@@ -584,8 +584,8 @@ function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
   const res = /不合格/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
-  if (/會驗|抗壓強度|試驗結果/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}};
-  if (/取樣/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, testName: t, sampleDate: date}};
+  if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, testName: t, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
+  if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
   if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
   if (/自主檢查|防汛/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
@@ -600,12 +600,16 @@ function inferItems(items, text, qtyDay) {
   return c.length > 6 ? [] : c;
 }
 function parseVendorRecords(wb, items, logs) {
-  const out = {inspections: [], supervisions: [], forms: []}, seen = new Set();
+  const out = {inspections: [], supervisions: [], forms: []}, seen = new Set(), tests = [];
+  const mk = t => (String(t).match(/鋼筋|混凝土|瀝青|回填|塊石|拋石|異型塊|鋼板樁|基樁/) || [])[0];
   const cap = Object.keys(logs || {}).sort().pop() || todayISO(); // 廠商表已預填未來日期的例行文字，只收到最後一筆日誌日期
   const add = (raw, date) => {
     if (date > cap) return;
     const c = classifyLine(raw, date); if (!c) return; const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
     if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
+    if (r.type === '材料查驗') { if (r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
+      const k = mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === '材料查驗' && mk(x.content) === k);
+      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; return; } }
     out[c.list].push({id: uid(), ...r});
   };
   const db = wb.SheetNames.find(n => /^日資料庫1/.test(n));
@@ -619,6 +623,11 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
+  for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
+    const k = mk(t.r.content), kg = (t.r.content.match(/(d+)s*kgf/i) || [])[1], cand = out.inspections.filter(x => x.type === '材料查驗' && x.date <= t.date && (!k || mk(x.content) === k)).sort((a, b) => b.date.localeCompare(a.date)),
+      o = (kg && cand.find(x => new RegExp(kg + '\s*kgf', 'i').test(x.content))) || cand[0], lab = `${+t.date.slice(5, 7)}/${+t.date.slice(8)} ${t.r.content}`;
+    if (o) { o.testNeed = true; o.testName = o.testName ? o.testName + '；' + lab : lab; o.sampleDate = o.sampleDate || t.date; } else out.inspections.push({id: uid(), ...t.r}); // 找不到進場查驗：以會驗當日獨立成一筆
+  }
   return out;
 }
 /* ---- 各項填報：查驗紀錄／督導查核／安環交汛表單（本系統整合連動版的同名分頁）---- */
@@ -1199,14 +1208,14 @@ function InspectionTab(props) {
     {k: 'result', label: '查驗結果', type: 'select', options: ['', '合格', '有條件合格', '不合格', '待複查']},
     {k: 'fixDone', label: '缺失改善完成日', type: 'date', show: r => r.result === '不合格' || r.result === '有條件合格'},
     {k: 'defect', label: '缺失內容／改善要求', type: 'textarea', show: r => r.result === '不合格' || r.result === '有條件合格'},
-    {k: 'testNeed', label: '取樣試驗', type: 'check', hint: '本次查驗需取樣試驗'},
-    {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣日期', type: 'date', show: r => r.testNeed},
-    {k: 'reportNo', label: '試驗報告編號（回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
+    {k: 'testNeed', label: '試驗會驗', type: 'check', hint: '廠商日誌載明有辦理取樣／試驗會驗（取得報告後回填報告編號）'},
+    {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣／會驗日期', type: 'date', show: r => r.testNeed},
+    {k: 'reportNo', label: '試驗報告編號（取得報告後回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
   const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => shortList(itemNames(p, r.items))], ['位置', r => r.location], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
-    note="工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
+    note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
 function TechTab(props) {
   const fields = [{k: 'date', label: '督導日期', type: 'date'}, {k: 'no', label: '表單號'}, {k: 'person', label: '督導技師'},
