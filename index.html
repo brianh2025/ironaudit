@@ -581,11 +581,22 @@ async function parsePdfSchedule(file, startDate) {
   return {sheet: `PDF${noText ? `（${noText} 頁無文字層未讀）` : ''}`, how: [...new Set(cands.map(c => c.how))].join('、'), points: pts};
 }
 /* 廠商活頁簿：從「日資料庫」二～五項記事欄與「輸入1」（取樣試驗／重要事項）的文字行，依關鍵字辨識填報 */
+/* 位置：樁號（0k+500-0k+700）＋結構部位（擋浪牆基礎大底、坡面工基礎擋土牆…）＋單雙號；部位取樁號之後、施工項目字樣之前 */
+const STA_RE = /\d+\s*[kK]\s*\+\s*\d+(?:\s*[-~～－–至到]\s*\d+\s*[kK]\s*\+\s*\d+)?/;
+const GENERIC_RE = /告示牌|職安|安衛|安全衛生|救生|警示|拒馬|護欄|交通錐|滅火|照明|廁所|工務所|工地標誌|縮時攝影|交維|交通維持|環保|環境/;
+function parseLocation(t) {
+  t = String(t); const m = t.match(STA_RE); if (!m) return GENERIC_RE.test(t) ? '全工區' : ''; // 通泛項目（告示牌、職安設備、救生設備…）沒有樁號，位置為全工區
+  const rest = t.slice(m.index + m[0].length).replace(/^[\s、，,:：]+/, ''), cut = rest.search(/模板|鋼筋|預力|混凝土|開挖|回填|放樣|測量|澆置|查驗|取樣|試體|尺寸|進場|廠驗|打設|組立|綁紮|伸縮縫|止水|自主檢查|塊石|拋石|[（(]/);
+  const part = (cut < 0 ? rest : rest.slice(0, cut)).replace(/[\s、，,]+$/, ''), side = (t.match(/[（(](單號|雙號)[）)]/) || [])[1];
+  return [m[0].replace(/\s+/g, ''), part, side].filter(Boolean).join(' ');
+}
 const MAT_PRI = ['基樁', '鋼板樁', '異型塊', '鋼筋', '瀝青', '塊石', '拋石', '回填', '混凝土'];
 const matKey = t => MAT_PRI.find(k => String(t).includes(k)); // 材料種類（依優先順序，預力混凝土基樁 → 基樁）
 function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
+  if (/圍籬/.test(t)) return null; // 契約沒有施工圍籬這個工項，不建查驗紀錄
+  if (/勘查|會勘|討論|開會|會議/.test(t) && !/合格|不合格|未通過/.test(t)) return null; // 現場勘查、討論、會議只是提到查驗，不是查驗紀錄
   const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
@@ -598,7 +609,9 @@ const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混�
 /* 查驗工項只依查驗文字判斷；不參考當天有無計數量（有計數量不代表有施工、更不代表有查驗）。文字對不到唯一工項就留空，由人工勾選 */
 function inferItems(items, text) {
   const its = items.filter(x => x.kind === 'normal' && !/品質管理|試驗|檢驗/.test(x.name)), n = norm(text), hit = new Set(); // 試驗費工項只走日誌完成數量，不掛在查驗上
-  its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code); });
+  if (/職安設備|安衛設備|安全衛生設備/.test(text)) return its.filter(x => /職業安全衛生/.test(x.group || '') && !/人員|教育|講習|文書|動力救生船|上下設備/.test(x.name)).map(x => x.code); // 寫「職安設備」＝職業安全衛生費組內全部設備類工項（動力救生船、開挖空間上下設備另有單獨查驗，不含）
+  its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code);
+    else if (x.name.split(/[，,]/).some(seg => { const g = norm(seg); return g.length >= 3 && !/^(產品|租用|其他|一般|費用|材料)/.test(g) && n.includes(g); })) hit.add(x.code); }); // 名稱的其中一段（動力救生船、工程告示牌…）出現在文字中
   const OTHER = ['模板', '鋼筋', '異型塊', '基樁', '坡面工', '瀝青', '植筋', '伸縮縫', '銲接']; // 「混凝土」不含這些類別的工項（場鑄結構混凝土用模板、預鑄混凝土異型塊…），除非內容本身提到
   if (hit.size) return [...hit].slice(0, 6); // 名稱直接出現在文字中
   const kg = (text.match(/(\d+)\s*kgf/i) || [])[1];
@@ -619,11 +632,12 @@ function parseVendorRecords(wb, items, logs) {
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
     if (r.items && !r.keepItems) r.items = inferItems(items, r.content);
     const keep = r.keepItems; delete r.keepItems;
+    if (c.list === 'inspections') r.location = r.location || parseLocation(r.content);
     if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
       if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
-      const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && (x.mat || mk(x.content)) === k);
-      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; if (keep && !o.items.length) o.items = r.items; return; }
+      const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && ((x.mat || mk(x.content)) === k || (mat && /澆置|澆築/.test(x.content))) && (!x.location || !r.location || x.location === r.location)); // 位置不同＝不同張查驗，不合併
+      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; o.location = o.location || r.location; if (keep && !o.items.length) o.items = r.items; return; }
       if (mat) r.mat = mat; }
     out[c.list].push({id: uid(), ...r});
   };
