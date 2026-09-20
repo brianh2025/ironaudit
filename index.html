@@ -120,7 +120,10 @@ const Store = (() => {
   };
 })();
 
-const DEFAULT_PREFIX = {施工查驗: '施查', 材料查驗: '材查', 技師督導: '技督', 查核: '查核', 職安衛: '安', 環保: '環', 交維: '交', 防汛: '汛'};
+/* 表單編碼（施工抽查紀錄表 E＋工程類別代碼）：A 測量、B 開挖、C 回填、D 鋼筋、E 模板、F 混凝土、G 臨時擋土設施、H 預力混凝土基樁、I 臨時擋抽移排水、J 瀝青混凝土鋪面、K 控制性低強度回填材料(CLSM)、L 植筋、M 混凝土塊、N 坡面工、
+   U 安全衛生、V 環境保護、W 交維設施、X 汛期工地防災、Y 材料設備送審、Z 材料設備檢驗；技師督導 RT、機關督導（查核／團體督導）RQ。例：ED-001 ＝ 鋼筋工程第 1 張 */
+const DEFAULT_PREFIX = {施工查驗: 'E', 材料查驗: 'E', 技師督導: 'RT', 查核: 'RQ', 職安衛: 'EU', 環保: 'EV', 交維: 'EW', 防汛: 'EX'};
+const OLD_PREFIX = {施工查驗: ['施查', 'E1'], 材料查驗: ['材查', 'E2'], 技師督導: ['技督'], 查核: ['查核', 'N'], 職安衛: ['安', 'E3'], 環保: ['環', 'E4'], 交維: ['交', 'E5'], 防汛: ['汛']};
 function newProject(name = '新專案') {
   return {
     id: uid(), created: new Date().toISOString(),
@@ -588,11 +591,19 @@ function classifyLine(raw, date) {
   if (/自主檢查|防汛/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
 }
-function parseVendorRecords(wb, items) {
+const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋']];
+function inferItems(items, text, qtyDay) {
+  const its = items.filter(x => x.kind === 'normal'), n = norm(text), hit = new Set();
+  its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code); });
+  if (!hit.size) for (const [k, m] of ITEM_KW) if (text.includes(k)) its.filter(x => x.name.includes(m)).forEach(x => hit.add(x.code));
+  let c = [...hit]; if (qtyDay) { const q = c.filter(code => qtyDay[code]); if (q.length) c = q; }
+  return c.length > 6 ? [] : c;
+}
+function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: []}, seen = new Set();
   const add = (raw, date) => {
     const c = classifyLine(raw, date); if (!c) return; const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
-    if (r.items) { const txt = norm(r.content); r.items = items.filter(x => x.kind === 'normal' && norm(x.name).length >= 4 && txt.includes(norm(x.name))).map(x => x.code); }
+    if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
     out[c.list].push({id: uid(), ...r});
   };
   const db = wb.SheetNames.find(n => /^日資料庫1/.test(n));
@@ -609,7 +620,7 @@ function parseVendorRecords(wb, items) {
   return out;
 }
 /* ---- 各項填報：查驗紀錄／督導查核／安環交汛表單（本系統整合連動版的同名分頁）---- */
-function parseRecords(wb, items) {
+function parseRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: []};
   const read = (sn, fn) => {
     const ws = wb.Sheets[sn]; if (!ws) return; const rows = aoa(ws), h = (rows[0] || []).map(clean);
@@ -623,7 +634,7 @@ function parseRecords(wb, items) {
     testNeed: s('需試驗') === '是', testName: s('試驗項目'), sampleDate: d('取樣日'), reportNo: s('試驗報告編號'), reportDate: d('報告日期'), testResult: s('試驗結果')}));
   read('督導查核', (s, date, d) => out.supervisions.push({id: uid(), date, kind: s('類別') || '技師督導', no: s('表單號'), person: s('單位/人員'), items: [], content: s('內容'), score: s('分數/等級'), defects: +s('缺失件數') || 0, fixDue: d('改善期限'), fixDone: d('改善完成')}));
   read('安環交汛表單', (s, date) => out.forms.push({id: uid(), date, cat: s('類別'), no: s('表單號'), title: s('表單名稱'), result: s('結果'), note: s('備註')}));
-  const V = parseVendorRecords(wb, items);
+  const V = parseVendorRecords(wb, items, logs);
   for (const k in V) { const have = new Set(out[k].map(x => x.date + norm(x.content || x.title))); out[k].push(...V[k].filter(x => !have.has(x.date + norm(x.content || x.title)))); }
   return out.inspections.length + out.supervisions.length + out.forms.length ? out : null;
 }
@@ -632,9 +643,10 @@ const recCount = r => r.inspections.length + r.supervisions.length + r.forms.len
 function mergeRecords(d, r) {
   for (const k of ['inspections', 'supervisions', 'forms']) for (const x of r[k]) {
     const i = d[k].findIndex(y => x.no ? y.no === x.no && y.date === x.date : y.date === x.date && (y.content || y.title) === (x.content || x.title));
-    if (i >= 0) { d[k][i] = {...x, no: x.no || d[k][i].no, id: d[k][i].id}; continue; }
-    if (!x.no) x.no = nextNo(d, d[k], k === 'inspections' ? x.type : k === 'forms' ? x.cat : x.kind === '技師督導' ? '技師督導' : '查核');
-    d[k].push(x);
+    let rec = x;
+    if (i >= 0) { const o = d[k][i]; rec = {...o, ...Object.fromEntries(Object.entries(x).filter(([, v]) => !(v === '' || v === undefined || v === false || (Array.isArray(v) && !v.length)))), id: o.id}; d[k].splice(i, 1); if (!x.no) rec.no = ''; }
+    if (!rec.no) rec.no = nextNo(d, d[k], formPrefix(d, rec, k));
+    d[k].push(rec);
   }
 }
 
@@ -706,8 +718,32 @@ function auditWeek(p, monday) {
   return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood,
     miss: rows.filter(r => r.status !== 'ok').length};
 }
+const SITE_CODE = [[/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'], [/坡面工/, 'N'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'],
+  [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土/, 'F'], [/回填|塊石|拋石/, 'C'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
+/* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
+function formPrefix(p, r, listKey) {
+  const P = p.settings.prefix || {}, base = k => P[k] || DEFAULT_PREFIX[k] || k;
+  if (listKey === 'forms') return base(r.cat);
+  if (listKey === 'supervisions') return base(r.kind === '技師督導' ? '技師督導' : '查核');
+  const type = r.type || '施工查驗', txt = [r.content, r.testName, r.location, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ');
+  if (type === '材料查驗') return base(type) + (/送審/.test(txt) ? 'Y' : 'Z');
+  const hit = SITE_CODE.find(([re]) => re.test(txt));
+  return base(type) + (hit ? hit[1] : '');
+}
+/* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
+function migrateProject(p) {
+  let ch = false; p.settings.prefix = p.settings.prefix || {};
+  for (const k in DEFAULT_PREFIX) { const v = p.settings.prefix[k]; if (v === undefined || OLD_PREFIX[k].includes(v)) { p.settings.prefix[k] = DEFAULT_PREFIX[k]; ch = true; } }
+  const old = /^(施查|材查|查核|安|環|交|技督|汛|N|E[1-5](-[1-5X])?)-\d+$/;
+  for (const k of ['inspections', 'supervisions', 'forms']) {
+    const list = (p[k] = p[k] || []), todo = list.filter(r => old.test(r.no || '')).sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.no.localeCompare(b.no));
+    if (!todo.length) continue; todo.forEach(r => { r.no = ''; });
+    for (const r of todo) r.no = nextNo(p, list, formPrefix(p, r, k)); ch = true;
+  }
+  return ch;
+}
 function nextNo(p, list, key) {
-  const pre = p.settings.prefix[key] || key; const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$');
+  const pre = key; const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$');
   const mx = list.reduce((m, r) => { const k = String(r.no || '').match(re); return k ? Math.max(m, +k[1]) : m; }, 0);
   return `${pre}-${pad(mx + 1, 3)}`;
 }
@@ -992,7 +1028,7 @@ function ImportTab({p, update}) {
           const items = out.items?.items || p.items; const L = parseLogs(wb, items);
           if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
           Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`));
-          const R = parseRecords(wb, items); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
+          const R = parseRecords(wb, items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
         }
       }
       if (out.logs && !Object.keys(out.logs.logs).length) out.logs = null;
@@ -1167,7 +1203,7 @@ function InspectionTab(props) {
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
   const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => shortList(itemNames(p, r.items))], ['位置', r => r.location], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => r.type || '施工查驗'}
+  return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
 function TechTab(props) {
@@ -1176,7 +1212,7 @@ function TechTab(props) {
     {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
   const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['督導技師', r => r.person], ['工項', r => shortList(itemNames(props.p, r.items))], ['缺失', r => r.defects || 0],
     ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className="tag bad">未完成</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="supervisions" title="技師督導" filter=${r => r.kind === '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: '技師督導', items: []}} prefixKey=${() => '技師督導'} />`;
+  return html`<${RecordTab} ...${props} listKey="supervisions" title="技師督導" filter=${r => r.kind === '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: '技師督導', items: []}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
 }
 function AuditRecTab(props) {
   const K = ['工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'];
@@ -1185,14 +1221,14 @@ function AuditRecTab(props) {
     {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
   const cols = [['日期', r => roc(r.date)], ['類別', r => r.kind], ['表單號', r => r.no], ['單位', r => r.person], ['分數', r => r.score], ['缺失', r => r.defects || 0],
     ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className=${'tag ' + (r.fixDue && r.fixDue < todayISO() ? 'bad' : 'warn')}>期限 ${roc(r.fixDue) || '未定'}</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="supervisions" title="查核及團體督導" filter=${r => r.kind !== '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: K[0]}} prefixKey=${() => '查核'} />`;
+  return html`<${RecordTab} ...${props} listKey="supervisions" title="查核及團體督導" filter=${r => r.kind !== '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: K[0]}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
 }
 function FormTab(props) {
   const fields = [{k: 'cat', label: '類別', type: 'select', options: ['職安衛', '環保', '交維', '防汛']}, {k: 'date', label: '日期', type: 'date'}, {k: 'no', label: '表單號'},
     {k: 'title', label: '表單名稱', list: r => FORM_TITLES[r.cat] || []}, {k: 'result', label: '檢查結果', type: 'select', options: ['', '符合', '缺失待改善', '已改善']},
     {k: 'note', label: '缺失／備註', type: 'textarea'}];
   const cols = [['日期', r => roc(r.date)], ['類別', r => r.cat], ['表單號', r => r.no], ['表單名稱', r => r.title], ['結果', r => resTag(r.result)], ['備註', r => r.note]];
-  return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => r.cat} />`;
+  return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => formPrefix(props.p, r, 'forms')} />`;
 }
 
 /* ================= 試驗報告回填 ================= */
@@ -1297,7 +1333,7 @@ async function parseReportFiles(files, p) {
       const c = parseContract(wb); if (c) out.items = c;
       const sc = parseSchedule(wb); if (sc) out.schedule = sc;
       const L = parseLogs(wb, out.items?.items || p.items);
-      const R = parseRecords(wb, out.items?.items || p.items); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
+      const R = parseRecords(wb, out.items?.items || p.items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
       if (Object.keys(L.logs).length) { out.logs = out.logs || {logs: {}, unmatched: []}; Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); }
     } catch (e) { out.notes.push(`${f.name} 解析失敗：${e.message}`); }
   }
@@ -1354,7 +1390,7 @@ function DriveImport({existing, onCreate, onClose}) {
 
 function App() {
   const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null), [drv, setDrv] = useState(false);
-  useEffect(() => { Store.list().then(l => { setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
+  useEffect(() => { Store.list().then(l => { l.forEach(x => { if (migrateProject(x)) Store.put(x); }); setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
   const p = projects?.find(x => x.id === cur);
   const saveT = useRef({});
   const update = fn => setProjects(ps => ps.map(x => { if (x.id !== cur) return x; const n = structuredClone(x); fn(n); n.updated = new Date().toISOString();
@@ -1364,7 +1400,7 @@ function App() {
   const create = async () => { const name = prompt('專案（工程）名稱：'); if (!name) return; const n = newProject(name); await Store.put(n); setProjects(ps => [...ps, n]); setCur(n.id); setTab('import'); };
   const del = async () => { if (!confirm(`確定刪除「${p.info.name}」？所有匯入資料與填報紀錄都會刪除，建議先下載 JSON 備份。`)) return; await Store.del(p.id); const rest = projects.filter(x => x.id !== p.id); setProjects(rest); setCur(rest[0]?.id || null); setTab('home'); };
   const restore = async doc => { if (!doc?.info || !doc.items) return alert('不是有效的專案備份檔'); const exist = projects.some(x => x.id === doc.id);
-    if (exist && !confirm('已有相同專案，要以備份內容覆蓋嗎？')) return; const n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; await Store.put(n);
+    if (exist && !confirm('已有相同專案，要以備份內容覆蓋嗎？')) return; const n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; migrateProject(n); await Store.put(n);
     setProjects(ps => exist ? ps.map(x => x.id === n.id ? n : x) : [...ps, n]); setCur(n.id); alert('已還原：' + n.info.name); };
   const addProject = async n => { await Store.put(n); setProjects(ps => [...ps, n]); setCur(c => c || n.id); };
   const quick = pr => { setPreset(pr); setTab('insp'); };
