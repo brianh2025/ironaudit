@@ -608,6 +608,8 @@ function classifyLine(raw, date) {
 const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋'], ['開挖', '方(機械']];
 /* 查驗工項只依查驗文字判斷；不參考當天有無計數量（有計數量不代表有施工、更不代表有查驗）。文字對不到唯一工項就留空，由人工勾選 */
 function inferItems(items, text) { return inferItems2(items, text).codes; }
+/* 工項提示：日誌有寫該類工作、但契約同類有多項而未載明規格時，提示要勾選哪個（顯示時即時計算，舊資料也適用） */
+const itemHint = (items, text) => inferItems2(items, text).ambig.map(a => `${a.k}未載明規格：${a.names.map(nm => nm.slice(0, 22)).join('／')}`).join('；');
 /* 回傳 codes＝對到的工項；ambig＝關鍵字有寫、但契約同類有兩項以上（如模板乙種／丙種）而無法判定者，供提示人工勾選 */
 function inferItems2(items, text) {
   const its = items.filter(x => x.kind === 'normal' && !/品質管理|試驗|檢驗/.test(x.name)), n = norm(text), hit = new Set(); // 試驗費工項只走日誌完成數量，不掛在查驗上
@@ -617,8 +619,8 @@ function inferItems2(items, text) {
   const OTHER = ['模板', '鋼筋', '異型塊', '基樁', '坡面工', '瀝青', '植筋', '伸縮縫', '銲接']; // 「混凝土」不含這些類別的工項（場鑄結構混凝土用模板、預鑄混凝土異型塊…），除非內容本身提到
   if (hit.size) return {codes: [...hit].slice(0, 6), ambig: []}; // 名稱直接出現在文字中
   const kg = (text.match(/(\d+)\s*kgf/i) || [])[1], ambig = [];
-  for (const [k, m] of ITEM_KW) if (text.includes(k)) {
-    let c = its.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !text.includes(o))));
+  for (const [k, m] of ITEM_KW) if (k === '坡面工' ? /坡面工(?!基礎|擋土牆|堤趾|路側)/.test(text) : text.includes(k)) { // 「坡面工」單獨是施工項目；「坡面工基礎／擋土牆」是結構部位
+    let c = its.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !(o === '坡面工' ? /坡面工(?!基礎|擋土牆|堤趾|路側)/.test(text) : text.includes(o)))));
     if (kg && c.length > 1) { const g = c.filter(x => new RegExp(kg + '\\s*kgf', 'i').test(x.name)); if (g.length) c = g; } // 強度等級相同者
     if (c.length === 1) hit.add(c[0].code); // 只靠關鍵字者，該類別必須唯一才採用
     else if (c.length > 1) ambig.push({k, names: c.map(x => x.name)});
@@ -789,7 +791,7 @@ function auditWeek(p, monday) {
 }
 /* 先看工種（混凝土施工查驗、測量、開挖、鋼筋、模板、混凝土、回填…），最後才看結構名稱（擋土、坡面工），避免「坡面工…混凝土澆置」被判成坡面工程 */
 const SITE_CODE = [[/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
-  [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
+  [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工(?!基礎|擋土牆|堤趾|路側)/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
 /* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
 function formPrefix(p, r, listKey) {
   const P = p.settings.prefix || {}, base = k => P[k] || DEFAULT_PREFIX[k] || k;
@@ -979,7 +981,8 @@ function Field({f, rec, set, p}) {
   const v = rec[f.k];
   const on = e => set(f.k, f.type === 'number' ? (e.target.value === '' ? '' : +e.target.value) : f.type === 'check' ? e.target.checked : e.target.value);
   let ctl;
-  if (f.type === 'textarea') ctl = html`<textarea value=${v || ''} onChange=${on} />`;
+  if (f.type === 'note') ctl = html`<div className="msg warn">${f.value(rec)}</div>`;
+  else if (f.type === 'textarea') ctl = html`<textarea value=${v || ''} onChange=${on} />`;
   else if (f.type === 'select') ctl = html`<select value=${v || ''} onChange=${on}>${(typeof f.options === 'function' ? f.options(rec) : f.options).map(o => html`<option key=${o} value=${o}>${o || '（未選）'}</option>`)}</select>`;
   else if (f.type === 'check') ctl = html`<span><input type="checkbox" checked=${!!v} onChange=${on} /> ${f.hint || ''}</span>`;
   else if (f.type === 'items') ctl = html`<${ItemsPick} p=${p} value=${v || []} date=${rec.date} onChange=${x => set(f.k, x)} />`;
@@ -1273,7 +1276,7 @@ function InspectionTab(props) {
     {k: 'date', label: '查驗日期', type: 'date'}, {k: 'type', label: '查驗類別', type: 'select', options: ['施工查驗', '材料查驗']},
     {k: 'no', label: '表單號'}, {k: 'inspector', label: '查驗人員'},
     {k: 'items', label: '查驗工項（對應契約項目）', type: 'items'},
-    {k: 'itemNote', label: '工項提示（日誌未載明規格，請勾選上方工項）', wide: true, show: r => r.itemNote && !(r.items || []).length},
+    {k: 'itemNote', type: 'note', label: '工項提示（日誌未載明規格，請勾選上方工項）', wide: true, show: r => !(r.items || []).length && (r.itemNote || itemHint(p.items, r.content || '')), value: r => r.itemNote || itemHint(p.items, r.content || '')},
     {k: 'location', label: '位置／里程', wide: true}, {k: 'content', label: '查驗項目及內容', type: 'textarea'},
     {k: 'result', label: '查驗結果', type: 'select', options: ['', '合格', '有條件合格', '不合格', '待複查']},
     {k: 'fixDone', label: '缺失改善完成日', type: 'date', show: r => r.result === '不合格' || r.result === '有條件合格'},
@@ -1282,7 +1285,7 @@ function InspectionTab(props) {
     {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣／會驗日期', type: 'date', show: r => r.testNeed},
     {k: 'reportNo', label: '試驗報告編號（取得報告後回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => r.items?.length ? shortList(itemNames(p, r.items)) : r.itemNote ? html`<span className="tag warn">${r.itemNote}</span>` : ''], ['位置', r => r.location], ['結果', r => resTag(r.result)],
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => { if (r.items?.length) return shortList(itemNames(p, r.items)); const h = r.itemNote || itemHint(p.items, r.content || ''); return h ? html`<span className="tag warn">${h}</span>` : html`<span className="tag warn">工項未勾選</span>`; }], ['位置', r => r.location], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
