@@ -129,7 +129,7 @@ function newProject(name = '新專案') {
   return {
     id: uid(), created: new Date().toISOString(),
     info: {name, contractNo: '', owner: '', supervisor: '睿泰工程顧問有限公司', contractor: '', location: '', startDate: todayISO(), duration: 180, extendDays: 0, amount: 0},
-    items: [], schedule: [], logs: {}, inspections: [], supervisions: [], forms: [],
+    items: [], schedule: [], logs: {}, inspections: [], supervisions: [], forms: [], flags: [],
     settings: {prefix: {...DEFAULT_PREFIX}, tolerance: 3, testDue: 30, labor: ['技術工', '大工', '小工'], machines: ['挖土機', '混凝土車', '吊(卡)車']},
   };
 }
@@ -586,7 +586,7 @@ const matKey = t => MAT_PRI.find(k => String(t).includes(k)); // 材料種類（
 function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
-  const res = /不合格/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
+  const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
   if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
@@ -603,7 +603,7 @@ function inferItems(items, text, qtyDay) {
   return c.length > 6 ? [] : c;
 }
 function parseVendorRecords(wb, items, logs) {
-  const out = {inspections: [], supervisions: [], forms: []}, seen = new Set(), tests = [];
+  const out = {inspections: [], supervisions: [], forms: [], flags: []}, seen = new Set(), tests = []; // flags：記事欄載明查驗、但施工概況未載明該項工作（不建查驗，改列稽核）
   const mk = matKey;
   const cap = Object.keys(logs || {}).sort().pop() || todayISO(); // 廠商表已預填未來日期的例行文字，只收到最後一筆日誌日期
   const add = (raw, date) => { const c = classifyLine(raw, date); if (c) put(c, date); };
@@ -611,6 +611,8 @@ function parseVendorRecords(wb, items, logs) {
     if (date > cap) return;
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
     if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
+    if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
+      if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
       const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && (x.mat || mk(x.content)) === k);
       if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; return; }
@@ -643,7 +645,7 @@ function parseVendorRecords(wb, items, logs) {
 }
 /* ---- 各項填報：查驗紀錄／督導查核／安環交汛表單（本系統整合連動版的同名分頁）---- */
 function parseRecords(wb, items, logs) {
-  const out = {inspections: [], supervisions: [], forms: []};
+  const out = {inspections: [], supervisions: [], forms: [], flags: []};
   const read = (sn, fn) => {
     const ws = wb.Sheets[sn]; if (!ws) return; const rows = aoa(ws), h = (rows[0] || []).map(clean);
     for (const r of rows.slice(1)) {
@@ -657,12 +659,13 @@ function parseRecords(wb, items, logs) {
   read('督導查核', (s, date, d) => out.supervisions.push({id: uid(), date, kind: s('類別') || '技師督導', no: s('表單號'), person: s('單位/人員'), items: [], content: s('內容'), score: s('分數/等級'), defects: +s('缺失件數') || 0, fixDue: d('改善期限'), fixDone: d('改善完成')}));
   read('安環交汛表單', (s, date) => out.forms.push({id: uid(), date, cat: s('類別'), no: s('表單號'), title: s('表單名稱'), result: s('結果'), note: s('備註')}));
   const V = parseVendorRecords(wb, items, logs);
-  for (const k in V) { const have = new Set(out[k].map(x => x.date + norm(x.content || x.title))); out[k].push(...V[k].filter(x => !have.has(x.date + norm(x.content || x.title)))); }
-  return out.inspections.length + out.supervisions.length + out.forms.length ? out : null;
+  for (const k in V) { const kf = x => x.date + norm(x.content || x.title || x.text), have = new Set(out[k].map(kf)); out[k].push(...V[k].filter(x => !have.has(kf(x)))); }
+  return out.inspections.length + out.supervisions.length + out.forms.length + out.flags.length ? out : null;
 }
 const recCount = r => r.inspections.length + r.supervisions.length + r.forms.length;
 /* 併入專案：同表單號＋日期視為同一筆（以匯入內容更新），否則新增 */
 function mergeRecords(d, r) {
+  d.flags = d.flags || []; for (const x of r.flags || []) if (!d.flags.some(y => y.date === x.date && y.text === x.text)) d.flags.push(x);
   for (const k of ['inspections', 'supervisions', 'forms']) for (const x of r[k]) {
     const i = d[k].findIndex(y => x.no ? y.no === x.no && y.date === x.date : y.date === x.date && (y.content || y.title) === (x.content || x.title));
     let rec = x;
@@ -722,6 +725,14 @@ function entryNoInsp(p, d) {
     .filter(t => { const k = matKey(t); return !p.inspections.some(r => r.date === d && r.type === '材料查驗' && (!k || matKey(r.content) === k)); })
     .map(text => ({date: d, text}));
 }
+/* 完成數量有計、但施工概況（施工項目）沒寫該類工作 → 施工未自檢或數量虛報。工項依「模板→鋼筋→混凝土」先中先歸類 */
+const QTY_CHECK = [['模板', /模板/, /模板|模型|組立|拆模/], ['鋼筋', /鋼筋/, /鋼筋|綁紮|組立/], ['混凝土', /混凝土/, /混凝土|澆置|澆築|打設|PC|襯底|打底|基樁|異型塊|預鑄|吊放/]];
+function qtyNoWork(p, d) {
+  const lg = p.logs[d]; if (!lg) return []; const txt = lg.summary || '', got = {};
+  for (const c in lg.qty || {}) { const it = p.items.find(x => x.code === c); if (!it || it.kind !== 'normal' || !(lg.qty[c] > 0) || /試驗|檢驗|品質管理/.test(it.name)) continue;
+    const cat = QTY_CHECK.find(([, re]) => re.test(it.name)); if (cat) (got[cat[0]] = got[cat[0]] || []).push(`${it.name}　${fmtQ(lg.qty[c])} ${it.unit}`); }
+  return QTY_CHECK.filter(([k, , tx]) => got[k] && !tx.test(txt)).map(([k]) => ({date: d, cat: k, items: got[k]}));
+}
 function auditWeek(p, monday) {
   const days = [...Array(7)].map((_, i) => addDays(monday, i)), end = days[6];
   const tol = +p.settings.tolerance || 0;
@@ -742,9 +753,9 @@ function auditWeek(p, monday) {
   const forms = {}; ['職安衛', '環保', '交維', '防汛'].forEach(c => forms[c] = p.forms.filter(f => f.cat === c && inWeek(f)).length);
   const failOpen = p.inspections.filter(r => r.result === '不合格' && !r.fixDone && r.date <= end);
   const sup = p.supervisions.filter(inWeek);
-  const noEntry = days.flatMap(d => entryNoInsp(p, d));
+  const noEntry = days.flatMap(d => entryNoInsp(p, d)), noWork = days.flatMap(d => qtyNoWork(p, d)), claims = (p.flags || []).filter(inWeek);
   const flood = +monday.slice(5, 7) >= 5 && +monday.slice(5, 7) <= 11;
-  return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood, noEntry,
+  return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood, noEntry, noWork, claims,
     miss: rows.filter(r => r.status !== 'ok').length};
 }
 const SITE_CODE = [[/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'], [/坡面工/, 'N'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'],
@@ -924,6 +935,10 @@ async function exportAuditExcel(p, A) {
   A.pendingTests.forEach(t => s.addRow([t.r.no, t.r.testName, t.r.sampleDate || t.r.date, t.age]));
   s.addRow([]); s.addRow(['進場材料未查驗']); s.addRow(['日期', '施工概況記載']);
   if (A.noEntry.length) A.noEntry.forEach(e => s.addRow([roc(e.date), e.text])); else s.addRow(['無']);
+  s.addRow([]); s.addRow(['記事載明查驗、施工項目未載明（未建查驗）']); s.addRow(['日期', '類別', '記事原文']);
+  if (A.claims.length) A.claims.forEach(e => s.addRow([roc(e.date), e.cat, e.text])); else s.addRow(['無']);
+  s.addRow([]); s.addRow(['有計數量、施工項目卻未載明']); s.addRow(['日期', '類別', '完成數量工項', '註記']);
+  if (A.noWork.length) A.noWork.forEach(e => s.addRow([roc(e.date), e.cat, e.items.join('；'), '施工未自檢或數量虛報'])); else s.addRow(['無']);
   s.addRow([]); s.addRow(['本週表單數',...Object.entries(A.forms).map(([k, v]) => `${k} ${v} 件`)]);
   [8, 46, 6, 30, 10, 24, 24, 12].forEach((w, i) => s.getColumn(i + 1).width = w);
   s.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; }));
@@ -1315,6 +1330,10 @@ function AuditTab({p, C, quick}) {
         ${A.flood && html`<div className="mute" style=${{marginTop: '6px'}}>目前為防汛期（5～11 月），建議每週至少一次防汛檢查。</div>`}</div>
       <div className="card"><h2>進場材料未查驗</h2>${A.noEntry.length ? html`<table><tbody>${A.noEntry.map((e, i) => html`<tr key=${i}><td>${roc(e.date)}</td><td>${e.text}</td><td className="noprint"><button className="b s" onClick=${() => quick({date: e.date, type: '材料查驗', content: e.text})}>補填查驗</button></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}
         <div className="mute" style=${{marginTop: '6px'}}>依施工概況載明「進場」、當日卻沒有對應材料查驗紀錄者。</div></div>
+      <div className="card"><h2>有計數量、施工項目卻未載明</h2>${A.noWork.length ? html`<table><tbody>${A.noWork.map((e, i) => html`<tr key=${i}><td>${roc(e.date)}</td><td>${e.cat}</td><td>${e.items.join('；')}</td><td><span className="tag bad">施工未自檢或數量虛報</span></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}
+        <div className="mute" style=${{marginTop: '6px'}}>完成數量有模板、鋼筋或混凝土，施工概況卻沒寫對應施工項目。</div></div>
+      <div className="card"><h2>記事載明查驗、施工項目未載明</h2>${A.claims.length ? html`<table><tbody>${A.claims.map(e => html`<tr key=${e.id}><td>${roc(e.date)}</td><td>${e.cat}</td><td>${e.text}</td><td><span className="tag bad">未建查驗</span></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}
+        <div className="mute" style=${{marginTop: '6px'}}>廠商記事欄寫有模板、鋼筋、混凝土施工查驗，但當天施工概況沒有該項施工項目，因此不建立查驗紀錄。</div></div>
       <div className="card"><h2>不合格未改善</h2>${A.failOpen.length ? html`<table><tbody>${A.failOpen.map(r => html`<tr key=${r.id}><td>${r.no}</td><td>${roc(r.date)}</td><td>${shortList(itemNames(p, r.items))}</td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}</div>
     </div></div>`;
 }
