@@ -1,0 +1,1249 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ironaudit 智慧監造報表</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCI+PHJlY3Qgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiIHJ4PSIyNiIgZmlsbD0iIzFCMjYzMiIvPjxwb2x5Z29uIGZpbGw9IiNGRkZGRkYiIHBvaW50cz0iMjEuMzYsMjYuNDAgNzUuMTIsMjYuNDAgNzUuMTIsMzkuODQgNTQuOTYsMzkuODQgNTQuOTYsOTMuNjAgMjEuMzYsOTMuNjAgMjEuMzYsODAuMTYgNDEuNTIsODAuMTYgNDEuNTIsMzkuODQgMjEuMzYsMzkuODQiLz48cG9seWdvbiBmaWxsPSIjRjI2QjFEIiBwb2ludHM9IjU0Ljk2LDgwLjE2IDk1LjI4LDI4LjA4IDk1LjI4LDQ0Ljg4IDU0Ljk2LDkzLjYwIi8+PC9zdmc+">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#1f2933;--mute:#6b7785;--line:#d9dee4;--pri:#1B2632;--pri2:#fdeee4;--acc:#F26B1D;--ok:#1a7f37;--okbg:#e6f4ea;--warn:#9a6700;--warnbg:#fff4d6;--bad:#cf222e;--badbg:#ffe5e5}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:#1B2632;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0 8px 0 0}
+header select{max-width:420px}
+nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 12px;position:sticky;top:0;z-index:5}
+nav button{border:0;background:none;padding:10px 12px;cursor:pointer;font-size:14px;color:var(--mute);border-bottom:3px solid transparent}
+nav button.on{color:var(--pri);border-bottom-color:var(--acc);font-weight:bold}
+main{padding:16px;max-width:1400px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 10px}
+.card h3{font-size:14px;margin:12px 0 6px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px}
+.kpi .l{color:var(--mute);font-size:12px}.kpi .v{font-size:22px;font-weight:bold;margin-top:4px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute)}
+label.f.wide{grid-column:1/-1}
+input,select,textarea{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink)}
+textarea{min-height:60px;resize:vertical}
+button.b{font:inherit;padding:6px 12px;border-radius:5px;border:1px solid var(--line);background:#fff;cursor:pointer}
+button.b:hover{background:#f0f3f6}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri)}button.p:hover{background:#2c3b4a}
+button.d{color:var(--bad);border-color:#f0b4b8}
+button.s{padding:2px 8px;font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+th{background:#eef2f6;position:sticky;top:0}
+td.n,th.n{text-align:right;white-space:nowrap}
+tr.g td{background:#f7f9fb;font-weight:bold}
+.tw{overflow:auto;max-height:70vh}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:12px;white-space:nowrap}
+.ok{background:var(--okbg);color:var(--ok)}.warn{background:var(--warnbg);color:var(--warn)}.bad{background:var(--badbg);color:var(--bad)}.mute{color:var(--mute)}
+.msg{padding:8px 12px;border-radius:6px;margin:8px 0}
+.split{display:grid;grid-template-columns:220px 1fr;gap:14px}
+.list{max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
+.list div{padding:5px 8px;cursor:pointer;border-bottom:1px solid #eef1f4;display:flex;justify-content:space-between;gap:6px}
+.list div.on{background:var(--pri2);font-weight:bold}
+.pick{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:5px;padding:4px;background:#fff}
+.pick label{display:flex;gap:6px;font-size:13px;padding:2px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;z-index:20;overflow:auto}
+.modal>.card{width:min(960px,100%)}
+.empty{color:var(--mute);padding:20px;text-align:center}
+@media(max-width:760px){.split{grid-template-columns:1fr}}
+@media print{header,nav,.noprint{display:none}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+'use strict';
+/* ================= 共用工具 ================= */
+const LOGO_DARK = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NDkgMTIwIiB3aWR0aD0iNDQ5IiBoZWlnaHQ9IjEyMCI+PHBvbHlnb24gZmlsbD0iI0ZGRkZGRiIgcG9pbnRzPSIxNC4wMCwyMC4wMCA3OC4wMCwyMC4wMCA3OC4wMCwzNi4wMCA1NC4wMCwzNi4wMCA1NC4wMCwxMDAuMDAgMTQuMDAsMTAwLjAwIDE0LjAwLDg0LjAwIDM4LjAwLDg0LjAwIDM4LjAwLDM2LjAwIDE0LjAwLDM2LjAwIi8+PHBvbHlnb24gZmlsbD0iI0YyNkIxRCIgcG9pbnRzPSI1NC4wMCw4NC4wMCAxMDIuMDAsMjIuMDAgMTAyLjAwLDQyLjAwIDU0LjAwLDEwMC4wMCIvPjxwYXRoIGQ9Ik0xMzYuMDQyOTY4NzUgODYuMFY0Ni42OTUzMTI1SDE0OC4zMTI1Vjg2LjBaTTE0Mi4xNjAxNTYyNSA0Mi4wODk4NDM3NVExMzkuNTU4NTkzNzUgNDIuMDg5ODQzNzUgMTM3LjY5NTMxMjUgNDAuMzQ5NjA5Mzc1UTEzNS44MzIwMzEyNSAzOC42MDkzNzUgMTM1LjgzMjAzMTI1IDM2LjE4MzU5Mzc1UTEzNS44MzIwMzEyNSAzMy43MjI2NTYyNSAxMzcuNjk1MzEyNSAzMi4wUTEzOS41NTg1OTM3NSAzMC4yNzczNDM3NSAxNDIuMTYwMTU2MjUgMzAuMjc3MzQzNzVRMTQ0Ljc5Njg3NSAzMC4yNzczNDM3NSAxNDYuNjYwMTU2MjUgMzEuOTgyNDIxODc1UTE0OC41MjM0Mzc1IDMzLjY4NzUgMTQ4LjUyMzQzNzUgMzYuMTgzNTkzNzVRMTQ4LjUyMzQzNzUgMzguNjQ0NTMxMjUgMTQ2LjY2MDE1NjI1IDQwLjM2NzE4NzVRMTQ0Ljc5Njg3NSA0Mi4wODk4NDM3NSAxNDIuMTYwMTU2MjUgNDIuMDg5ODQzNzVaIE0xNTQuOTkzNTkzNzUgODYuMFY0Ni42OTUzMTI1SDE2Ni45MTE1NjI1VjUzLjg2NzE4NzVIMTY3LjMzMzQzNzVRMTY4LjM4ODEyNSA0OS45NjQ4NDM3NSAxNzAuODMxNDg0Mzc1IDQ4LjA4Mzk4NDM3NVExNzMuMjc0ODQzNzUgNDYuMjAzMTI1IDE3Ni41MDkyMTg3NSA0Ni4yMDMxMjVRMTc3LjM1Mjk2ODc1IDQ2LjIwMzEyNSAxNzguMjg0NjA5Mzc1IDQ2LjMwODU5Mzc1UTE3OS4yMTYyNSA0Ni40MTQwNjI1IDE3OS45ODk2ODc1IDQ2LjYyNVY1Ny4zMTI1UTE3OS4xMTA3ODEyNSA1Ni45OTYwOTM3NSAxNzcuNjg2OTUzMTI1IDU2LjgzNzg5MDYyNVExNzYuMjYzMTI1IDU2LjY3OTY4NzUgMTc1LjEzODEyNSA1Ni42Nzk2ODc1UTE3Mi44ODgxMjUgNTYuNjc5Njg3NSAxNzEuMDk1MTU2MjUgNTcuNjgxNjQwNjI1UTE2OS4zMDIxODc1IDU4LjY4MzU5Mzc1IDE2OC4yODI2NTYyNSA2MC40NDE0MDYyNVExNjcuMjYzMTI1IDYyLjE5OTIxODc1IDE2Ny4yNjMxMjUgNjQuNTU0Njg3NVY4Ni4wWiBNMjAyLjAzNDA2MjUgODYuNzM4MjgxMjVRMTk1Ljg4MTcxODc1IDg2LjczODI4MTI1IDE5MS40NTIwMzEyNSA4NC4xODk0NTMxMjVRMTg3LjAyMjM0Mzc1IDgxLjY0MDYyNSAxODQuNjQ5Mjk2ODc1IDc3LjA4Nzg5MDYyNVExODIuMjc2MjUgNzIuNTM1MTU2MjUgMTgyLjI3NjI1IDY2LjQ4ODI4MTI1UTE4Mi4yNzYyNSA2MC40MDYyNSAxODQuNjQ5Mjk2ODc1IDU1Ljg1MzUxNTYyNVExODcuMDIyMzQzNzUgNTEuMzAwNzgxMjUgMTkxLjQ1MjAzMTI1IDQ4Ljc1MTk1MzEyNVExOTUuODgxNzE4NzUgNDYuMjAzMTI1IDIwMi4wMzQwNjI1IDQ2LjIwMzEyNVEyMDguMTg2NDA2MjUgNDYuMjAzMTI1IDIxMi42MTYwOTM3NSA0OC43NTE5NTMxMjVRMjE3LjA0NTc4MTI1IDUxLjMwMDc4MTI1IDIxOS40MDEyNSA1NS44NTM1MTU2MjVRMjIxLjc1NjcxODc1IDYwLjQwNjI1IDIyMS43NTY3MTg3NSA2Ni40ODgyODEyNVEyMjEuNzU2NzE4NzUgNzIuNTM1MTU2MjUgMjE5LjQwMTI1IDc3LjA4Nzg5MDYyNVEyMTcuMDQ1NzgxMjUgODEuNjQwNjI1IDIxMi42MTYwOTM3NSA4NC4xODk0NTMxMjVRMjA4LjE4NjQwNjI1IDg2LjczODI4MTI1IDIwMi4wMzQwNjI1IDg2LjczODI4MTI1Wk0yMDIuMDM0MDYyNSA3Ny4zNTE1NjI1UTIwNC4zODk1MzEyNSA3Ny4zNTE1NjI1IDIwNi4wMDY3MTg3NSA3NS45ODA0Njg3NVEyMDcuNjIzOTA2MjUgNzQuNjA5Mzc1IDIwOC40NTAwNzgxMjUgNzIuMTQ4NDM3NVEyMDkuMjc2MjUgNjkuNjg3NSAyMDkuMjc2MjUgNjYuNDE3OTY4NzVRMjA5LjI3NjI1IDYzLjE0ODQzNzUgMjA4LjQ1MDA3ODEyNSA2MC43MDUwNzgxMjVRMjA3LjYyMzkwNjI1IDU4LjI2MTcxODc1IDIwNi4wMDY3MTg3NSA1Ni45MjU3ODEyNVEyMDQuMzg5NTMxMjUgNTUuNTg5ODQzNzUgMjAyLjAzNDA2MjUgNTUuNTg5ODQzNzVRMTk5LjY3ODU5Mzc1IDU1LjU4OTg0Mzc1IDE5OC4wNjE0MDYyNSA1Ni45MjU3ODEyNVExOTYuNDQ0MjE4NzUgNTguMjYxNzE4NzUgMTk1LjYxODA0Njg3NSA2MC43MDUwNzgxMjVRMTk0Ljc5MTg3NSA2My4xNDg0Mzc1IDE5NC43OTE4NzUgNjYuNDE3OTY4NzVRMTk0Ljc5MTg3NSA2OS42ODc1IDE5NS42MTgwNDY4NzUgNzIuMTQ4NDM3NVExOTYuNDQ0MjE4NzUgNzQuNjA5Mzc1IDE5OC4wNjE0MDYyNSA3NS45ODA0Njg3NVExOTkuNjc4NTkzNzUgNzcuMzUxNTYyNSAyMDIuMDM0MDYyNSA3Ny4zNTE1NjI1WiBNMjM5LjE5NTYyNSA2My41NzAzMTI1Vjg2LjBIMjI2LjkyNjA5Mzc1VjQ2LjY5NTMxMjVIMjM4LjQ1NzM0Mzc1TDIzOC42NjgyODEyNSA1NS4yMDMxMjVRMjQwLjEwOTY4NzUgNTEuNDc2NTYyNSAyNDIuNzExMjUgNDkuMDUwNzgxMjVRMjQ1Ljc2OTg0Mzc1IDQ2LjIwMzEyNSAyNTAuOTcyOTY4NzUgNDYuMjAzMTI1UTI1NS4wODYyNSA0Ni4yMDMxMjUgMjU4LjE0NDg0Mzc1IDQ4LjAzMTI1UTI2MS4yMDM0Mzc1IDQ5Ljg1OTM3NSAyNjIuODkwOTM3NSA1My4xOTkyMTg3NVEyNjQuNTc4NDM3NSA1Ni41MzkwNjI1IDI2NC41Nzg0Mzc1IDYwLjk2ODc1Vjg2LjBIMjUyLjMwODkwNjI1VjYzLjM1OTM3NVEyNTIuMzA4OTA2MjUgNjAuMDU0Njg3NSAyNTAuNjIxNDA2MjUgNTguMTczODI4MTI1UTI0OC45MzM5MDYyNSA1Ni4yOTI5Njg3NSAyNDUuOTEwNDY4NzUgNTYuMjkyOTY4NzVRMjQzLjk0MTcxODc1IDU2LjI5Mjk2ODc1IDI0Mi40MTI0MjE4NzUgNTcuMTU0Mjk2ODc1UTI0MC44ODMxMjUgNTguMDE1NjI1IDI0MC4wMzkzNzUgNTkuNjMyODEyNVEyMzkuMTk1NjI1IDYxLjI1IDIzOS4xOTU2MjUgNjMuNTcwMzEyNVoiIGZpbGw9IiNGRkZGRkYiLz48cGF0aCBkPSJNMjg1LjM4ODQzNzUgODYuODc4OTA2MjVRMjgxLjY2MTg3NSA4Ni44Nzg5MDYyNSAyNzguNjM4NDM3NSA4NS40OTAyMzQzNzVRMjc1LjYxNSA4NC4xMDE1NjI1IDI3My44NTcxODc1IDgxLjQyOTY4NzVRMjcyLjA5OTM3NSA3OC43NTc4MTI1IDI3Mi4wOTkzNzUgNzQuODkwNjI1UTI3Mi4wOTkzNzUgNzEuNTUwNzgxMjUgMjczLjM4MjU3ODEyNSA2OS40MDYyNVEyNzQuNjY1NzgxMjUgNjcuMjYxNzE4NzUgMjc2Ljg2MzA0Njg3NSA2NS45OTYwOTM3NVEyNzkuMDYwMzEyNSA2NC43MzA0Njg3NSAyODEuNzQ5NzY1NjI1IDY0LjA5NzY1NjI1UTI4NC40MzkyMTg3NSA2My40NjQ4NDM3NSAyODcuMjE2NTYyNSA2My4xNDg0Mzc1UTI5MC42OTcwMzEyNSA2Mi43MjY1NjI1IDI5Mi44NzY3MTg3NSA2Mi40NjI4OTA2MjVRMjk1LjA1NjQwNjI1IDYyLjE5OTIxODc1IDI5Ni4wOTM1MTU2MjUgNjEuNTgzOTg0Mzc1UTI5Ny4xMzA2MjUgNjAuOTY4NzUgMjk3LjEzMDYyNSA1OS41OTc2NTYyNVY1OS4zODY3MTg3NVEyOTcuMTMwNjI1IDU3LjE3MTg3NSAyOTYuMjg2ODc1IDU1LjY2MDE1NjI1UTI5NS40NDMxMjUgNTQuMTQ4NDM3NSAyOTMuNzczMjAzMTI1IDUzLjMyMjI2NTYyNVEyOTIuMTAzMjgxMjUgNTIuNDk2MDkzNzUgMjg5LjYwNzE4NzUgNTIuNDk2MDkzNzVRMjg3LjA0MDc4MTI1IDUyLjQ5NjA5Mzc1IDI4NS4xOTUwNzgxMjUgNTMuMjg3MTA5Mzc1UTI4My4zNDkzNzUgNTQuMDc4MTI1IDI4Mi4yMDY3OTY4NzUgNTUuMzA4NTkzNzVRMjgxLjA2NDIxODc1IDU2LjUzOTA2MjUgMjgwLjUwMTcxODc1IDU3Ljg3NUwyNzMuMjI0Mzc1IDU1Ljk3NjU2MjVRMjc0LjU2MDMxMjUgNTIuNDYwOTM3NSAyNzcuMDU2NDA2MjUgNTAuMzE2NDA2MjVRMjc5LjU1MjUgNDguMTcxODc1IDI4Mi43ODY4NzUgNDcuMTg3NVEyODYuMDIxMjUgNDYuMjAzMTI1IDI4OS40NjY1NjI1IDQ2LjIwMzEyNVEyOTEuODU3MTg3NSA0Ni4yMDMxMjUgMjk0LjUyOTA2MjUgNDYuNzY1NjI1UTI5Ny4yMDA5Mzc1IDQ3LjMyODEyNSAyOTkuNTU2NDA2MjUgNDguODA0Njg3NVEzMDEuOTExODc1IDUwLjI4MTI1IDMwMy4zODg0Mzc1IDUyLjk1MzEyNVEzMDQuODY1IDU1LjYyNSAzMDQuODY1IDU5LjkxNDA2MjVWODYuMEgyOTcuMzc2NzE4NzVWODAuNjIxMDkzNzVIMjk2Ljk5UTI5Ni4yMTY1NjI1IDgyLjEzMjgxMjUgMjk0LjcwNDg0Mzc1IDgzLjU3NDIxODc1UTI5My4xOTMxMjUgODUuMDE1NjI1IDI5MC44OTAzOTA2MjUgODUuOTQ3MjY1NjI1UTI4OC41ODc2NTYyNSA4Ni44Nzg5MDYyNSAyODUuMzg4NDM3NSA4Ni44Nzg5MDYyNVpNMjg3LjExMTA5Mzc1IDgwLjY1NjI1UTI5MC4yNzUxNTYyNSA4MC42NTYyNSAyOTIuNTI1MTU2MjUgNzkuNDI1NzgxMjVRMjk0Ljc3NTE1NjI1IDc4LjE5NTMxMjUgMjk1Ljk3MDQ2ODc1IDc2LjE1NjI1UTI5Ny4xNjU3ODEyNSA3NC4xMTcxODc1IDI5Ny4xNjU3ODEyNSA3MS44MzIwMzEyNVY2Ni44MDQ2ODc1UTI5Ni43NDM5MDYyNSA2Ny4yMjY1NjI1IDI5NS41NjYxNzE4NzUgNjcuNTYwNTQ2ODc1UTI5NC4zODg0Mzc1IDY3Ljg5NDUzMTI1IDI5Mi44NzY3MTg3NSA2OC4xNTgyMDMxMjVRMjkxLjM2NSA2OC40MjE4NzUgMjg5Ljk1ODc1IDY4LjU5NzY1NjI1UTI4OC41NTI1IDY4Ljc3MzQzNzUgMjg3LjYzODQzNzUgNjguODc4OTA2MjVRMjg1LjQ1ODc1IDY5LjE2MDE1NjI1IDI4My42NDgyMDMxMjUgNjkuODI4MTI1UTI4MS44Mzc2NTYyNSA3MC40OTYwOTM3NSAyODAuNzY1MzkwNjI1IDcxLjcyNjU2MjVRMjc5LjY5MzEyNSA3Mi45NTcwMzEyNSAyNzkuNjkzMTI1IDc0Ljk5NjA5Mzc1UTI3OS42OTMxMjUgNzYuODU5Mzc1IDI4MC42NTk5MjE4NzUgNzguMTI1UTI4MS42MjY3MTg3NSA3OS4zOTA2MjUgMjgzLjI3OTA2MjUgODAuMDIzNDM3NVEyODQuOTMxNDA2MjUgODAuNjU2MjUgMjg3LjExMTA5Mzc1IDgwLjY1NjI1WiBNMzI3LjIyNTc4MTI1IDg2LjQ5MjE4NzVRMzIzLjIxNzk2ODc1IDg2LjQ5MjE4NzUgMzIwLjE5NDUzMTI1IDg0LjgwNDY4NzVRMzE3LjE3MTA5Mzc1IDgzLjExNzE4NzUgMzE1LjUwMTE3MTg3NSA3OS44MTI1UTMxMy44MzEyNSA3Ni41MDc4MTI1IDMxMy44MzEyNSA3MS42NTYyNVY0Ni42OTUzMTI1SDMyMS41NjU2MjVWNzAuNzA3MDMxMjVRMzIxLjU2NTYyNSA3NC45NjA5Mzc1IDMyMy43OTgwNDY4NzUgNzcuMzUxNTYyNVEzMjYuMDMwNDY4NzUgNzkuNzQyMTg3NSAzMjkuODYyNSA3OS43NDIxODc1UTMzMi40OTkyMTg3NSA3OS43NDIxODc1IDMzNC41NTU4NTkzNzUgNzguNTk5NjA5Mzc1UTMzNi42MTI1IDc3LjQ1NzAzMTI1IDMzNy44MDc4MTI1IDc1LjI1OTc2NTYyNVEzMzkuMDAzMTI1IDczLjA2MjUgMzM5LjAwMzEyNSA2OS45Njg3NVY0Ni42OTUzMTI1SDM0Ni43Mzc1Vjg2LjBIMzM5LjM1NDY4NzVMMzM5LjMxOTUzMTI1IDc4LjMzNTkzNzVRMzM3LjcwMjM0Mzc1IDgyLjE2Nzk2ODc1IDMzNS4wMzA0Njg3NSA4NC4xMDE1NjI1UTMzMS43MjU3ODEyNSA4Ni40OTIxODc1IDMyNy4yMjU3ODEyNSA4Ni40OTIxODc1WiBNMzcwLjMyODc1IDg2Ljc3MzQzNzVRMzY1LjU0NzUgODYuNzczNDM3NSAzNjEuODIwOTM3NSA4NC4zMzAwNzgxMjVRMzU4LjA5NDM3NSA4MS44ODY3MTg3NSAzNTUuOTg1IDc3LjMzMzk4NDM3NVEzNTMuODc1NjI1IDcyLjc4MTI1IDM1My44NzU2MjUgNjYuNDUzMTI1UTM1My44NzU2MjUgNjAuMDU0Njg3NSAzNTYuMDIwMTU2MjUgNTUuNTE5NTMxMjVRMzU4LjE2NDY4NzUgNTAuOTg0Mzc1IDM2MS44OTEyNSA0OC41OTM3NVEzNjUuNjE3ODEyNSA0Ni4yMDMxMjUgMzcwLjMyODc1IDQ2LjIwMzEyNVEzNzMuOTg1IDQ2LjIwMzEyNSAzNzYuMjE3NDIxODc1IDQ3LjQxNjAxNTYyNVEzNzguNDQ5ODQzNzUgNDguNjI4OTA2MjUgMzc5LjcxNTQ2ODc1IDUwLjI0NjA5Mzc1UTM4MC45ODEwOTM3NSA1MS44NjMyODEyNSAzODEuNjQ5MDYyNSA1My4wOTM3NUgzODIuMDcwOTM3NVYzMy42MTcxODc1SDM4OS44MDUzMTI1Vjg2LjBIMzgyLjI4MTg3NVY3OS44NDc2NTYyNUgzODEuNjQ5MDYyNVEzODAuOTgxMDkzNzUgODEuMTEzMjgxMjUgMzc5LjY4MDMxMjUgODIuNzMwNDY4NzVRMzc4LjM3OTUzMTI1IDg0LjM0NzY1NjI1IDM3Ni4xMjk1MzEyNSA4NS41NjA1NDY4NzVRMzczLjg3OTUzMTI1IDg2Ljc3MzQzNzUgMzcwLjMyODc1IDg2Ljc3MzQzNzVaTTM3Mi4wMTYyNSA4MC4xOTkyMTg3NVEzNzUuMzIwOTM3NSA4MC4xOTkyMTg3NSAzNzcuNTg4NTE1NjI1IDc4LjQ0MTQwNjI1UTM3OS44NTYwOTM3NSA3Ni42ODM1OTM3NSAzODEuMDMzODI4MTI1IDczLjU3MjI2NTYyNVEzODIuMjExNTYyNSA3MC40NjA5Mzc1IDM4Mi4yMTE1NjI1IDY2LjM4MjgxMjVRMzgyLjIxMTU2MjUgNjIuMjY5NTMxMjUgMzgxLjA1MTQwNjI1IDU5LjIyODUxNTYyNVEzNzkuODkxMjUgNTYuMTg3NSAzNzcuNjIzNjcxODc1IDU0LjQ4MjQyMTg3NVEzNzUuMzU2MDkzNzUgNTIuNzc3MzQzNzUgMzcyLjAxNjI1IDUyLjc3NzM0Mzc1UTM2OC42MDYwOTM3NSA1Mi43NzczNDM3NSAzNjYuMzM4NTE1NjI1IDU0LjU3MDMxMjVRMzY0LjA3MDkzNzUgNTYuMzYzMjgxMjUgMzYyLjkyODM1OTM3NSA1OS40Mzk0NTMxMjVRMzYxLjc4NTc4MTI1IDYyLjUxNTYyNSAzNjEuNzg1NzgxMjUgNjYuMzgyODEyNVEzNjEuNzg1NzgxMjUgNzAuMjg1MTU2MjUgMzYyLjk0NTkzNzUgNzMuNDE0MDYyNVEzNjQuMTA2MDkzNzUgNzYuNTQyOTY4NzUgMzY2LjM5MTI1IDc4LjM3MTA5Mzc1UTM2OC42NzY0MDYyNSA4MC4xOTkyMTg3NSAzNzIuMDE2MjUgODAuMTk5MjE4NzVaIE0zOTguNzcxNTYyNSA4Ni4wVjQ2LjY5NTMxMjVINDA2LjUwNTkzNzVWODYuMFpNNDAyLjY3MzkwNjI1IDQwLjY4MzU5Mzc1UTQwMC42NyA0MC42ODM1OTM3NSAzOTkuMjQ2MTcxODc1IDM5LjM0NzY1NjI1UTM5Ny44MjIzNDM3NSAzOC4wMTE3MTg3NSAzOTcuODIyMzQzNzUgMzYuMTEzMjgxMjVRMzk3LjgyMjM0Mzc1IDM0LjE3OTY4NzUgMzk5LjI0NjE3MTg3NSAzMi44NDM3NVE0MDAuNjcgMzEuNTA3ODEyNSA0MDIuNjczOTA2MjUgMzEuNTA3ODEyNVE0MDQuNjc3ODEyNSAzMS41MDc4MTI1IDQwNi4xMTkyMTg3NSAzMi44NDM3NVE0MDcuNTYwNjI1IDM0LjE3OTY4NzUgNDA3LjU2MDYyNSAzNi4xMTMyODEyNVE0MDcuNTYwNjI1IDM4LjAxMTcxODc1IDQwNi4xMTkyMTg3NSAzOS4zNDc2NTYyNVE0MDQuNjc3ODEyNSA0MC42ODM1OTM3NSA0MDIuNjczOTA2MjUgNDAuNjgzNTkzNzVaIE00MzIuMjc2ODc1IDQ2LjY5NTMxMjVWNTIuOTg4MjgxMjVINDI0LjQzNzAzMTI1Vjc1LjM4MjgxMjVRNDI0LjQzNzAzMTI1IDc3LjczODI4MTI1IDQyNS40Mzg5ODQzNzUgNzguODQ1NzAzMTI1UTQyNi40NDA5Mzc1IDc5Ljk1MzEyNSA0MjguNzI2MDkzNzUgNzkuOTUzMTI1UTQyOS4zMjM3NSA3OS45NTMxMjUgNDMwLjMwODEyNSA3OS44MTI1UTQzMS4yOTI1IDc5LjY3MTg3NSA0MzEuOTk1NjI1IDc5LjUzMTI1TDQzMy4zNjY3MTg3NSA4NS43MTg3NVE0MzIuMTM2MjUgODYuMTQwNjI1IDQzMC43MyA4Ni4zMzM5ODQzNzVRNDI5LjMyMzc1IDg2LjUyNzM0Mzc1IDQyNy45NTI2NTYyNSA4Ni41MjczNDM3NVE0MjIuNjA4OTA2MjUgODYuNTI3MzQzNzUgNDE5LjY1NTc4MTI1IDgzLjc2NzU3ODEyNVE0MTYuNzAyNjU2MjUgODEuMDA3ODEyNSA0MTYuNzAyNjU2MjUgNzYuMDE1NjI1VjUyLjk4ODI4MTI1SDQxMC45NzIxODc1VjQ2LjY5NTMxMjVINDE2LjcwMjY1NjI1VjM3LjM0Mzc1SDQyNC40MzcwMzEyNVY0Ni42OTUzMTI1WiIgZmlsbD0iI0M5RDFEOSIvPjwvc3ZnPg==';
+const html = htm.bind(React.createElement);
+const {useState, useEffect, useMemo, useRef} = React;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+const toISO = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromISO = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = fromISO(s); d.setDate(d.getDate() + n); return toISO(d); };
+const dayDiff = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 864e5);
+const todayISO = () => toISO(new Date());
+const WK = '日一二三四五六';
+const wkday = s => WK[fromISO(s).getDay()];
+const roc = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+y - 1911}/${m}/${d}`; };
+const mondayOf = s => { const d = fromISO(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return toISO(d); };
+const num = v => { if (v == null || v === '') return NaN; if (typeof v === 'number') return v; const t = String(v).replace(/[,，\s%]/g, ''); return t === '' ? NaN : Number(t); };
+const isNum = v => Number.isFinite(num(v));
+const r4 = x => Math.round(x * 1e4) / 1e4;
+const pct = (x, d = 2) => Number.isFinite(x) ? (x * 100).toFixed(d) + '%' : '—';
+const money = x => Number.isFinite(x) ? Math.round(x).toLocaleString() : '—';
+const fmtQ = x => Number.isFinite(x) ? (+x.toFixed(3)).toLocaleString() : '';
+const norm = s => String(s ?? '').replace(/[\s　，,。．.、:：;；()（）\[\]【】「」'"＂]/g, '').replace(/[＜]/g, '<').replace(/[＞]/g, '>').replace(/[³]/g, '3').replace(/[²]/g, '2').toLowerCase();
+const clean = s => String(s ?? '').replace(/\s+/g, '');
+
+/* 各種日期寫法 → ISO（Date 物件、Excel 序號、115/8/3、115.08.03、2026-8-3、1150803） */
+function parseAnyDate(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date && !isNaN(v)) { const d = new Date(v.getTime() + 12 * 36e5); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate())); }
+  if (typeof v === 'number') { if (v > 20000 && v < 80000) { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${pad(d.m)}-${pad(d.d)}`; } return null; }
+  let s = String(v).trim().replace(/[年月]/g, '/').replace(/日.*$/, '').replace(/\(.+?\)|（.+?）/g, '').trim();
+  let m = s.match(/^(\d{2,4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})/);
+  if (!m) { const k = s.match(/^(\d{3})(\d{2})(\d{2})$/); if (k) m = [0, k[1], k[2], k[3]]; }
+  if (!m) return null;
+  let y = +m[1]; if (y < 1911) y += 1911;
+  const mo = +m[2], d = +m[3]; if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+
+/* ================= 資料儲存層 =================
+   目前以瀏覽器 IndexedDB 保存，每個專案一份文件。
+   日後併入 RT-PMIS 時，只需把 Store 的四個函式換成 Supabase 呼叫。 */
+const Store = (() => {
+  let dbp;
+  const db = () => dbp || (dbp = new Promise((res, rej) => {
+    const q = indexedDB.open('smart-supervision', 1);
+    q.onupgradeneeded = () => q.result.createObjectStore('projects', {keyPath: 'id'});
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  }));
+  const tx = async (mode, fn) => { const d = await db(); return new Promise((res, rej) => { const t = d.transaction('projects', mode); const r = fn(t.objectStore('projects')); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); }); };
+  return {
+    list: () => tx('readonly', s => s.getAll()),
+    put: doc => tx('readwrite', s => s.put(doc)),
+    del: id => tx('readwrite', s => s.delete(id)),
+  };
+})();
+
+const DEFAULT_PREFIX = {施工查驗: '施查', 材料查驗: '材查', 技師督導: '技督', 查核: '查核', 職安衛: '安', 環保: '環', 交維: '交', 防汛: '汛'};
+function newProject(name = '新專案') {
+  return {
+    id: uid(), created: new Date().toISOString(),
+    info: {name, contractNo: '', owner: '', supervisor: '睿泰工程顧問有限公司', contractor: '', location: '', startDate: todayISO(), duration: 180, extendDays: 0, amount: 0},
+    items: [], schedule: [], logs: {}, inspections: [], supervisions: [], forms: [],
+    settings: {prefix: {...DEFAULT_PREFIX}, tolerance: 3, testDue: 30, labor: ['技術工', '大工', '小工'], machines: ['挖土機', '混凝土車', '吊(卡)車']},
+  };
+}
+/* ================= 匯入解析 ================= */
+const readWB = async file => XLSX.read(await file.arrayBuffer(), {type: 'array', cellDates: true});
+const aoa = ws => XLSX.utils.sheet_to_json(ws, {header: 1, raw: true, defval: null, blankrows: true});
+const CN_NUM = /^[一二三四五六七八九十]+$/;
+const RATIO_RE = /利潤|營業稅/;
+const NO_INSPECT_RE = /品質|品管|職業安全|職安|環境保護|環保|交通維持|保險|利潤|營業稅/;
+
+/* ---- 契約詳細價目表 ---- */
+function parseContractSheet(rows) {
+  let hi = -1, col = {};
+  for (let i = 0; i < Math.min(rows.length, 30) && hi < 0; i++) {
+    const h = rows[i].map(clean);
+    const f = re => h.findIndex(x => re.test(x));
+    const c = {seq: f(/^項次$/), name: f(/項目|說明/), unit: f(/^單位$/), qty: f(/數量/), price: f(/單價/)};
+    if (c.seq >= 0 && c.unit >= 0 && c.qty >= 0 && c.price >= 0) {
+      hi = i; col = c; col.code = f(/代碼/); col.kind = f(/^類型$/); col.inspect = f(/需查驗/); col.amount = f(/複價|總價|^金額$/);
+      if (col.name === col.seq) col.name = f(/工程項目|說明/);
+    }
+  }
+  if (hi < 0) return null;
+  const items = []; let group = '', gseq = '', gi = -1, n = 0;
+  const letter = i => String.fromCharCode(65 + i);
+  for (let i = hi + 1; i < rows.length; i++) {
+    const r = rows[i], seq = clean(r[col.seq]), name = String(r[col.name] ?? '').trim(), unit = clean(r[col.unit]);
+    const qty = num(r[col.qty]), price = num(r[col.price]);
+    if (/總價|總計|合計/.test(clean(name)) && !unit) continue;
+    const isItem = unit && Number.isFinite(qty) && qty > 0 && Number.isFinite(price);
+    if (CN_NUM.test(seq)) { gi++; n = 0; group = name; gseq = seq; }
+    if (!isItem) continue;
+    n++;
+    const code = col.code >= 0 && clean(r[col.code]) ? clean(r[col.code]) : letter(Math.max(gi, 0)) + pad(n);
+    const kind = col.kind >= 0 && clean(r[col.kind]) ? (clean(r[col.kind]) === '比例' ? 'ratio' : 'normal') : (RATIO_RE.test(name) && unit === '式' ? 'ratio' : 'normal');
+    const inspect = col.inspect >= 0 && r[col.inspect] != null ? /^(是|Y|y|v|V|✓|1|TRUE|true)$/.test(clean(r[col.inspect])) : (kind === 'normal' && !NO_INSPECT_RE.test(group));
+    items.push({code, seq, name, unit, qty, price, amount: col.amount >= 0 && isNum(r[col.amount]) ? num(r[col.amount]) : Math.round(qty * price), group, gseq, kind, inspect});
+  }
+  return items;
+}
+function parseContract(wb) {
+  let best = null;
+  for (const sn of wb.SheetNames) {
+    const items = parseContractSheet(aoa(wb.Sheets[sn]));
+    if (!items || !items.length) continue;
+    const score = items.length + (/詳細|契約/.test(sn) ? 5 : 0) + (items.some(x => /^[A-Z]\d{2}$/.test(x.code)) ? 3 : 0);
+    if (!best || score > best.score) best = {sheet: sn, items, score};
+  }
+  return best;
+}
+/* 工程資料：「工程資料」分頁，或施工日誌表頭（工程名稱／承攬廠商名稱／契約工期／開工日期…）的「標籤→右側值」 */
+const INFO_MAP = [[/^工程名稱/, 'name'], [/^契約編號|^工程編號/, 'contractNo'], [/^主辦機關/, 'owner'], [/^監造單位/, 'supervisor'], [/^承[攬包]廠商/, 'contractor'],
+  [/^開工日期/, 'startDate'], [/^完工期限|^契約工期/, 'duration'], [/^契約金額/, 'amount'], [/^展延工期|^工期展延天數/, 'extendDays'], [/^施工地點/, 'location']];
+function infoFromRows(rows, info = {}) {
+  for (const r of rows) for (let i = 0; i < r.length; i++) {
+    const lab = clean(r[i]).replace(/[:：]$/, ''); if (!lab || lab.length > 8) continue;
+    const hit = INFO_MAP.find(([re]) => re.test(lab)); if (!hit || info[hit[1]] != null) continue;
+    const k = hit[1]; let v = null;
+    for (let j = i + 1; j < Math.min(r.length, i + 8); j++) { if (r[j] == null || String(r[j]).trim() === '') continue; if (INFO_MAP.some(([re]) => re.test(clean(r[j])))) break; v = r[j]; break; }
+    if (v == null) continue;
+    if (k === 'startDate') { const d = parseAnyDate(v); if (d) info[k] = d; }
+    else if (['duration', 'amount', 'extendDays'].includes(k)) { const m = String(v).replace(/,/g, '').match(/\d+(\.\d+)?/); if (m) info[k] = +m[0]; }
+    else info[k] = String(v).trim();
+  }
+  return info;
+}
+function parseInfo(wb) {
+  if (wb.Sheets['工程資料']) return infoFromRows(aoa(wb.Sheets['工程資料']).map(r => r.slice(0, 3)));
+  const info = {}; // 無工程資料分頁：從各分頁表頭（前 15 列）讀
+  for (const sn of wb.SheetNames) infoFromRows(aoa(wb.Sheets[sn]).slice(0, 15), info);
+  return info;
+}
+
+/* ---- 預定進度表 ---- */
+function toFrac(vals) { const mx = Math.max(...vals.map(v => v[1])); return vals.map(([d, v]) => ({date: d, cum: mx > 1.5 ? v / 100 : v})); }
+function dedupSchedule(pts) {
+  const m = new Map(); pts.forEach(p => m.set(p.date, p.cum));
+  const a = [...m].map(([date, cum]) => ({date, cum: Math.round(cum * 1e6) / 1e6})).sort((x, y) => x.date < y.date ? -1 : 1);
+  const k = a.findIndex(x => x.cum >= a[a.length - 1].cum); return a.slice(0, k + 1); // 去除達 100% 後的重複點
+}
+function parseSchedule(wb) {
+  const cands = [];
+  for (const [si, sn] of wb.SheetNames.entries()) {
+    if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; // 略過隱藏分頁
+    scheduleCands(aoa(wb.Sheets[sn]), sn, cands);
+  }
+  cands.sort((a, b) => b.points.length - a.points.length);
+  return cands[0] || null;
+}
+function scheduleCands(rows, sn, cands) {
+  {
+    if (!rows.length) return cands;
+    const H = Math.min(rows.length, 8), W = Math.max(...rows.slice(0, 400).map(r => r.length));
+    // (A) 直式：表頭含「預定」且「累計」的欄 + 日期欄
+    const hdr = [];
+    for (let i = 0; i < H; i++) { let last = '', lc = -9; hdr[i] = []; for (let c = 0; c < W; c++) { const v = clean(rows[i][c]); if (v) { last = v; lc = c; } hdr[i][c] = v || (c - lc <= 1 ? last : ''); } } // 合併表頭只往右延伸 1 格
+    for (let c = 0; c < W; c++) {
+      const t = hdr.map(h => h[c] || '').join('|');
+      if (!(/預定/.test(t) && /累計/.test(t))) continue;
+      if (/實際/.test(clean(rows.slice(0, H).map(r => r[c]).join('')))) continue;
+      let dc = -1, best = 0;
+      for (let k = 0; k < Math.min(W, 6); k++) { const n = rows.slice(1).filter(r => parseAnyDate(r[k])).length; if (n > best) { best = n; dc = k; } }
+      if (dc < 0 || best < 3) continue;
+      const vals = rows.slice(1).map(r => [parseAnyDate(r[dc]), num(r[c])]).filter(([d, v]) => d && Number.isFinite(v));
+      if (vals.some((v, i) => i && v[1] < vals[i - 1][1] - 1e-6)) continue; // 累計值必須遞增（排除「當日」欄）
+      if (vals.length >= 3) cands.push({sheet: sn, how: '直式欄位', points: dedupSchedule(toFrac(vals))});
+    }
+    // (B) 橫式：某列標示「累計」、上方有一列日期
+    for (let i = 0; i < rows.length; i++) {
+      const labOf = r => (r || []).slice(0, 4).filter(v => !isNum(v)).map(clean).join('');
+      let lab = labOf(rows[i]); if (!/累計/.test(lab)) lab += labOf(rows[i - 1]) + labOf(rows[i + 1]); // 列標題折行
+      if (!/累計/.test(lab) || /實際/.test(lab)) continue;
+      const numCols = rows[i].map((v, c) => c > 0 && isNum(v) ? c : -1).filter(c => c >= 0);
+      if (numCols.length < 3) continue;
+      for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
+        const pairs = numCols.map(c => [parseAnyDate(rows[j][c]), num(rows[i][c])]).filter(([d]) => d);
+        if (pairs.length >= 3) { cands.push({sheet: sn, how: '橫式列', points: dedupSchedule(toFrac(pairs))}); break; }
+      }
+    }
+  }
+  return cands;
+}
+function parsePastedSchedule(text) {
+  const vals = text.split(/\r?\n/).map(l => l.split(/\t|,|\s{2,}/)).map(c => [parseAnyDate(c[0]), num(c[1])]).filter(([d, v]) => d && Number.isFinite(v));
+  return vals.length ? dedupSchedule(toFrac(vals)) : [];
+}
+
+/* ---- 施工日誌 ---- */
+let ALIAS = {}; // 使用者手動指定的「日誌名稱 → 契約代碼」，匯入前由專案設定帶入
+function matchItem(items, name, unit) {
+  const n = norm(name); if (!n) return null;
+  if (ALIAS[n]) { const a = items.find(x => x.code === ALIAS[n]); if (a) return a; }
+  let c = items.filter(x => norm(x.name) === n);
+  if (!c.length && n.length >= 6) c = items.filter(x => { const m = norm(x.name); return m.startsWith(n) || n.startsWith(m); });
+  if (c.length > 1 && unit) { const u = c.filter(x => norm(x.unit) === norm(unit)); if (u.length) c = u; }
+  return c[0] || null;
+}
+const blankLog = () => ({wAm: '', wPm: '', summary: '', safety: '', tests: '', notify: '', notes: '', labor: {}, machines: {}, qty: {}});
+function parseLogs(wb, items) {
+  const logs = {}, unmatched = [], sources = [];
+  const L = d => logs[d] || (logs[d] = blankLog());
+  const S = n => wb.Sheets[n] ? aoa(wb.Sheets[n]) : null;
+  // (1) 本系統匯出之整合連動版
+  let rows = S('每日數量');
+  if (rows && clean(rows[0]?.[0]) === '代碼') {
+    const codes = rows[0]; let n = 0;
+    for (let i = 7; i < rows.length; i++) { const d = parseAnyDate(rows[i][0]); if (!d) continue;
+      for (let c = 7; c < codes.length; c++) { const q = num(rows[i][c]); const code = clean(codes[c]); if (code && Number.isFinite(q) && q !== 0 && items.find(x => x.code === code)?.kind === 'normal') { L(d).qty[code] = q; n++; } } }
+    sources.push(`每日數量：${n} 筆數量`);
+  } else if ((rows = S('工程項目'))) {
+    // (2) 既有整合活頁簿（工程項目矩陣：列=日期、欄=工項）
+    const nr = rows.findIndex(r => clean(r[0]) === '工程項目'), ur = rows.findIndex(r => clean(r[0]) === '日期');
+    if (nr >= 0 && ur >= 0) {
+      const map = {};
+      const miss = {};
+      rows[nr].forEach((v, c) => { if (c < 3 || !v || /合計|利雜費|總和$|^營業稅$/.test(clean(v))) return; const it = matchItem(items, v, rows[ur][c]); if (it) map[c] = it.code; else miss[c] = String(v); });
+      let n = 0, prev = '';
+      for (let i = ur + 1; i < rows.length; i++) { const d = parseAnyDate(rows[i][0]); if (!d) continue;
+        if (d <= prev) break; prev = d; // 下方另有累計區塊時停止
+        for (const c in miss) { const q = num(rows[i][c]); if (Number.isFinite(q) && q !== 0) unmatched.push({name: miss[c], unit: clean(rows[ur][c]), date: d, q}); }
+        for (const c in map) { const q = num(rows[i][c]); if (Number.isFinite(q) && q !== 0 && items.find(x => x.code === map[c]).kind === 'normal') { L(d).qty[map[c]] = q; n++; } } }
+      sources.push(`工程項目矩陣：對應 ${Object.keys(map).length} 個工項、${n} 筆數量`);
+    }
+  }
+  // (4)「日資料庫」格式（日資料庫1、日資料庫2…：第「工項」列為名稱、下方單價／契約數量列，「今日完成數量」列之後逐日一列）
+  const dbs = wb.SheetNames.filter(n => /^日資料庫/.test(n));
+  if (!sources.length && dbs.length) {
+    let n = 0; const mapped = new Set();
+    for (const sn of dbs) {
+      const R = aoa(wb.Sheets[sn]);
+      const nr = R.findIndex(r => clean(r[0]) === '工項'), qr = R.findIndex(r => clean(r[0]) === '契約數量');
+      const hr = R.findIndex(r => r.some(v => clean(v) === '今日完成數量')); if (nr < 0 || hr < 0) continue;
+      const dc = R.slice(0, hr + 1).map(r => r.findIndex(v => clean(v) === '日期')).find(i => i >= 0) ?? 2;
+      const wx = [1, 2, 3, 4].map(k => clean(R[nr][1 + k])); // 天氣代號 1~4 → 晴陰雨颱風
+      const cols = {}, miss = {};
+      R[nr].forEach((v, c) => { if (c < 6 || !v || !(num(R[qr]?.[c]) > 0)) return; // 契約數量為 0 的是大項／小計欄
+        const it = matchItem(items, v, ''); if (it) { if (it.kind === 'normal') { cols[c] = it.code; mapped.add(it.code); } } else miss[c] = String(v); });
+      for (let i = hr + 1; i < R.length; i++) { const d = parseAnyDate(R[i][dc]); if (!d) continue;
+        for (const c in cols) { const q = num(R[i][c]); if (Number.isFinite(q) && q !== 0) { L(d).qty[cols[c]] = q; n++; } }
+        for (const c in miss) { const q = num(R[i][c]); if (Number.isFinite(q) && q !== 0) unmatched.push({name: miss[c], unit: '', date: d, q}); }
+        if (sn === dbs[0]) { const l = logs[d]; const w = k => wx[num(R[i][k]) - 1] || '';
+          if (l || num(R[i][dc + 1]) > 0) { const x = L(d); x.wAm = x.wAm || w(dc + 2); x.wPm = x.wPm || w(dc + 3); } } }
+    }
+    // 未來日期只有預設天氣代號，不建立日誌
+    const lastD = Object.keys(logs).filter(d => Object.keys(logs[d].qty).length).sort().pop();
+    for (const d in logs) if (!lastD || d > lastD) delete logs[d];
+    // 工程進行狀況文字：依「快速輸入」分頁的欄位設定（項目／起始欄／項數）
+    const qi = S('快速輸入'), R1 = aoa(wb.Sheets[dbs[0]]);
+    const cfg = qi && qi.find(r => /工程進行狀況|施工概況/.test(clean(r[7])));
+    if (cfg) { const c0 = num(cfg[8]) - 1, k = num(cfg[9]) || 1; let t = 0;
+      for (const r of R1) { const d = parseAnyDate(r[2]); if (!d) continue; const txt = r.slice(c0, c0 + k).filter(v => v != null && String(v).trim()).join('\n');
+        if (txt && (!lastD || d <= lastD)) { L(d).summary = L(d).summary || txt; t++; } }
+      sources.push(`${dbs.join('、')}：對應 ${mapped.size} 個工項、${n} 筆數量、${t} 天施工概況`); }
+    else sources.push(`${dbs.join('、')}：對應 ${mapped.size} 個工項、${n} 筆數量`);
+    // 輸入1：職安衛／取樣試驗／通知協力廠商／重要事項（各段占數欄）
+    const inp = S('輸入1');
+    if (inp) { const h = inp[0] || [], sec = [];
+      h.forEach((v, c) => { const t = clean(v); const k = /安全衛生/.test(t) ? 'safety' : /取樣試驗/.test(t) ? 'tests' : /協力廠商/.test(t) ? 'notify' : /重要事項/.test(t) ? 'notes' : null; if (k) sec.push([k, c]); });
+      sec.forEach((x, i) => x.push(i + 1 < sec.length ? sec[i + 1][1] : h.length + 20));
+      let t = 0; for (const r of inp.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue; let hit = false;
+        for (const [k, a, b] of sec) { const txt = r.slice(a, b).filter(v => v != null && String(v).trim()).join('\n'); if (txt && k !== 'safety') { L(d)[k] = L(d)[k] || txt; hit = true; } }
+        if (hit) t++; }
+      sources.push(`輸入1：${t} 天記事`); }
+    // 人機料：列為工別／機具、欄為日期
+    const rm = S('人機料');
+    if (rm) { let dcol = [], sec = '', t = 0;
+      for (const r of rm) { const nm = clean(r[0]); if (!nm) continue;
+        if (nm === '工程項目') { dcol = r.map(parseAnyDate); sec = ''; continue; } // 每個區塊各有日期列
+        if (/^(人力|人員|工別)$/.test(nm)) { sec = 'labor'; continue; } if (/^(機具|機械|機具設備)$/.test(nm)) { sec = 'machines'; continue; } if (/材料/.test(nm)) { sec = ''; continue; }
+        if (!sec) continue; r.forEach((v, c) => { const d = dcol[c], q = num(v); if (c && d && q > 0 && logs[d]) { logs[d][sec][nm] = q; t++; } }); }
+      sources.push(`人機料：${t} 筆`); }
+  }
+  // 記事（天氣/施工概況/重要事項…）
+  if ((rows = S('施工日誌記事') || S('記事'))) {
+    const hr = rows.findIndex(r => /日期/.test(clean(r[0])));
+    const htxt = c => clean([rows[Math.max(0, hr - 1)]?.[c], rows[hr]?.[c]].join(''));
+    const W = Math.max(...rows.slice(0, 10).map(r => r.length)); const col = {};
+    for (let c = 1; c < W; c++) { const t = htxt(c) || clean(rows[1]?.[c]);
+      if (/上午/.test(t) && col.wAm == null) col.wAm = c; else if (/下午/.test(t) && col.wPm == null) col.wPm = c;
+      else if (/施工概況/.test(t) && col.summary == null) col.summary = c; else if (/職業安全|職安/.test(t) && col.safety == null) col.safety = c;
+      else if (/取樣|試驗/.test(t) && col.tests == null) col.tests = c; else if (/協力廠商/.test(t) && col.notify == null) col.notify = c;
+      else if (/重要事項/.test(t) && col.notes == null) col.notes = c; }
+    const lk = {}; rows[hr].forEach((v, c) => { const k = clean(v); if (c > 7 && k) lk[c] = k; });
+    let n = 0;
+    for (let i = hr + 1; i < rows.length; i++) { const d = parseAnyDate(rows[i][0]); if (!d) continue;
+      const got = Object.entries(col).filter(([, c]) => rows[i][c] != null && String(rows[i][c]).trim());
+      if (!got.length) continue; const l = L(d); got.forEach(([k, c]) => l[k] = String(rows[i][c]).trim()); n++; }
+    sources.push(`記事：${n} 天文字`);
+  }
+  // 出工機具
+  if ((rows = S('出工機具'))) {
+    const hr = rows.findIndex(r => clean(r[0]) === '日期'); const top = rows[hr - 1] || []; let sec = '', cols = [];
+    rows[hr].forEach((v, c) => { if (clean(top[c])) sec = clean(top[c]); const k = clean(v); if (c > 0 && k && k !== '0' && /出工|機具/.test(sec)) cols.push([c, /機具/.test(sec) ? 'machines' : 'labor', k]); });
+    let n = 0;
+    for (let i = hr + 1; i < rows.length; i++) { const d = parseAnyDate(rows[i][0]); if (!d) continue;
+      cols.forEach(([c, g, k]) => { const q = num(rows[i][c]); if (Number.isFinite(q) && q > 0) { L(d)[g][k] = q; n++; } }); }
+    sources.push(`出工機具：${n} 筆`);
+  }
+  // (3) 一日一頁的標準「公共工程施工日誌」
+  if (!sources.length) {
+    for (const sn of wb.SheetNames) {
+      const r = aoa(wb.Sheets[sn]); let d = null, hi = -1, nc = -1, qc = -1, uc = -1;
+      for (let i = 0; i < Math.min(r.length, 12) && !d; i++) r[i].forEach((v, c) => { if (!d && /日期/.test(clean(v)) && !/開工|完工|竣工/.test(clean(v))) for (let k = c + 1; k < c + 8 && !d; k++) d = parseAnyDate(r[i][k]); });
+      for (let i = 0; i < r.length && hi < 0; i++) { const h = r[i].map(clean); const q = h.findIndex(x => /本日完成數量/.test(x)); if (q >= 0) { hi = i; qc = q; nc = h.findIndex(x => /施工項目|工程項目/.test(x)); uc = h.findIndex(x => x === '單位'); } }
+      if (!d || hi < 0 || nc < 0) continue;
+      const l = L(d); let n = 0;
+      for (let i = hi + 1; i < r.length; i++) { const nm = r[i][nc]; const q = num(r[i][qc]); if (!nm) { if (n) break; else continue; }
+        if (/材料名稱|工別|二、|三、/.test(clean(nm))) break;
+        if (!Number.isFinite(q) || q === 0) continue; const it = matchItem(items, nm, uc >= 0 ? r[i][uc] : ''); if (it) { l.qty[it.code] = (l.qty[it.code] || 0) + q; n++; } else unmatched.push({name: String(nm), unit: uc >= 0 ? clean(r[i][uc]) : '', date: d, q}); }
+      r.forEach(row => row.forEach((v, c) => { const t = clean(v); if (/^上午/.test(t) && !l.wAm) l.wAm = clean(row[c + 1]) || t.replace(/上午[:：]?/, ''); if (/^下午/.test(t) && !l.wPm) l.wPm = clean(row[c + 1]) || t.replace(/下午[:：]?/, ''); }));
+      sources.push(`${sn}：${roc(d)} ${n} 項`);
+    }
+  }
+  return {logs, unmatched, sources};
+}
+/* ================= 施工日誌 PDF 匯入 =================
+   以 pdf.js 讀取文字與座標，依 y 座標組成行、依表頭 x 位置判定欄位。
+   僅支援「文字型」PDF；掃描影像檔無文字層，需先 OCR。 */
+let pdfjsP;
+const loadPdfjs = () => pdfjsP || (pdfjsP = new Promise((res, rej) => {
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  s.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; res(pdfjsLib); };
+  s.onerror = () => rej(new Error('無法載入 PDF 元件（請確認網路）')); document.head.appendChild(s);
+}));
+
+/* 一頁 → 行陣列，每行為儲存格 [{t, x0, x1, xc, y}] */
+async function pdfPageLines(page) {
+  const tc = await page.getTextContent();
+  const it = tc.items.filter(i => i.str && i.str.trim()).map(i => ({t: i.str, x0: i.transform[4], x1: i.transform[4] + i.width, y: i.transform[5], h: Math.abs(i.transform[3]) || 10}));
+  it.sort((a, b) => b.y - a.y || a.x0 - b.x0);
+  const lines = [];
+  for (const i of it) { const L = lines.find(l => Math.abs(l.y - i.y) <= Math.max(2, i.h * 0.35)); if (L) L.c.push(i); else lines.push({y: i.y, c: [i]}); }
+  lines.sort((a, b) => b.y - a.y);
+  return lines.map(l => {
+    l.c.sort((a, b) => a.x0 - b.x0); const out = [];
+    for (const i of l.c) { const p = out[out.length - 1]; if (p && i.x0 - p.x1 < i.h * 0.2 && !(/\d$/.test(p.t) && /^\d/.test(i.t))) { p.t += i.t; p.x1 = i.x1; } else out.push({...i}); }
+    out.forEach(c => { c.t = c.t.trim(); c.xc = (c.x0 + c.x1) / 2; }); return {y: l.y, c: out.filter(c => c.t), text: out.map(c => c.t).join(' ')};
+  });
+}
+const pdfNum = t => /^[-－—]$/.test(t) ? 0 : /^-?[\d,]+(\.\d+)?$/.test(t) ? num(t) : NaN;
+const ROCDATE = /(\d{2,4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/;
+
+async function parsePdfLogs(file, items) {
+  const lib = await loadPdfjs();
+  const doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+  const logs = {}, unmatched = [], sources = [], info = {}; let cur = null, noText = 0;
+  const days = {}; // date → {q2:{}, q1:{}, has2}
+  for (let pn = 1; pn <= doc.numPages; pn++) {
+    const lines = await pdfPageLines(await doc.getPage(pn));
+    if (!lines.length) { noText++; continue; }
+    // 日期：以「填表日期」所在行為準，換頁未出現則沿用前一頁
+    for (const l of lines) if (/填表日期|日期/.test(l.text)) { const m = l.text.replace(/填表日期[:：]?/, '').match(ROCDATE); if (m) { cur = parseAnyDate(`${m[1]}/${m[2]}/${m[3]}`); break; } }
+    infoFromRows(lines.slice(0, 15).map(l => l.c.map(c => c.t)), info); // 表頭工程資料
+    if (!cur) continue;
+    const D = days[cur] || (days[cur] = {q1: {}, q2: {}, has2: false, pages: []}); D.pages.push(pn);
+    const lg = logs[cur] || (logs[cur] = blankLog());
+    for (const l of lines) { const a = l.text.match(/上午[:：]?\s*([^\s下填]+)/), b = l.text.match(/下午[:：]?\s*([^\s填]+)/); if (a && !lg.wAm) lg.wAm = a[1]; if (b && !lg.wPm) lg.wPm = b[1]; }
+    // 文字段落
+    const sect = (start, stop) => { const i = lines.findIndex(l => start.test(l.text)); if (i < 0) return '';
+      const o = []; for (let k = i + 1; k < lines.length && !stop.test(lines[k].text); k++) o.push(lines[k].text); return o.join('\n').trim(); };
+    const put = (k, v) => { if (v && !lg[k]) lg[k] = v; };
+    put('tests', sect(/^六、|施工取樣試驗紀錄/, /^七、|協力廠商/));
+    put('notify', sect(/^七、|通知協力廠商/, /^八、|重要事項/));
+    put('notes', sect(/^八、|重要事項記錄/, /簽章|^註/));
+    const si = lines.findIndex(l => /^一、/.test(l.text));
+    if (si >= 0 && !lg.summary) { const o = []; for (let k = si + 1; k < lines.length && !/營造業專業|^二、/.test(lines[k].text); k++) { const t = lines[k].text; if (/施工項目|單位|契約數量/.test(t) || lines[k].c.some(c => Number.isFinite(pdfNum(c.t)) && c.t.length > 1)) continue; o.push(t); } put('summary', o.join('\n').trim()); }
+    // 出工人數／機具
+    const lh = lines.findIndex(l => /工別/.test(l.text) && /本日人數/.test(l.text));
+    if (lh >= 0) { const H = lines[lh].c, hx = re => H.find(c => re.test(c.t))?.xc;
+      const xP = hx(/本日人數/), xPc = hx(/累計人數/), xM = hx(/本日使用數量/), xMn = hx(/機具名稱/);
+      for (let k = lh + 1; k < lines.length && !/^四、|^四/.test(lines[k].text); k++) {
+        const cs = lines[k].c, txt = cs.filter(c => !Number.isFinite(pdfNum(c.t)));
+        const near = x => { const c = cs.filter(c => Number.isFinite(pdfNum(c.t))).sort((a, b) => Math.abs(a.xc - x) - Math.abs(b.xc - x))[0]; return c && Math.abs(c.xc - x) < 40 ? pdfNum(c.t) : 0; };
+        const w = txt.find(c => c.xc < (xP ?? 0)), m = xMn != null ? txt.find(c => c.xc > (xPc ?? xP) + 20) : null;
+        if (w && xP != null) { const v = near(xP); if (v > 0) lg.labor[clean(w.t)] = v; }
+        if (m && xM != null) { const v = near(xM); if (v > 0) lg.machines[clean(m.t)] = v; }
+      } }
+    // 完成數量表（第一聯「施工項目」表、第二聯「工程項目」表）
+    for (let h = 0; h < lines.length; h++) {
+      const band = lines.slice(Math.max(0, h - 1), h + 2), ht = lines[h].text;
+      if (!(/單位/.test(ht) && /契約數量/.test(band.map(l => l.text).join('')) && /完成數量/.test(band.map(l => l.text).join('')))) continue;
+      // 表頭欄：同 x 位置上下文字串接（處理「本日／完成數量」分兩行）
+      const cols = [];
+      band.forEach(l => l.c.forEach(c => { const k = cols.find(k => Math.abs(k.xc - c.xc) < 22); if (k) k.t += c.t; else cols.push({xc: c.xc, x0: c.x0, t: c.t}); }));
+      const col = re => cols.find(k => re.test(k.t));
+      const cQ = col(/本日完成數量|本日.*完成數量/) || col(/^本日完成$/), cU = col(/^單位/), cP = col(/單價/);
+      if (!cQ || !cU) continue;
+      const second = !!cP; if (second) D.has2 = true;
+      const bucket = second ? D.q2 : D.q1;
+      const start = lines.indexOf(band[band.length - 1]) + 1; let prevText = '';
+      for (let k = start; k < lines.length; k++) {
+        const L = lines[k]; if (/^二、|材料名稱|^三、|工別|營造業專業/.test(L.text)) break;
+        const cs = L.c, u = cs.find(c => Math.abs(c.xc - cU.xc) < 25 && !Number.isFinite(pdfNum(c.t)) && c.t.length <= 4);
+        const nums = cs.filter(c => c.xc > cU.xc && Number.isFinite(pdfNum(c.t)));
+        if (!u || !nums.length) { const t = cs.filter(c => c.xc < cU.xc - 15).map(c => c.t).join(''); prevText = t; continue; }
+        let name = cs.filter(c => c.x1 < u.x0 - 2).map(c => c.t).join('').replace(/^(\(?\d+\)?|[壹貳參一二三四五六七八九十]+)\s*/, '');
+        const qc = nums.slice().sort((a, b) => Math.abs(a.xc - cQ.xc) - Math.abs(b.xc - cQ.xc))[0];
+        const q = qc && Math.abs(qc.xc - cQ.xc) < 45 ? pdfNum(qc.t) : 0;
+        const pc = cP && nums.slice().sort((a, b) => Math.abs(a.xc - cP.xc) - Math.abs(b.xc - cP.xc))[0];
+        const price = pc ? pdfNum(pc.t) : NaN;
+        const nextOnly = lines[k + 1] && !lines[k + 1].c.some(c => Number.isFinite(pdfNum(c.t)) && c.xc > cU.xc) ? lines[k + 1].c.filter(c => c.xc < cU.xc - 15).map(c => c.t).join('') : '';
+        const tryNames = [name, prevText + name, name + nextOnly, prevText + name + nextOnly].filter(Boolean);
+        let it = null; for (const n of tryNames) { it = pdfMatch(items, n, u.t, price); if (it) break; }
+        prevText = '';
+        if (!q) continue;
+        if (it && it.kind === 'normal') bucket[it.code] = second ? q : (bucket[it.code] || 0) + q; else if (!it) unmatched.push({name: name || tryNames[tryNames.length - 1], unit: clean(u.t), date: cur, q});
+      }
+    }
+  }
+  for (const [d, D] of Object.entries(days)) { logs[d].qty = D.has2 ? D.q2 : D.q1; sources.push(`${roc(d)}（第 ${D.pages.join('、')} 頁）${Object.keys(logs[d].qty).length} 項${D.has2 ? '，依第二聯' : ''}`); }
+  if (noText) sources.push(`有 ${noText} 頁無文字層（掃描影像），無法讀取，需先以 OCR 轉成文字型 PDF`);
+  return {logs, unmatched, sources, info};
+}
+function pdfMatch(items, name, unit, price) {
+  const n = norm(name); if (n.length < 2) return null;
+  if (ALIAS[n]) { const a = items.find(x => x.code === ALIAS[n]); if (a) return a; }
+  let c = items.filter(x => norm(x.name) === n);
+  if (!c.length && n.length >= 6) c = items.filter(x => { const m = norm(x.name); return m.startsWith(n) || n.startsWith(m); });
+  if (c.length > 1 && Number.isFinite(price)) { const p = c.filter(x => Math.abs(x.price - price) < 0.01); if (p.length) c = p; }
+  if (c.length > 1 && unit) { const u = c.filter(x => norm(x.unit) === norm(unit)); if (u.length) c = u; }
+  return c[0] || null;
+}
+
+/* ---- 預算書（詳細價目表）PDF、預定進度表 PDF ---- */
+async function pdfPages(file) {
+  const lib = await loadPdfjs(); const doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+  const pages = []; let noText = 0;
+  for (let pn = 1; pn <= doc.numPages; pn++) { const l = await pdfPageLines(await doc.getPage(pn)); if (l.length) pages.push(l); else noText++; }
+  return {pages, noText};
+}
+/* 詳細價目表：依表頭（項次／項目及說明／單位／數量／單價／複價）x 位置切欄，折行名稱併回上一列，再交給 Excel 同一套解析 */
+async function parsePdfContract(file) {
+  const {pages, noText} = await pdfPages(file); const rows = [];
+  for (const lines of pages) {
+    const hi = lines.findIndex(l => /單\s*位/.test(l.text) && /數\s*量/.test(l.text) && /單\s*價/.test(l.text)); if (hi < 0) continue;
+    const hc = []; for (const c of lines[hi].c) { const p = hc[hc.length - 1]; // 「項 目 及 說 明」逐字分開時併成一欄
+      if (p && clean(p.t).length <= 4 && clean(c.t).length <= 2 && c.x0 - p.x1 < c.h * 3 && !/單|數|價/.test(c.t)) { p.t += c.t; p.x1 = c.x1; p.xc = (p.x0 + p.x1) / 2; } else hc.push({...c}); }
+    const H = hc.map(c => ({t: clean(c.t), xc: c.xc, x1: c.x1})).sort((a, b) => a.xc - b.xc);
+    const bound = H.slice(1).map((h, i) => (H[i].xc + h.xc) / 2);
+    const si0 = H.findIndex(h => /^項次$/.test(h.t)); if (si0 >= 0 && si0 < bound.length) bound[si0] = H[si0].x1 + 4; // 項次欄窄，名稱靠左對齊
+    const colOf = x => { let i = 0; while (i < bound.length && x > bound[i]) i++; return i; };
+    const nameCol = H.findIndex(h => /項目|說明/.test(h.t)), seqCol = H.findIndex(h => /^項次$/.test(h.t));
+    if (!rows.length) rows.push(H.map(h => h.t));
+    // 每列先依欄位切好；有項次或數字者為主列，只有名稱的折行依 y 距離歸入最近的工項主列（儲存格垂直置中時名稱會分在上下兩行）
+    const L = lines.slice(hi + 1).map(l => { const r = Array(H.length).fill(null);
+      for (const c of l.c) { let i = colOf(c.xc); if (r[i] != null && isNum(r[i]) && isNum(c.t) && i + 1 < r.length && r[i + 1] == null) i++; // 相鄰兩個數字不併在同一欄
+        r[i] = r[i] == null ? c.t : r[i] + c.t; }
+      const seq = seqCol >= 0 ? clean(r[seqCol]) : '';
+      const anchor = !!seq || r.some((v, i) => i !== nameCol && i !== seqCol && isNum(v));
+      return {r, y: l.y, h: l.c[0]?.h || 10, anchor, group: /^[壹貳參肆伍一二三四五六七八九十]+$/.test(seq), pre: [], post: []}; });
+    const A = L.filter(x => x.anchor);
+    // 折行歸屬：名稱寫滿欄寬才會折到下一行，依此串接；非名稱欄的零碎文字（如單位）歸最近主列
+    const lc = lines.slice(hi + 1); L.forEach((x, k) => { const nc = lc[k].c.filter(c => colOf(c.xc) === nameCol); x.nx1 = nc.length ? Math.max(...nc.map(c => c.x1)) : 0; });
+    const full = Math.max(0, ...L.map(x => x.nx1)) - Math.max(...L.map(x => x.h)) * 4.5;
+    const other = (f, a) => f.r.forEach((v, i) => { if (v != null && i !== nameCol && a.r[i] == null) a.r[i] = v; });
+    let prev = null, buf = [];
+    const flush = next => {
+      for (const f of buf) { const t = [prev, next].filter(a => a && !a.group).sort((a, b) => Math.abs(a.y - f.y) - Math.abs(b.y - f.y))[0]; if (t && Math.abs(t.y - f.y) < f.h * 4) other(f, t); }
+      const nf = buf.filter(f => f.r[nameCol]); let k = 0;
+      if (prev && !prev.group) { let cont = prev.r[nameCol] ? prev.nx1 >= full : (prev.pre.length ? prev.preFull : false);
+        const lim = prev.pre.length || Infinity; // 垂直置中時上下折行數相同
+        let ly = prev.y; // 與上一段距離超過約 1.8 倍字高即視為另一格
+        while (k < nf.length && k < lim && cont && ly - nf[k].y <= nf[k].h * 1.8) { cont = nf[k].nx1 >= full; ly = nf[k].y; k++; } }
+      nf.forEach((f, j) => { if (j < k) prev.post.push(f.r[nameCol]); else if (next) { next.pre.push(f.r[nameCol]); next.preFull = f.nx1 >= full; } });
+      buf = []; };
+    for (const x of L) { if (x.anchor) { flush(x); prev = x; } else if (x.r.some(v => v != null)) buf.push(x); }
+    flush(null);
+    for (const a of A) { a.r[nameCol] = [...a.pre, a.r[nameCol] || '', ...a.post].join(''); rows.push(a.r); }
+  }
+  const items = rows.length ? parseContractSheet(rows) : null;
+  // PDF 單價常只印整數：以複價÷數量回推實際單價
+  (items || []).forEach(x => { if (x.amount && x.qty && Math.abs(x.qty * x.price - x.amount) > Math.max(1, x.amount * 1e-3)) x.price = Math.round(x.amount / x.qty * 100) / 100; });
+  const info = pages[0] ? infoFromRows(pages[0].slice(0, 12).map(l => l.c.map(c => c.t))) : {};
+  return items && items.length ? {sheet: `PDF${noText ? `（${noText} 頁無文字層未讀）` : ''}`, items, score: items.length, info} : null;
+}
+/* 預定進度表：以 x 位置分群還原成格線，再用與 Excel 相同的直式／橫式偵測；無年份的「8/12」依開工日補年 */
+function gridFromLines(lines, startDate) {
+  const xs = [];
+  lines.forEach(l => l.c.forEach(c => { const k = xs.find(k => Math.abs(k.x - c.xc) < 18); if (k) { k.x = (k.x * k.n + c.xc) / (k.n + 1); k.n++; } else xs.push({x: c.xc, n: 1}); }));
+  xs.sort((a, b) => a.x - b.x);
+  const y0 = startDate ? +startDate.slice(0, 4) : new Date().getFullYear();
+  const fix = t => { const m = t.match(/^(\d{1,2})\/(\d{1,2})$/); if (!m || +m[1] > 12) return t;
+    let d = `${y0}-${pad(+m[1])}-${pad(+m[2])}`; if (startDate && dayDiff(startDate, d) < -60) d = `${y0 + 1}-${pad(+m[1])}-${pad(+m[2])}`; return d; };
+  return lines.map(l => { const r = Array(xs.length).fill(null);
+    l.c.forEach(c => { const order = xs.map((k, i) => [Math.abs(k.x - c.xc), i]).sort((a, b) => a[0] - b[0]);
+      const free = order.find(([, i]) => r[i] == null); const bi = free ? free[1] : order[0][1]; // 已被佔用就放次近欄
+      r[bi] = r[bi] == null ? fix(c.t) : r[bi] + c.t; }); return r; });
+}
+async function parsePdfSchedule(file, startDate) {
+  const {pages, noText} = await pdfPages(file); const cands = [];
+  pages.forEach((lines, i) => {
+    scheduleCands(gridFromLines(lines, startDate), `PDF 第 ${i + 1} 頁`, cands);
+    // 橫式 10 日區塊：日期列與下方「累計」列依 x 位置逐格配對
+    const g = gridFromLines(lines.map(l => ({...l, c: l.c})), startDate); // 只借用補年份
+    lines.forEach((l, k) => {
+      const dc = l.c.map(c => ({...c, d: parseAnyDate(/^\d{1,2}\/\d{1,2}$/.test(c.t) ? g[k].find(v => v && v.endsWith(pad(+c.t.split('/')[1]))) : c.t)})).filter(c => c.d);
+      if (dc.length < 3) return;
+      for (let j = k + 1; j <= Math.min(lines.length - 1, k + 4); j++) {
+        const lab = [lines[j - 1], lines[j], lines[j + 1]].filter(Boolean).map(x => x.text).join('');
+        const nc = lines[j].c.map(c => { const m = c.t.match(/^\D+?(\d+(?:\.\d+)?%)$/); return m ? {...c, t: m[1]} : c; }).filter(c => isNum(c.t)); // 標題溢入第一格時拆出數字 if (nc.length < 3 || !/累計/.test(lab) || /實際/.test(lines[j].text)) continue;
+        const pts = dc.map(d => { const n = nc.slice().sort((a, b) => Math.abs(a.x1 - d.x1) - Math.abs(b.x1 - d.x1))[0]; return Math.abs(n.x1 - d.x1) < 40 ? [d.d, num(n.t)] : null; }).filter(Boolean);
+        if (pts.length >= 3) { cands.push({sheet: `PDF 第 ${i + 1} 頁`, how: '橫式列', points: toFrac(pts)}); break; }
+      }
+    });
+  });
+  // 多頁的同類序列合併
+  const pts = dedupSchedule(cands.flatMap(c => c.points));
+  if (!pts.length) return null;
+  return {sheet: `PDF${noText ? `（${noText} 頁無文字層未讀）` : ''}`, how: [...new Set(cands.map(c => c.how))].join('、'), points: pts};
+}
+/* ================= 連動計算 ================= */
+function calc(p) {
+  /* 實際進度 = Σ(計量項目完成金額 + 比例項目分攤金額) ÷ 契約總價
+     比例項目（利潤管理費、營業稅）依「排在它之前的所有項目」當日完成比例分攤，
+     對應詳細表「約壹．一～壹．六總和之7%」「約壹．一～壹．八總和之5%」的計算方式。 */
+  const amtOf = x => x.qty * x.price;
+  const total = p.items.reduce((s, x) => s + amtOf(x), 0);
+  const normal = p.items.filter(x => x.kind === 'normal');
+  const base = normal.reduce((s, x) => s + amtOf(x), 0);
+  const dates = Object.keys(p.logs).sort();
+  const cumQty = {}, series = []; let cumAmt = 0;
+  for (const d of dates) {
+    const q = p.logs[d].qty || {}; let amt = 0, before = 0, beforeDone = 0;
+    for (const it of p.items) {
+      let a = 0;
+      if (it.kind === 'normal') { const v = q[it.code] || 0; if (v) { a = v * it.price; cumQty[it.code] = (cumQty[it.code] || 0) + v; } }
+      else if (before > 0) a = amtOf(it) * beforeDone / before;
+      amt += a; before += amtOf(it); beforeDone += a;
+    }
+    cumAmt += amt;
+    series.push({date: d, amt, day: total ? r4(amt / total) : 0, cum: total ? r4(cumAmt / total) : 0, sched: schedAt(p, d)});
+  }
+  const byDate = Object.fromEntries(series.map(s => [s.date, s]));
+  return {base, total, cumQty, series, byDate, last: series.filter(s => s.amt > 0).pop() || series[series.length - 1]};
+}
+/* 預定進度：以檢核點線性內插（開工日前一日視為 0%） */
+function schedAt(p, d) {
+  const s = p.schedule; if (!s.length) return NaN;
+  const pts = [{date: addDays(p.info.startDate || s[0].date, -1), cum: 0}, ...s.filter(x => x.date >= (p.info.startDate || ''))];
+  if (d <= pts[0].date) return 0;
+  for (let i = 1; i < pts.length; i++) if (d <= pts[i].date) {
+    const a = pts[i - 1], b = pts[i], t = dayDiff(a.date, d) / Math.max(1, dayDiff(a.date, b.date));
+    return r4(a.cum + (b.cum - a.cum) * t);
+  }
+  return pts[pts.length - 1].cum;
+}
+function dayInfo(p, d) {
+  const total = (+p.info.duration || 0) + (+p.info.extendDays || 0);
+  const used = p.info.startDate ? dayDiff(p.info.startDate, d) + 1 : NaN;
+  return {total, used, left: total - used, end: p.info.startDate ? addDays(p.info.startDate, total - 1) : ''};
+}
+const inspItemsNeeded = p => p.items.filter(x => x.inspect);
+
+/* ================= 每週稽核 ================= */
+function auditWeek(p, monday) {
+  const days = [...Array(7)].map((_, i) => addDays(monday, i)), end = days[6];
+  const tol = +p.settings.tolerance || 0;
+  const rows = [];
+  for (const it of inspItemsNeeded(p)) {
+    const work = days.filter(d => (p.logs[d]?.qty?.[it.code] || 0) > 0);
+    if (!work.length) continue;
+    const ins = p.inspections.filter(r => (r.items || []).includes(it.code));
+    const cover = work.map(d => ins.filter(r => r.date && Math.abs(dayDiff(d, r.date)) <= tol));
+    const okDays = cover.filter(c => c.length).length;
+    const nos = [...new Set(cover.flat().map(r => r.no || '(未編號)'))];
+    const qty = work.reduce((s, d) => s + p.logs[d].qty[it.code], 0);
+    rows.push({it, work, qty, nos, status: okDays === work.length ? 'ok' : okDays ? 'part' : 'none', missDays: work.filter((d, i) => !cover[i].length)});
+  }
+  const pendingTests = p.inspections.filter(r => r.testNeed && !r.reportNo && (r.sampleDate || r.date) <= end)
+    .map(r => ({r, age: dayDiff(r.sampleDate || r.date, end)}));
+  const inWeek = r => r.date >= monday && r.date <= end;
+  const forms = {}; ['職安衛', '環保', '交維', '防汛'].forEach(c => forms[c] = p.forms.filter(f => f.cat === c && inWeek(f)).length);
+  const failOpen = p.inspections.filter(r => r.result === '不合格' && !r.fixDone && r.date <= end);
+  const sup = p.supervisions.filter(inWeek);
+  const flood = +monday.slice(5, 7) >= 5 && +monday.slice(5, 7) <= 11;
+  return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood,
+    miss: rows.filter(r => r.status !== 'ok').length};
+}
+function nextNo(p, list, key) {
+  const pre = p.settings.prefix[key] || key; const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$');
+  const mx = list.reduce((m, r) => { const k = String(r.no || '').match(re); return k ? Math.max(m, +k[1]) : m; }, 0);
+  return `${pre}-${pad(mx + 1, 3)}`;
+}
+/* ================= 匯出：整合連動版 Excel（給廠商填用） ================= */
+const xDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); }; // Excel 日期以 UTC 午夜寫入，避免時區位移
+const colL = n => { let s = ''; n++; while (n) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }; // 0-based
+const FONT = {name: '微軟正黑體', size: 11};
+const THIN = {style: 'thin', color: {argb: 'FFBFC7D0'}};
+const BORDER = {top: THIN, left: THIN, bottom: THIN, right: THIN};
+const fill = argb => ({type: 'pattern', pattern: 'solid', fgColor: {argb}});
+function styleRange(ws, r1, c1, r2, c2, st) { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) Object.assign(ws.getCell(r, c), st); }
+function downloadBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); }
+
+async function exportLinkedExcel(p) {
+  const C = calc(p), wb = new ExcelJS.Workbook(); wb.creator = '智慧監造報表';
+  const cols = p.items, N = cols.length; // 全部項目依序排列，比例項目為公式欄
+  const di = dayInfo(p, p.info.startDate);
+  const lastLog = Object.keys(p.logs).sort().pop();
+  const nDays = Math.max(di.total + 30, lastLog ? dayDiff(p.info.startDate, lastLog) + 31 : 0);
+  const R0 = 8, RN = R0 + nDays - 1, IC = 7; // 資料起始列、結束列、工項起始欄(0-based: H)
+  const lastCol = colL(IC + N - 1);
+
+  // 說明
+  const s0 = wb.addWorksheet('說明');
+  [['智慧監造報表－整合連動版'], [''], ['填寫方式'], ['1. 「每日數量」分頁：依日期列填入各工項本日完成數量（黃色區），本日金額、實際進度、累計完成數量會自動計算。'],
+   ['2. 「施工日誌記事」分頁：填寫天氣、施工概況、職安衛、取樣試驗、通知協力廠商、重要事項。'], ['3. 「出工機具」分頁：填寫每日出工人數與機具數量。'],
+   ['4. 請勿變更分頁名稱、第 1 列代碼與欄位順序，監造單位將直接匯回系統比對查驗。'], [''], ['實際進度計算：Σ(本日完成數量×單價＋比例項目分攤金額) ÷ 契約項目總價。灰色欄為比例項目（利潤管理費、營業稅），依其前方各項目當日完成比例自動分攤，請勿填寫。'],
+   [`產出時間：${new Date().toLocaleString()}`]].forEach(r => s0.addRow(r));
+  s0.getCell('A1').font = {...FONT, size: 16, bold: true}; s0.getCell('A3').font = {...FONT, bold: true}; s0.getColumn(1).width = 120;
+
+  // 工程資料
+  const s1 = wb.addWorksheet('工程資料');
+  const inf = p.info;
+  [['工程名稱', inf.name], ['契約編號', inf.contractNo], ['主辦機關', inf.owner], ['監造單位', inf.supervisor], ['承包廠商', inf.contractor], ['施工地點', inf.location],
+   ['開工日期', inf.startDate ? xDate(inf.startDate) : ''], ['完工期限', +inf.duration || 0], ['展延工期', +inf.extendDays || 0], ['契約金額', +inf.amount || 0], ['契約項目總價', C.total]].forEach(r => s1.addRow(r));
+  s1.getColumn(1).width = 16; s1.getColumn(2).width = 60; s1.getCell('B7').numFmt = 'yyyy/mm/dd'; s1.getCell('B10').numFmt = '#,##0'; s1.getCell('B11').numFmt = '#,##0';
+  styleRange(s1, 1, 1, 11, 2, {font: FONT, border: BORDER}); styleRange(s1, 1, 1, 11, 1, {fill: fill('FFEEF2F6')});
+  const BASE = "工程資料!$B$11";
+
+  // 契約詳細表
+  const s2 = wb.addWorksheet('契約詳細表');
+  s2.addRow(['代碼', '項次', '項目及說明', '單位', '數量', '單價', '複價', '類型', '需查驗', '累計完成數量', '累計完成金額', '完成率']);
+  let gprev = null;
+  p.items.forEach(it => {
+    if (it.group !== gprev) { const g = s2.addRow(['', it.gseq, it.group]); g.font = {...FONT, bold: true}; g.fill = fill('FFF3F5F8'); gprev = it.group; }
+    const r = s2.rowCount + 1, cq = C.cumQty[it.code] || 0;
+    const row = s2.addRow([it.code, it.seq, it.name, it.unit, it.qty, it.price, {formula: `ROUND(E${r}*F${r},0)`, result: Math.round(it.qty * it.price)},
+      it.kind === 'ratio' ? '比例' : '計量', it.inspect ? '是' : '否',
+      it.kind === 'ratio' ? '' : {formula: `IFERROR(INDEX(每日數量!$H$6:$${lastCol}$6,MATCH(A${r},每日數量!$H$1:$${lastCol}$1,0)),0)`, result: cq},
+      it.kind === 'ratio' ? '' : {formula: `ROUND(J${r}*F${r},0)`, result: Math.round(cq * it.price)},
+      it.kind === 'ratio' ? '' : {formula: `IF(E${r}=0,0,J${r}/E${r})`, result: it.qty ? cq / it.qty : 0}]);
+    row.getCell(12).numFmt = '0.00%';
+  });
+  [8, 8, 52, 7, 11, 11, 13, 7, 7, 12, 13, 9].forEach((w, i) => s2.getColumn(i + 1).width = w);
+  [5, 6, 7, 10, 11].forEach(c => s2.getColumn(c).numFmt = '#,##0.##');
+  styleRange(s2, 1, 1, s2.rowCount, 12, {border: BORDER}); s2.eachRow(r => { if (!r.font?.bold) r.font = FONT; });
+  s2.getRow(1).font = {...FONT, bold: true}; s2.getRow(1).fill = fill('FFDCE6F1');
+  s2.views = [{state: 'frozen', ySplit: 1}];
+  s2.dataValidations?.add?.(`I2:I${s2.rowCount}`, {type: 'list', allowBlank: true, formulae: ['"是,否"']});
+
+  // 每日數量（連動核心）
+  const s3 = wb.addWorksheet('每日數量');
+  const lab = ['代碼', '項目', '單位', '契約數量', '單價', '累計完成數量', '日期'];
+  const hdrRow = ['日期', '工期(天)', '本日完成金額', '本日實際進度', '累計實際進度', '累計預定進度', '進度差異'];
+  for (let r = 1; r <= 6; r++) { s3.getCell(r, 7).value = lab[r - 1]; }
+  s3.getCell(1, 1).value = '代碼'; s3.getCell(2, 1).value = p.info.name; s3.getCell(4, 1).value = '契約項目總價'; s3.getCell(4, 3).value = {formula: BASE, result: C.total};
+  let before = 0; const befores = [];
+  cols.forEach((it, j) => {
+    const c = IC + j + 1, L = colL(IC + j); befores.push(before); before += it.qty * it.price;
+    s3.getCell(1, c).value = it.code; s3.getCell(2, c).value = it.name; s3.getCell(3, c).value = it.unit;
+    s3.getCell(4, c).value = it.qty; s3.getCell(5, c).value = it.price;
+    s3.getCell(6, c).value = {formula: `SUM(${L}${R0}:${L}${RN})`, result: C.cumQty[it.code] || 0};
+    s3.getColumn(c).width = 11;
+  });
+  hdrRow.forEach((h, i) => s3.getCell(7, i + 1).value = h);
+  let cumAmt = 0;
+  for (let i = 0; i < nDays; i++) {
+    const r = R0 + i, d = addDays(p.info.startDate, i), lg = p.logs[d];
+    let amt = 0, bd = 0;
+    cols.forEach((it, j) => {
+      const cell = s3.getCell(r, IC + j + 1);
+      if (it.kind === 'normal') { const q = lg?.qty?.[it.code]; if (q) { cell.value = q; amt += q * it.price; bd += q * it.price; } }
+      else if (befores[j] > 0 && j > 0) { const v = it.qty * bd / befores[j]; cell.value = {formula: `${it.qty}*SUMPRODUCT($H$5:${colL(IC + j - 1)}$5,H${r}:${colL(IC + j - 1)}${r})/${befores[j]}`, result: v}; amt += v * it.price; bd += v * it.price; }
+    });
+    cumAmt += amt;
+    s3.getCell(r, 1).value = xDate(d); s3.getCell(r, 1).numFmt = 'yyyy/mm/dd(aaa)';
+    s3.getCell(r, 2).value = i + 1;
+    s3.getCell(r, 3).value = {formula: `SUMPRODUCT($H$5:$${lastCol}$5,H${r}:${lastCol}${r})`, result: amt};
+    s3.getCell(r, 4).value = {formula: `ROUND(C${r}/${BASE},4)`, result: C.total ? r4(amt / C.total) : 0};
+    s3.getCell(r, 5).value = {formula: `ROUND(SUM($C$${R0}:C${r})/${BASE},4)`, result: C.total ? r4(cumAmt / C.total) : 0};
+    const sv = schedAt(p, d); if (Number.isFinite(sv)) s3.getCell(r, 6).value = sv;
+    s3.getCell(r, 7).value = {formula: `IF(F${r}="","",E${r}-F${r})`, result: Number.isFinite(sv) ? r4(r4(cumAmt / (C.total || 1)) - sv) : ''};
+  }
+  [11, 7, 13, 11, 11, 11, 10].forEach((w, i) => s3.getColumn(i + 1).width = w);
+  s3.getColumn(3).numFmt = '#,##0'; [4, 5, 6, 7].forEach(c => s3.getColumn(c).numFmt = '0.00%');
+  styleRange(s3, 1, 1, RN, IC + N, {border: BORDER, font: FONT});
+  styleRange(s3, 1, 1, 7, IC + N, {fill: fill('FFDCE6F1')});
+  for (let r = 1; r <= 7; r++) s3.getCell(r, 7).font = {...FONT, bold: true};
+  styleRange(s3, 2, IC + 1, 2, IC + N, {alignment: {wrapText: true, vertical: 'top'}}); s3.getRow(2).height = 80;
+  cols.forEach((it, j) => styleRange(s3, R0, IC + j + 1, RN, IC + j + 1, {fill: fill(it.kind === 'normal' ? 'FFFFF9DB' : 'FFE5E7EB')}));
+  s3.views = [{state: 'frozen', xSplit: IC, ySplit: 7}];
+  s3.dataValidations?.add?.(`H${R0}:${lastCol}${RN}`, {type: 'decimal', operator: 'greaterThanOrEqual', allowBlank: true, formulae: [0], showErrorMessage: true, errorTitle: '數量錯誤', error: '請輸入 0 以上的數字'});
+
+  // 施工日誌記事
+  const s4 = wb.addWorksheet('施工日誌記事');
+  const tk = [['日期', 12], ['上午天氣', 8], ['下午天氣', 8], ['施工概況', 40], ['職安衛督導', 30], ['取樣試驗', 30], ['通知協力廠商', 24], ['重要事項', 40]];
+  s4.addRow(tk.map(x => x[0])); tk.forEach((x, i) => s4.getColumn(i + 1).width = x[1]);
+  for (let i = 0; i < nDays; i++) { const d = addDays(p.info.startDate, i), l = p.logs[d] || {};
+    const row = s4.addRow([xDate(d), l.wAm || '', l.wPm || '', l.summary || '', l.safety || '', l.tests || '', l.notify || '', l.notes || '']); row.getCell(1).numFmt = 'yyyy/mm/dd(aaa)'; }
+  styleRange(s4, 1, 1, s4.rowCount, 8, {border: BORDER, font: FONT, alignment: {wrapText: true, vertical: 'top'}});
+  s4.getRow(1).font = {...FONT, bold: true}; s4.getRow(1).fill = fill('FFDCE6F1'); s4.views = [{state: 'frozen', xSplit: 1, ySplit: 1}];
+  s4.dataValidations?.add?.(`B2:C${s4.rowCount}`, {type: 'list', allowBlank: true, formulae: ['"晴,陰,雨,颱風,豪雨,停工"']});
+
+  // 出工機具
+  const s5 = wb.addWorksheet('出工機具');
+  const lb = p.settings.labor, mc = p.settings.machines;
+  s5.addRow(['', '出工情形', ...Array(lb.length - 1).fill(''), '機具使用量', ...Array(Math.max(0, mc.length - 1)).fill('')]);
+  s5.addRow(['日期', ...lb, ...mc]);
+  for (let i = 0; i < nDays; i++) { const d = addDays(p.info.startDate, i), l = p.logs[d] || {};
+    const row = s5.addRow([xDate(d), ...lb.map(k => l.labor?.[k] || null), ...mc.map(k => l.machines?.[k] || null)]); row.getCell(1).numFmt = 'yyyy/mm/dd(aaa)'; }
+  styleRange(s5, 1, 1, s5.rowCount, 1 + lb.length + mc.length, {border: BORDER, font: FONT});
+  styleRange(s5, 1, 1, 2, 1 + lb.length + mc.length, {fill: fill('FFDCE6F1')}); s5.getColumn(1).width = 14; s5.views = [{state: 'frozen', xSplit: 1, ySplit: 2}];
+
+  // 預定進度
+  const s6 = wb.addWorksheet('預定進度'); s6.addRow(['日期', '累計預定進度']);
+  p.schedule.forEach(x => { const r = s6.addRow([xDate(x.date), x.cum]); r.getCell(1).numFmt = 'yyyy/mm/dd'; r.getCell(2).numFmt = '0.00%'; });
+  s6.getColumn(1).width = 14; s6.getColumn(2).width = 14; styleRange(s6, 1, 1, s6.rowCount, 2, {border: BORDER, font: FONT});
+
+  // 查驗與表單（唯讀參考）
+  const nm = c => p.items.find(x => x.code === c)?.name || c;
+  const dump = (title, cols, list) => { const s = wb.addWorksheet(title); s.addRow(cols.map(c => c[0]));
+    list.forEach(r => s.addRow(cols.map(c => c[1](r)))); cols.forEach((c, i) => s.getColumn(i + 1).width = c[2] || 14);
+    styleRange(s, 1, 1, s.rowCount, cols.length, {border: BORDER, font: FONT, alignment: {wrapText: true, vertical: 'top'}}); s.getRow(1).fill = fill('FFDCE6F1'); };
+  dump('查驗紀錄', [['日期', r => r.date], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => (r.items || []).map(nm).join('、'), 40], ['位置', r => r.location], ['查驗內容', r => r.content, 30], ['結果', r => r.result],
+    ['需試驗', r => r.testNeed ? '是' : ''], ['試驗項目', r => r.testName], ['取樣日', r => r.sampleDate], ['試驗報告編號', r => r.reportNo, 18], ['報告日期', r => r.reportDate], ['試驗結果', r => r.testResult]], p.inspections);
+  dump('督導查核', [['日期', r => r.date], ['類別', r => r.kind], ['表單號', r => r.no], ['單位/人員', r => r.person, 18], ['內容', r => r.content, 40], ['分數/等級', r => r.score], ['缺失件數', r => r.defects], ['改善期限', r => r.fixDue], ['改善完成', r => r.fixDone]], p.supervisions);
+  dump('安環交汛表單', [['日期', r => r.date], ['類別', r => r.cat], ['表單號', r => r.no], ['表單名稱', r => r.title, 30], ['結果', r => r.result], ['備註', r => r.note, 40]], p.forms);
+
+  const buf = await wb.xlsx.writeBuffer();
+  downloadBlob(new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), `${p.info.name || '專案'}_整合連動版_${todayISO().replace(/-/g, '')}.xlsx`);
+}
+
+async function exportAuditExcel(p, A) {
+  const wb = new ExcelJS.Workbook(), s = wb.addWorksheet('每週稽核');
+  s.addRow([`${p.info.name}　每週查驗稽核（${roc(A.monday)}～${roc(A.end)}）`]); s.getCell('A1').font = {...FONT, size: 14, bold: true};
+  s.addRow([]); s.addRow(['代碼', '工項', '單位', '本週施工日', '本週數量', '查驗表單號', '未查驗日', '稽核結果']);
+  A.rows.forEach(r => s.addRow([r.it.code, r.it.name, r.it.unit, r.work.map(roc).join('、'), r.qty, r.nos.join('、'), r.missDays.map(roc).join('、'), {ok: '已查驗', part: '部分未查驗', none: '未查驗'}[r.status]]));
+  s.addRow([]); s.addRow(['試驗報告未回填']); s.addRow(['表單號', '試驗項目', '取樣日', '已過天數']);
+  A.pendingTests.forEach(t => s.addRow([t.r.no, t.r.testName, t.r.sampleDate || t.r.date, t.age]));
+  s.addRow([]); s.addRow(['本週表單數', ...Object.entries(A.forms).map(([k, v]) => `${k} ${v} 件`)]);
+  [8, 46, 6, 30, 10, 24, 24, 12].forEach((w, i) => s.getColumn(i + 1).width = w);
+  s.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; }));
+  downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_週稽核_${A.monday}.xlsx`);
+}
+/* ================= 共用元件 ================= */
+function Field({f, rec, set, p}) {
+  const v = rec[f.k];
+  const on = e => set(f.k, f.type === 'number' ? (e.target.value === '' ? '' : +e.target.value) : f.type === 'check' ? e.target.checked : e.target.value);
+  let ctl;
+  if (f.type === 'textarea') ctl = html`<textarea value=${v || ''} onChange=${on} />`;
+  else if (f.type === 'select') ctl = html`<select value=${v || ''} onChange=${on}>${(typeof f.options === 'function' ? f.options(rec) : f.options).map(o => html`<option key=${o} value=${o}>${o || '（未選）'}</option>`)}</select>`;
+  else if (f.type === 'check') ctl = html`<span><input type="checkbox" checked=${!!v} onChange=${on} /> ${f.hint || ''}</span>`;
+  else if (f.type === 'items') ctl = html`<${ItemsPick} p=${p} value=${v || []} date=${rec.date} onChange=${x => set(f.k, x)} />`;
+  else { const lid = f.list ? 'dl_' + f.k : undefined;
+    ctl = html`<span style=${{display: 'flex', gap: '4px'}}><input style=${{flex: 1}} type=${f.type || 'text'} list=${lid} value=${v ?? ''} onChange=${on} />
+      ${f.list && html`<datalist id=${lid}>${(typeof f.list === 'function' ? f.list(rec) : f.list).map(o => html`<option key=${o} value=${o} />`)}</datalist>`}
+      ${f.extra && f.extra(rec, set)}</span>`; }
+  return html`<label className=${'f' + (f.wide || f.type === 'textarea' || f.type === 'items' ? ' wide' : '')}>${f.label}${ctl}</label>`;
+}
+
+function ItemsPick({p, value, onChange, date}) {
+  const [q, setQ] = useState(''), [all, setAll] = useState(false);
+  const worked = date && p.logs[date] ? Object.keys(p.logs[date].qty || {}) : [];
+  const list = p.items.filter(x => (all || x.inspect || value.includes(x.code)) && (!q || norm(x.name + x.code).includes(norm(q))));
+  const tog = c => onChange(value.includes(c) ? value.filter(x => x !== c) : [...value, c]);
+  return html`<div>
+    <div className="row" style=${{marginBottom: '4px'}}>
+      <input placeholder="搜尋工項" value=${q} onChange=${e => setQ(e.target.value)} />
+      <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 顯示全部工項</label>
+      <button type="button" className="b s" disabled=${!worked.length} onClick=${() => onChange([...new Set([...value, ...worked.filter(c => p.items.find(x => x.code === c)?.inspect)])])}>帶入當日施工項目（${worked.length}）</button>
+      <span className="mute">已選 ${value.length} 項</span>
+    </div>
+    <div className="pick">${list.map(x => html`<label key=${x.code}><input type="checkbox" checked=${value.includes(x.code)} onChange=${() => tog(x.code)} />
+      <span className="mute">${x.code}</span> ${x.name} ${worked.includes(x.code) && html`<span className="tag warn">當日施工</span>`}</label>`)}
+      ${!list.length && html`<div className="mute">無符合工項（請先匯入契約詳細價目表）</div>`}</div></div>`;
+}
+
+function Modal({title, onClose, children}) {
+  return html`<div className="modal" onMouseDown=${e => e.target === e.currentTarget && onClose()}><div className="card">
+    <div className="row" style=${{justifyContent: 'space-between'}}><h2>${title}</h2><button className="b" onClick=${onClose}>關閉</button></div>${children}</div></div>`;
+}
+
+const Tag = ({s}) => s === 'ok' ? html`<span className="tag ok">已查驗</span>` : s === 'part' ? html`<span className="tag warn">部分未查驗</span>` : html`<span className="tag bad">未查驗</span>`;
+
+/* 通用紀錄表（查驗／督導／查核／表單共用） */
+function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, prefixKey, preset, clearPreset, note}) {
+  const list = p[listKey].filter(filter || (() => true)).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.no || '').localeCompare(a.no || ''));
+  const [ed, setEd] = useState(null), [q, setQ] = useState('');
+  const mkNew = (extra = {}) => { const r = {id: uid(), date: todayISO(), ...defaults, ...extra}; r.no = nextNo(p, p[listKey], prefixKey(r)); r._auto = true; return r; };
+  useEffect(() => { if (preset) { setEd(mkNew(preset)); clearPreset(); } }, [preset]);
+  const set = (k, v) => setEd(r => { const n = {...r, [k]: v}; if (r._auto && k !== 'no' && prefixKey(n) !== prefixKey(r)) n.no = nextNo(p, p[listKey], prefixKey(n)); if (k === 'no') n._auto = false; return n; });
+  const save = () => { const {_auto, ...r} = ed; update(d => { const i = d[listKey].findIndex(x => x.id === r.id); if (i >= 0) d[listKey][i] = r; else d[listKey].push(r); }); setEd(null); };
+  const del = () => { if (confirm(`確定刪除 ${ed.no || ''}？此動作無法復原。`)) { update(d => { d[listKey] = d[listKey].filter(x => x.id !== ed.id); }); setEd(null); } };
+  const shown = list.filter(r => !q || norm(JSON.stringify(r) + (r.items || []).map(c => p.items.find(x => x.code === c)?.name).join()).includes(norm(q)));
+  return html`<div className="card">
+    <div className="row" style=${{justifyContent: 'space-between'}}><h2>${title}（${list.length}）</h2>
+      <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} /><button className="b p" onClick=${() => setEd(mkNew())}>＋ 新增</button></div></div>
+    ${note && html`<div className="mute" style=${{marginBottom: '8px'}}>${note}</div>`}
+    ${shown.length ? html`<div className="tw"><table><thead><tr>${cols.map(c => html`<th key=${c[0]}>${c[0]}</th>`)}</tr></thead><tbody>
+      ${shown.map(r => html`<tr key=${r.id} style=${{cursor: 'pointer'}} onClick=${() => setEd({...r})}>${cols.map(c => html`<td key=${c[0]}>${c[1](r)}</td>`)}</tr>`)}</tbody></table></div>`
+      : html`<div className="empty">尚無紀錄</div>`}
+    ${ed && html`<${Modal} title=${(p[listKey].some(x => x.id === ed.id) ? '編輯' : '新增') + title} onClose=${() => setEd(null)}>
+      <div className="grid">${fields.filter(f => !f.show || f.show(ed)).map(f => html`<${Field} key=${f.k} f=${f} rec=${ed} set=${set} p=${p} />`)}</div>
+      <div className="row" style=${{marginTop: '12px', justifyContent: 'space-between'}}>
+        <button className="b d" onClick=${del} disabled=${!p[listKey].some(x => x.id === ed.id)}>刪除</button>
+        <button className="b p" onClick=${save}>儲存</button></div></${Modal}>`}
+  </div>`;
+}
+const itemNames = (p, codes) => (codes || []).map(c => p.items.find(x => x.code === c)?.name || c);
+const shortList = arr => arr.length > 2 ? `${arr.slice(0, 2).join('、')} 等 ${arr.length} 項` : arr.join('、');
+/* ================= 總覽 ================= */
+function SCurve({p, C}) {
+  const s = p.info.startDate, di = dayInfo(p, s); if (!s || !di.total) return null;
+  const W = 760, H = 240, M = 36, X = d => M + (W - 2 * M) * Math.min(1, Math.max(0, dayDiff(s, d) / di.total)), Y = v => H - M + (M * 2 - H) * v;
+  const sp = [{date: addDays(s, -1), cum: 0}, ...p.schedule]; const act = C.series.filter(x => x.date <= (C.last?.date || ''));
+  const line = (pts, k) => pts.map(x => `${X(x.date).toFixed(1)},${Y(x[k]).toFixed(1)}`).join(' ');
+  return html`<svg viewBox=${`0 0 ${W} ${H}`} style=${{width: '100%', maxWidth: W + 'px'}}>
+    ${[0, .25, .5, .75, 1].map(v => html`<g key=${v}><line x1=${M} x2=${W - M} y1=${Y(v)} y2=${Y(v)} stroke="#e3e7ec" /><text x=${M - 4} y=${Y(v) + 4} fontSize="10" textAnchor="end" fill="#6b7785">${v * 100}%</text></g>`)}
+    <text x=${M} y=${H - 12} fontSize="10" fill="#6b7785">${roc(s)}</text><text x=${W - M} y=${H - 12} fontSize="10" textAnchor="end" fill="#6b7785">${roc(di.end)}</text>
+    ${p.schedule.length > 0 && html`<polyline points=${line(sp, 'cum')} fill="none" stroke="#9aa5b1" strokeWidth="2" strokeDasharray="5 4" />`}
+    ${act.length > 0 && html`<polyline points=${line(act, 'cum')} fill="none" stroke="#1f6feb" strokeWidth="2.5" />`}
+    <g fontSize="11"><line x1=${W - 220} x2=${W - 196} y1=${M - 14} y2=${M - 14} stroke="#9aa5b1" strokeWidth="2" strokeDasharray="5 4" /><text x=${W - 192} y=${M - 10}>預定</text>
+    <line x1=${W - 150} x2=${W - 126} y1=${M - 14} y2=${M - 14} stroke="#1f6feb" strokeWidth="2.5" /><text x=${W - 122} y=${M - 10}>實際</text></g></svg>`;
+}
+function Dashboard({p, C, go}) {
+  const d = C.last?.date || todayISO(), di = dayInfo(p, d), A = auditWeek(p, mondayOf(d));
+  const gap = C.last ? C.last.cum - C.last.sched : NaN;
+  const pend = p.inspections.filter(r => r.testNeed && !r.reportNo).length;
+  const fails = p.inspections.filter(r => r.result === '不合格' && !r.fixDone).length;
+  const K = (l, v, cls, t) => html`<div className="kpi" style=${{cursor: t ? 'pointer' : 'default'}} onClick=${() => t && go(t)}><div className="l">${l}</div><div className=${'v ' + (cls || '')}>${v}</div></div>`;
+  return html`<div>
+    <div className="card"><h2>${p.info.name || '（未命名專案）'}</h2>
+      <div className="mute">${p.info.contractNo} ｜ 承攬：${p.info.contractor || '—'} ｜ 開工 ${roc(p.info.startDate)} ｜ 完工期限 ${roc(di.end)} ｜ 契約金額 ${money(+p.info.amount)} 元</div></div>
+    ${!p.items.length && html`<div className="msg warn">尚未匯入契約詳細價目表，請先到「資料匯入」。</div>`}
+    <div className="kpis" style=${{marginBottom: '14px'}}>
+      ${K('資料截至', roc(d) + '（' + wkday(d) + '）')}
+      ${K('工期 已用／剩餘', `${di.used}／${di.left} 天`, di.left < 0 ? 'bad' : '')}
+      ${K('累計預定進度', pct(C.last?.sched))}
+      ${K('累計實際進度', pct(C.last?.cum))}
+      ${K('進度差異', Number.isFinite(gap) ? (gap >= 0 ? '+' : '') + (gap * 100).toFixed(2) + '%' : '—', gap < -0.05 ? 'bad' : gap < 0 ? 'warn' : '')}
+      ${K('本週查驗缺漏', A.miss + ' 項', A.miss ? 'bad' : '', 'audit')}
+      ${K('試驗報告待回填', pend + ' 件', pend ? 'warn' : '', 'tests')}
+      ${K('不合格未改善', fails + ' 件', fails ? 'bad' : '', 'insp')}
+    </div>
+    <div className="card"><h2>進度 S 曲線</h2>${p.schedule.length || C.series.length ? html`<${SCurve} p=${p} C=${C} />` : html`<div className="empty">匯入預定進度表與施工日誌後顯示</div>`}
+      ${Number.isFinite(gap) && gap < -0.05 && html`<div className="msg bad">實際進度落後預定 ${(-gap * 100).toFixed(2)}%，已超過 5%，依規定應檢討趕工計畫。</div>`}</div>
+  </div>`;
+}
+
+/* ================= 資料匯入 ================= */
+const INFO_LABEL = {name: '工程名稱', contractNo: '契約編號', owner: '主辦機關', supervisor: '監造單位', contractor: '承攬廠商', startDate: '開工日期', duration: '契約工期', amount: '契約金額', extendDays: '展延天數', location: '施工地點'};
+function ImportTab({p, update}) {
+  const [res, setRes] = useState(null), [busy, setBusy] = useState(''), [paste, setPaste] = useState('');
+  const [pick, setPick] = useState({info: true, items: true, schedule: true, logs: true});
+  const [amap, setAmap] = useState({});
+  const run = async (mode, files) => {
+    if (!files.length) return; setBusy('解析中…'); ALIAS = p.settings.alias || {};
+    try {
+      const out = {mode, files: [...files].map(f => f.name)};
+      for (const f of files) {
+        if (/\.pdf$/i.test(f.name) && mode === 'items') { const c = await parsePdfContract(f); if (c) { out.items = c; out.info = {...c.info, ...out.info}; } continue; }
+        if (/\.pdf$/i.test(f.name) && mode === 'schedule') { const s = await parsePdfSchedule(f, p.info.startDate); if (s) out.schedule = s; continue; }
+        if (/\.pdf$/i.test(f.name)) { // 施工日誌 PDF
+          const items = out.items?.items || p.items; if (!items.length) throw new Error('請先匯入契約詳細價目表，PDF 工項需對應契約項目');
+          const L = await parsePdfLogs(f, items); out.info = {...L.info, ...out.info}; if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
+          Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`)); continue; }
+        const wb = await readWB(f);
+        if (mode !== 'schedule') out.info = {...parseInfo(wb), ...out.info};
+        if (mode === 'all' || mode === 'items') { const c = parseContract(wb); if (c) out.items = c; }
+        if (mode === 'all' || mode === 'schedule') { const s = parseSchedule(wb); if (s) out.schedule = s; }
+        if (mode === 'all' || mode === 'logs') {
+          const items = out.items?.items || p.items; const L = parseLogs(wb, items);
+          if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
+          Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`));
+        }
+      }
+      if (out.logs && !Object.keys(out.logs.logs).length) out.logs = null;
+      if (out.logs) { const items = (out.items?.items || p.items).filter(x => x.kind === 'normal'), m = {};
+        for (const u of out.logs.unmatched) { const k = norm(u.name); if (!m[k]) m[k] = suggestItem(items, u.name, u.unit)?.code || ''; }
+        setAmap(m); }
+      setPick({info: true, items: true, schedule: true, logs: true}); setRes(out);
+    } catch (e) { alert('解析失敗：' + e.message); console.error(e); }
+    setBusy('');
+  };
+  const apply = () => {
+    update(d => {
+      if (res.info && pick.info) for (const k in res.info) if (res.info[k] !== '' && res.info[k] != null) d.info[k] = res.info[k];
+      if (res.items && pick.items) { const old = Object.fromEntries(d.items.map(x => [x.code, x])); d.items = res.items.items.map(x => old[x.code] ? {...x, inspect: old[x.code].inspect, kind: old[x.code].kind} : x); }
+      if (res.schedule && pick.schedule) d.schedule = res.schedule.points;
+      if (res.logs && pick.logs) for (const u of res.logs.unmatched) { const code = amap[norm(u.name)]; if (!code) continue; // 手動對應
+        d.settings.alias = {...(d.settings.alias || {}), [norm(u.name)]: code};
+        const l = res.logs.logs[u.date] || (res.logs.logs[u.date] = blankLog()); l.qty[code] = (l.qty[code] || 0) + u.q; }
+      if (res.logs && pick.logs) for (const [dt, l] of Object.entries(res.logs.logs)) {
+        for (const g of ['labor', 'machines']) for (const k in l[g]) if (!d.settings[g].includes(k)) d.settings[g].push(k);
+        const cur = d.logs[dt] || blankLog();
+        d.logs[dt] = {...cur, ...Object.fromEntries(Object.entries(l).filter(([k, v]) => typeof v === 'string' ? v : false)),
+          labor: Object.keys(l.labor).length ? l.labor : cur.labor, machines: Object.keys(l.machines).length ? l.machines : cur.machines, qty: Object.keys(l.qty).length ? l.qty : cur.qty};
+      }
+    });
+    setRes(null); alert('已匯入並完成連動計算。');
+  };
+  const F = (mode, label, desc, multi) => html`<div className="card"><h2>${label}</h2><div className="mute" style=${{marginBottom: '8px'}}>${desc}</div>
+    <input type="file" accept=${mode === 'all' ? '.xlsx,.xlsm,.xls' : '.xlsx,.xlsm,.xls,.pdf'} multiple=${!!multi} onChange=${e => { run(mode, e.target.files); e.target.value = ''; }} /></div>`;
+  const ld = res?.logs ? Object.keys(res.logs.logs).sort() : [];
+  return html`<div>
+    ${F('all', '① 一鍵匯入整合活頁簿', '既有的施工日誌整合活頁簿（含「契約詳細表」「工程項目」「記事」「出工機具」「工程資料」分頁）或本系統匯出、廠商填回的「整合連動版」，一次讀入工程資料、契約項目、預定進度與施工日誌。')}
+    <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))'}}>
+      ${F('items', '② 契約詳細價目表（預算書）', 'Excel 或 PDF 皆可。自動尋找含「項次／項目及說明／單位／數量／單價」表頭的分頁；利潤管理費、營業稅自動判為比例項目（依前方項目完成比例分攤）。')}
+      <div className="card"><h2>③ 預定進度表</h2><div className="mute" style=${{marginBottom: '8px'}}>Excel 或 PDF 皆可（PDF 需先填開工日期以補年份）。自動辨識「累計預定進度」欄（直式）或「累計」列（橫式 10 日區塊）；只有 S 曲線圖、沒有數字的 PDF 讀不到。格式特殊時，可直接貼上兩欄：日期、累計預定%。</div>
+        <input type="file" accept=".xlsx,.xlsm,.xls,.pdf" onChange=${e => { run('schedule', e.target.files); e.target.value = ''; }} />
+        <textarea style=${{width: '100%', marginTop: '8px'}} placeholder=${'115/08/12\t1.25\n115/08/22\t3.80'} value=${paste} onChange=${e => setPaste(e.target.value)} />
+        <button className="b" onClick=${() => { const pts = parsePastedSchedule(paste); if (!pts.length) return alert('讀不到「日期＋百分比」資料'); setRes({mode: 'schedule', files: ['貼上資料'], schedule: {sheet: '貼上', how: '手動貼上', points: pts}}); }}>解析貼上內容</button></div>
+      ${F('logs', '④ 廠商施工日誌', '支援：整合活頁簿（工程項目矩陣＋記事＋出工機具）、本系統整合連動版、一日一頁的「公共工程施工日誌」Excel，或廠商提供的施工日誌 PDF（文字型，可多檔、一檔多日；掃描影像檔需先 OCR）。工項以名稱、單價、單位對應契約項目。', true)}
+    </div>
+    ${busy && html`<div className="msg warn">${busy}</div>`}
+    ${res && html`<${Modal} title="匯入預覽" onClose=${() => setRes(null)}>
+      <div className="mute">檔案：${res.files.join('、')}</div>
+      ${res.info && Object.keys(res.info).length > 0 && html`<h3><label><input type="checkbox" checked=${pick.info} onChange=${e => setPick({...pick, info: e.target.checked})} /> 工程資料</label></h3>
+        <div className="mute">${Object.entries(res.info).map(([k, v]) => `${INFO_LABEL[k] || k}：${k === 'startDate' ? roc(v) : v}${p.info[k] && p.info[k] != v ? `（原 ${k === 'startDate' ? roc(p.info[k]) : p.info[k]}）` : ''}`).join('｜')}</div>`}
+      ${res.items && html`<h3><label><input type="checkbox" checked=${pick.items} onChange=${e => setPick({...pick, items: e.target.checked})} /> 契約項目：${res.items.items.length} 項（分頁「${res.items.sheet}」）</label></h3>
+        <div className="mute">計量項目合計 ${money(res.items.items.filter(x => x.kind === 'normal').reduce((s, x) => s + x.qty * x.price, 0))} 元；比例項目：${res.items.items.filter(x => x.kind === 'ratio').map(x => x.name).join('、') || '無'}；預設需查驗 ${res.items.items.filter(x => x.inspect).length} 項</div>
+        ${p.items.length > 0 && html`<div className="msg warn">將取代現有 ${p.items.length} 個契約項目（同代碼項目保留「需查驗／類型」設定）。</div>`}`}
+      ${res.schedule && html`<h3><label><input type="checkbox" checked=${pick.schedule} onChange=${e => setPick({...pick, schedule: e.target.checked})} /> 預定進度：${res.schedule.points.length} 個點（${res.schedule.sheet}／${res.schedule.how}）</label></h3>
+        <div className="mute">${roc(res.schedule.points[0].date)} ${pct(res.schedule.points[0].cum)} → ${roc(res.schedule.points.at(-1).date)} ${pct(res.schedule.points.at(-1).cum)}</div>`}
+      ${res.logs && html`<h3><label><input type="checkbox" checked=${pick.logs} onChange=${e => setPick({...pick, logs: e.target.checked})} /> 施工日誌：${ld.length} 天（${roc(ld[0])}～${roc(ld.at(-1))}）</label></h3>
+        <div className="mute">${res.logs.sources.join('；')}</div>
+        ${res.logs.unmatched.length > 0 && html`<${UnmatchedMap} list=${res.logs.unmatched} items=${(res.items?.items || p.items).filter(x => x.kind === 'normal')} amap=${amap} setAmap=${setAmap} />`}`}
+      ${!res.items && !res.schedule && !res.logs && html`<div className="msg bad">檔案中找不到可辨識的資料。</div>`}
+      <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${apply} disabled=${!res.items && !res.schedule && !res.logs}>確認匯入</button></div>
+    </${Modal}>`}
+  </div>`;
+}
+
+/* 名稱對不到的工項：列出建議對應，使用者確認後併入並記住 */
+function UnmatchedMap({list, items, amap, setAmap}) {
+  const g = {}; list.forEach(u => { const k = norm(u.name); (g[k] = g[k] || {name: u.name, unit: u.unit, q: 0, days: new Set()}); g[k].q += u.q; g[k].days.add(u.date); });
+  return html`<div className="msg warn"><b>以下名稱與契約項目不完全相同，請確認對應（選好後按確認匯入，下次會自動對應）：</b>
+    <table style=${{marginTop: '6px', background: '#fff'}}><thead><tr><th>日誌上的名稱</th><th>單位</th><th className="n">合計數量</th><th className="n">天數</th><th>對應契約項目</th></tr></thead><tbody>
+    ${Object.entries(g).map(([k, x]) => html`<tr key=${k}><td>${x.name}</td><td>${x.unit}</td><td className="n">${fmtQ(x.q)}</td><td className="n">${x.days.size}</td>
+      <td><select style=${{maxWidth: '360px'}} value=${amap[k] || ''} onChange=${e => setAmap({...amap, [k]: e.target.value})}><option value="">（不匯入）</option>
+        ${items.map(it => html`<option key=${it.code} value=${it.code}>${it.code} ${it.name}（${it.unit}）</option>`)}</select></td></tr>`)}
+    </tbody></table></div>`;
+}
+/* 相似度（字元二元組 Dice 係數）＋單位相同加分，取最接近的契約項目 */
+function suggestItem(items, name, unit) {
+  const bg = s => { const t = norm(s).replace(/祛/g, '袪'), a = new Map(); for (let i = 0; i < t.length - 1; i++) { const k = t.slice(i, i + 2); a.set(k, (a.get(k) || 0) + 1); } return [a, Math.max(1, t.length - 1)]; };
+  const [A, na] = bg(name); let best = null, bs = 0;
+  for (const it of items) { const [B, nb] = bg(it.name); let o = 0; A.forEach((v, k) => o += Math.min(v, B.get(k) || 0));
+    const sc = 2 * o / (na + nb) + (unit && norm(unit) === norm(it.unit) ? 0.1 : 0); if (sc > bs) { bs = sc; best = it; } }
+  return bs >= 0.45 ? best : null;
+}
+
+/* ================= 契約項目 ================= */
+function ContractTab({p, C, update}) {
+  const [onlyI, setOnlyI] = useState(false);
+  const set = (code, k, v) => update(d => { const it = d.items.find(x => x.code === code); it[k] = v; });
+  let g = null;
+  const rows = p.items.filter(x => !onlyI || x.inspect);
+  const total = p.items.reduce((s, x) => s + x.qty * x.price, 0);
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>契約詳細價目表（${p.items.length} 項）</h2>
+    <div className="row"><span className="mute">複價合計 ${money(total)}</span><label><input type="checkbox" checked=${onlyI} onChange=${e => setOnlyI(e.target.checked)} /> 只看需查驗</label></div></div>
+    <div className="mute" style=${{marginBottom: '6px'}}>「需查驗」決定每週稽核要檢核的工項；「比例」項目（利潤管理費、營業稅）不填每日數量，依其前方各項目完成比例自動分攤。</div>
+    ${p.items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>項次</th><th>項目及說明</th><th>單位</th><th className="n">數量</th><th className="n">單價</th><th className="n">複價</th><th>類型</th><th>需查驗</th><th className="n">累計完成</th><th className="n">完成率</th><th>查驗次數</th></tr></thead><tbody>
+      ${rows.flatMap(it => { const out = []; if (it.group !== g) { g = it.group; out.push(html`<tr className="g" key=${'g' + it.code}><td></td><td>${it.gseq}</td><td colSpan="10">${it.group}</td></tr>`); }
+        const cq = C.cumQty[it.code] || 0, n = p.inspections.filter(r => (r.items || []).includes(it.code)).length;
+        out.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.seq}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(it.price)}</td><td className="n">${money(it.qty * it.price)}</td>
+          <td><select value=${it.kind} onChange=${e => set(it.code, 'kind', e.target.value)}><option value="normal">計量</option><option value="ratio">比例</option></select></td>
+          <td style=${{textAlign: 'center'}}><input type="checkbox" checked=${it.inspect} onChange=${e => set(it.code, 'inspect', e.target.checked)} /></td>
+          <td className="n">${it.kind === 'normal' ? fmtQ(cq) : ''}</td><td className="n">${it.kind === 'normal' ? html`<span className=${cq > it.qty ? 'tag bad' : ''}>${pct(it.qty ? cq / it.qty : 0, 1)}</span>` : ''}</td>
+          <td>${it.inspect ? (n ? n : html`<span className="mute">0</span>`) : ''}</td></tr>`); return out; })}
+    </tbody></table></div>` : html`<div className="empty">尚未匯入契約詳細價目表</div>`}</div>`;
+}
+
+/* ================= 施工日誌 ================= */
+function LogTab({p, C, update}) {
+  const di0 = dayInfo(p, p.info.startDate);
+  const lastD = [todayISO(), ...Object.keys(p.logs)].sort().pop();
+  const endD = lastD < p.info.startDate ? p.info.startDate : lastD;
+  const dates = useMemo(() => { const a = []; if (!p.info.startDate) return a; for (let d = p.info.startDate; d <= endD && a.length < 2000; d = addDays(d, 1)) a.push(d); return a.reverse(); }, [p.info.startDate, endD]);
+  const [sel, setSel] = useState(C.last?.date || dates[0]), [all, setAll] = useState(false);
+  const l = p.logs[sel] || blankLog(), s = C.byDate[sel], di = dayInfo(p, sel);
+  const up = fn => update(d => { d.logs[sel] = d.logs[sel] || blankLog(); fn(d.logs[sel]); });
+  const setQ = (code, v) => up(x => { const n = parseFloat(v); if (!v || !n) delete x.qty[code]; else x.qty[code] = n; });
+  const prevCum = code => Object.keys(p.logs).filter(d => d < sel).reduce((a, d) => a + (p.logs[d].qty?.[code] || 0), 0);
+  const W = ['', '晴', '陰', '雨', '颱風', '豪雨', '停工'];
+  let g = null;
+  const items = p.items.filter(x => x.kind === 'normal' && (all || l.qty?.[x.code]));
+  if (!p.info.startDate) return html`<div className="empty">請先於「專案設定」填寫開工日期</div>`;
+  return html`<div className="split">
+    <div className="list">${dates.map(d => { const x = p.logs[d]; const has = x && Object.keys(x.qty || {}).length; return html`<div key=${d} className=${d === sel ? 'on' : ''} onClick=${() => setSel(d)}>
+      <span>${roc(d)}（${wkday(d)}）</span><span>${has ? html`<span className="tag ok">${Object.keys(x.qty).length}項</span>` : x && (x.summary || x.wAm) ? html`<span className="tag">記事</span>` : ''}</span></div>`; })}</div>
+    <div>
+      <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>${roc(sel)}（${wkday(sel)}）施工日誌</h2>
+        <span className="mute">第 ${di.used} 天／契約 ${di.total} 天，剩餘 ${di.left} 天</span></div>
+        <div className="kpis">
+          <div className="kpi"><div className="l">本日完成金額</div><div className="v">${money(s?.amt || 0)}</div></div>
+          <div className="kpi"><div className="l">本日實際進度</div><div className="v">${pct(s?.day || 0)}</div></div>
+          <div className="kpi"><div className="l">累計實際進度</div><div className="v">${pct(s?.cum ?? NaN)}</div></div>
+          <div className="kpi"><div className="l">累計預定進度</div><div className="v">${pct(schedAt(p, sel))}</div></div></div>
+        <div className="grid" style=${{marginTop: '10px'}}>
+          <label className="f">上午天氣<select value=${l.wAm} onChange=${e => up(x => x.wAm = e.target.value)}>${W.map(w => html`<option key=${w}>${w}</option>`)}</select></label>
+          <label className="f">下午天氣<select value=${l.wPm} onChange=${e => up(x => x.wPm = e.target.value)}>${W.map(w => html`<option key=${w}>${w}</option>`)}</select></label>
+          ${[['summary', '施工概況'], ['safety', '職安衛督導'], ['tests', '取樣試驗紀錄'], ['notify', '通知協力廠商辦理事項'], ['notes', '重要事項紀錄']].map(([k, t]) =>
+            html`<label key=${k} className="f wide">${t}<textarea value=${l[k] || ''} onChange=${e => { const v = e.target.value; up(x => x[k] = v); }} /></label>`)}
+        </div>
+        <h3>出工人數／機具</h3>
+        <div className="row">${[...p.settings.labor.map(k => ['labor', k]), ...p.settings.machines.map(k => ['machines', k])].map(([grp, k]) =>
+          html`<label key=${grp + k} className="f">${k}<input type="number" min="0" style=${{width: '80px'}} value=${l[grp]?.[k] ?? ''} onChange=${e => { const v = +e.target.value; up(x => { x[grp] = x[grp] || {}; if (v) x[grp][k] = v; else delete x[grp][k]; }); }} /></label>`)}</div>
+      </div>
+      <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>本日完成數量</h2>
+        <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 顯示全部工項以填報</label></div>
+        ${items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工程項目</th><th>單位</th><th className="n">契約數量</th><th className="n">前日累計</th><th className="n">本日完成</th><th className="n">本日金額</th><th className="n">累計完成率</th></tr></thead><tbody>
+          ${items.flatMap(it => { const o = []; if (it.group !== g) { g = it.group; o.push(html`<tr className="g" key=${'g' + it.code}><td colSpan="8">${it.gseq}　${it.group}</td></tr>`); }
+            const pc = prevCum(it.code), q = l.qty?.[it.code] || 0;
+            o.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(pc)}</td>
+              <td className="n"><input key=${sel + it.code} type="number" step="any" min="0" style=${{width: '90px', textAlign: 'right'}} defaultValue=${q || ''} onChange=${e => setQ(it.code, e.target.value)} /></td>
+              <td className="n">${q ? money(q * it.price) : ''}</td><td className="n"><span className=${pc + q > it.qty ? 'tag bad' : ''}>${pct(it.qty ? (pc + q) / it.qty : 0, 1)}</span></td></tr>`); return o; })}
+        </tbody></table></div>` : html`<div className="empty">本日無完成數量${p.items.length ? '，勾選「顯示全部工項」即可填報' : '（請先匯入契約項目）'}</div>`}
+      </div></div></div>`;
+}
+/* ================= 查驗／督導／查核／表單 ================= */
+const TESTS = ['混凝土抗壓強度試驗', '混凝土坍度試驗', '混凝土氯離子含量檢測', '鋼筋拉伸試驗', '鋼筋化學成分分析', '工地密度試驗', '級配粒料篩分析', '瀝青混凝土鑽心（厚度／壓實度）', 'CLSM 抗壓強度試驗', '其他'];
+const FORM_TITLES = {
+  職安衛: ['施工前安全檢查表', '危害告知紀錄', '工具箱會議紀錄', '自動檢查紀錄', '職安衛教育訓練紀錄', '職安衛巡檢紀錄'],
+  環保: ['環境保護檢查表', '空氣污染防制檢查表', '營建工地逕流廢水污染削減檢查表', '廢棄物清運紀錄', '噪音振動檢查表'],
+  交維: ['交通維持設施檢查表', '交維巡查紀錄', '交通維持計畫執行檢查表'],
+  防汛: ['防汛整備檢查表', '汛期工地自主檢查表', '防汛演練紀錄', '颱風豪雨應變紀錄', '防汛物資清點表']};
+const resTag = v => v === '合格' || v === '符合' || v === '已改善' ? html`<span className="tag ok">${v}</span>` : v === '不合格' || v === '缺失待改善' ? html`<span className="tag bad">${v}</span>` : v ? html`<span className="tag warn">${v}</span>` : '';
+
+function InspectionTab(props) {
+  const {p} = props;
+  const fields = [
+    {k: 'date', label: '查驗日期', type: 'date'}, {k: 'type', label: '查驗類別', type: 'select', options: ['施工查驗', '材料查驗']},
+    {k: 'no', label: '表單號'}, {k: 'inspector', label: '查驗人員'},
+    {k: 'items', label: '查驗工項（對應契約項目）', type: 'items'},
+    {k: 'location', label: '位置／里程', wide: true}, {k: 'content', label: '查驗項目及內容', type: 'textarea'},
+    {k: 'result', label: '查驗結果', type: 'select', options: ['', '合格', '有條件合格', '不合格', '待複查']},
+    {k: 'fixDone', label: '缺失改善完成日', type: 'date', show: r => r.result === '不合格' || r.result === '有條件合格'},
+    {k: 'defect', label: '缺失內容／改善要求', type: 'textarea', show: r => r.result === '不合格' || r.result === '有條件合格'},
+    {k: 'testNeed', label: '取樣試驗', type: 'check', hint: '本次查驗需取樣試驗'},
+    {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣日期', type: 'date', show: r => r.testNeed},
+    {k: 'reportNo', label: '試驗報告編號（回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
+    {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => shortList(itemNames(p, r.items))], ['位置', r => r.location], ['結果', r => resTag(r.result)],
+    ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
+  return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => r.type || '施工查驗'}
+    note="工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
+}
+function TechTab(props) {
+  const fields = [{k: 'date', label: '督導日期', type: 'date'}, {k: 'no', label: '表單號'}, {k: 'person', label: '督導技師'},
+    {k: 'items', label: '督導工項', type: 'items'}, {k: 'content', label: '督導內容', type: 'textarea'},
+    {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['督導技師', r => r.person], ['工項', r => shortList(itemNames(props.p, r.items))], ['缺失', r => r.defects || 0],
+    ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className="tag bad">未完成</span>`) : '']];
+  return html`<${RecordTab} ...${props} listKey="supervisions" title="技師督導" filter=${r => r.kind === '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: '技師督導', items: []}} prefixKey=${() => '技師督導'} />`;
+}
+function AuditRecTab(props) {
+  const K = ['工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'];
+  const fields = [{k: 'date', label: '日期', type: 'date'}, {k: 'kind', label: '類別', type: 'select', options: K}, {k: 'no', label: '表單號'}, {k: 'person', label: '查核單位／委員'},
+    {k: 'score', label: '分數／等級'}, {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'content', label: '查核意見摘要', type: 'textarea'},
+    {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
+  const cols = [['日期', r => roc(r.date)], ['類別', r => r.kind], ['表單號', r => r.no], ['單位', r => r.person], ['分數', r => r.score], ['缺失', r => r.defects || 0],
+    ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className=${'tag ' + (r.fixDue && r.fixDue < todayISO() ? 'bad' : 'warn')}>期限 ${roc(r.fixDue) || '未定'}</span>`) : '']];
+  return html`<${RecordTab} ...${props} listKey="supervisions" title="查核及團體督導" filter=${r => r.kind !== '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: K[0]}} prefixKey=${() => '查核'} />`;
+}
+function FormTab(props) {
+  const fields = [{k: 'cat', label: '類別', type: 'select', options: ['職安衛', '環保', '交維', '防汛']}, {k: 'date', label: '日期', type: 'date'}, {k: 'no', label: '表單號'},
+    {k: 'title', label: '表單名稱', list: r => FORM_TITLES[r.cat] || []}, {k: 'result', label: '檢查結果', type: 'select', options: ['', '符合', '缺失待改善', '已改善']},
+    {k: 'note', label: '缺失／備註', type: 'textarea'}];
+  const cols = [['日期', r => roc(r.date)], ['類別', r => r.cat], ['表單號', r => r.no], ['表單名稱', r => r.title], ['結果', r => resTag(r.result)], ['備註', r => r.note]];
+  return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => r.cat} />`;
+}
+
+/* ================= 試驗報告回填 ================= */
+function TestTab({p, update}) {
+  const [all, setAll] = useState(false);
+  const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
+  const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
+  const due = +p.settings.testDue || 30;
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
+    <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已回填</label></div>
+    <div className="mute" style=${{marginBottom: '6px'}}>取樣超過 ${due} 天仍未回填者標紅（天數可於專案設定調整）。</div>
+    ${list.length ? html`<div className="tw"><table><thead><tr><th>查驗表單號</th><th>工項</th><th>試驗項目</th><th>取樣日</th><th className="n">已過天數</th><th>試驗報告編號</th><th>報告日期</th><th>結果</th></tr></thead><tbody>
+      ${list.map(r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<tr key=${r.id}><td>${r.no}</td><td>${shortList(itemNames(p, r.items))}</td><td>${r.testName}</td><td>${roc(r.sampleDate || r.date)}</td>
+        <td className="n"><span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span></td>
+        <td><input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" /></td>
+        <td><input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} /></td>
+        <td><select value=${r.testResult || ''} onChange=${e => set(r.id, 'testResult', e.target.value)}><option value="">—</option><option>合格</option><option>不合格</option></select></td></tr>`; })}
+    </tbody></table></div>` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div>`;
+}
+
+/* ================= 每週稽核 ================= */
+function AuditTab({p, C, quick}) {
+  const [mon, setMon] = useState(mondayOf(C.last?.date || todayISO()));
+  const A = useMemo(() => auditWeek(p, mon), [p, mon]);
+  const cnt = s => A.rows.filter(r => r.status === s).length;
+  return html`<div>
+    <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}>
+      <div className="row"><button className="b" onClick=${() => setMon(addDays(mon, -7))}>◀ 上週</button>
+        <input type="date" value=${mon} onChange=${e => e.target.value && setMon(mondayOf(e.target.value))} />
+        <button className="b" onClick=${() => setMon(addDays(mon, 7))}>下週 ▶</button>
+        <b>${roc(A.monday)}（一）～ ${roc(A.end)}（日）</b></div>
+      <button className="b" onClick=${() => exportAuditExcel(p, A)}>匯出稽核表 Excel</button></div>
+      <div className="kpis" style=${{marginTop: '10px'}}>
+        <div className="kpi"><div className="l">本週施工之需查驗工項</div><div className="v">${A.rows.length}</div></div>
+        <div className="kpi"><div className="l">已查驗</div><div className="v ok" style=${{background: 'none'}}>${cnt('ok')}</div></div>
+        <div className="kpi"><div className="l">部分／未查驗</div><div className=${'v ' + (A.miss ? 'bad' : '')} style=${{background: 'none'}}>${cnt('part')}／${cnt('none')}</div></div>
+        <div className="kpi"><div className="l">試驗報告未回填</div><div className="v">${A.pendingTests.length}</div></div></div>
+      <div className="mute" style=${{marginTop: '6px'}}>判定方式：施工日誌某日有完成數量的「需查驗」工項，須在該日前後 ${p.settings.tolerance} 天內有勾選該工項的查驗紀錄（容許天數可於專案設定調整）。</div></div>
+    <div className="card"><h2>工項查驗比對</h2>
+      ${A.rows.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工項</th><th>本週施工日</th><th className="n">本週數量</th><th>查驗表單號</th><th>稽核結果</th><th>未查驗日</th><th className="noprint"></th></tr></thead><tbody>
+        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => roc(d).slice(4)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
+          <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => roc(d).slice(4)).join('、')}</td>
+          <td className="noprint">${r.status !== 'ok' && html`<button className="b s" onClick=${() => quick({items: [r.it.code], date: r.missDays[0], type: '施工查驗'})}>補填查驗</button>`}</td></tr>`)}
+      </tbody></table></div>` : html`<div className="empty">本週施工日誌無需查驗工項的完成數量</div>`}</div>
+    <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(360px,1fr))'}}>
+      <div className="card"><h2>試驗報告未回填（截至週日）</h2>${A.pendingTests.length ? html`<table><tbody>${A.pendingTests.map(t => html`<tr key=${t.r.id}><td>${t.r.no}</td><td>${t.r.testName}</td><td>${roc(t.r.sampleDate || t.r.date)}</td><td className="n"><span className=${t.age > p.settings.testDue ? 'tag bad' : ''}>${t.age} 天</span></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}</div>
+      <div className="card"><h2>本週表單填報</h2><table><tbody>${Object.entries(A.forms).map(([k, v]) => html`<tr key=${k}><td>${k}</td><td className="n">${v} 件</td><td>${!v && (k !== '防汛' || A.flood) ? html`<span className="tag warn">本週未填報</span>` : ''}</td></tr>`)}
+        <tr><td>技師督導／查核</td><td className="n">${A.sup.length} 件</td><td></td></tr></tbody></table>
+        ${A.flood && html`<div className="mute" style=${{marginTop: '6px'}}>目前為防汛期（5～11 月），建議每週至少一次防汛檢查。</div>`}</div>
+      <div className="card"><h2>不合格未改善</h2>${A.failOpen.length ? html`<table><tbody>${A.failOpen.map(r => html`<tr key=${r.id}><td>${r.no}</td><td>${roc(r.date)}</td><td>${shortList(itemNames(p, r.items))}</td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}</div>
+    </div></div>`;
+}
+/* ================= 專案設定／匯出備份 ================= */
+function SettingsTab({p, update, onDelete, onRestore}) {
+  const I = (k, label, type) => html`<label className="f">${label}<input type=${type || 'text'} value=${p.info[k] ?? ''} onChange=${e => { const v = type === 'number' ? +e.target.value : e.target.value; update(d => { d.info[k] = v; }); }} /></label>`;
+  const S = (k, label) => html`<label className="f">${label}<input type="number" value=${p.settings[k]} onChange=${e => { const v = +e.target.value; update(d => { d.settings[k] = v; }); }} /></label>`;
+  const backup = () => downloadBlob(new Blob([JSON.stringify(p, null, 1)], {type: 'application/json'}), `${p.info.name || '專案'}_備份_${todayISO().replace(/-/g, '')}.json`);
+  return html`<div>
+    <div className="card"><h2>匯出與備份</h2><div className="row">
+      <button className="b p" onClick=${() => exportLinkedExcel(p).catch(e => alert('匯出失敗：' + e.message))} disabled=${!p.items.length}>匯出整合連動版 Excel（給廠商填用）</button>
+      <button className="b" onClick=${backup}>下載專案備份（JSON）</button>
+      <label className="b" style=${{cursor: 'pointer'}}>還原／匯入備份…<input type="file" accept=".json" style=${{display: 'none'}} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (f) onRestore(JSON.parse(await f.text())); }} /></label></div>
+      <div className="mute" style=${{marginTop: '8px'}}>資料存在本瀏覽器。換電腦或與同事共用時，請下載 JSON 備份放到共用雲端硬碟，對方以「還原／匯入備份」讀入。廠商填回的整合連動版，可在「資料匯入 ①」直接匯回。</div></div>
+    <div className="card"><h2>工程資料</h2><div className="grid">
+      ${I('name', '工程名稱')}${I('contractNo', '契約編號')}${I('owner', '主辦機關')}${I('supervisor', '監造單位')}${I('contractor', '承攬廠商')}${I('location', '施工地點')}
+      ${I('startDate', '開工日期', 'date')}${I('duration', '契約工期（日曆天）', 'number')}${I('extendDays', '展延天數', 'number')}${I('amount', '契約金額（元）', 'number')}</div></div>
+    <div className="card"><h2>稽核與編號設定</h2><div className="grid">
+      ${S('tolerance', '查驗比對容許天數（±天）')}${S('testDue', '試驗報告回填期限（天）')}
+      ${Object.keys(DEFAULT_PREFIX).map(k => html`<label key=${k} className="f">表單號前綴：${k}<input value=${p.settings.prefix[k] || ''} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`)}
+      ${[['labor', '出工工別（以、分隔）'], ['machines', '機具名稱（以、分隔）']].map(([k, t]) => html`<label key=${k} className="f wide">${t}<input defaultValue=${p.settings[k].join('、')} onBlur=${e => { const v = e.target.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean); update(d => { d.settings[k] = v; }); }} /></label>`)}
+    </div></div>
+    <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
+}
+
+/* ================= 主程式 ================= */
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
+function App() {
+  const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null);
+  useEffect(() => { Store.list().then(l => { setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
+  const p = projects?.find(x => x.id === cur);
+  const saveT = useRef({});
+  const update = fn => setProjects(ps => ps.map(x => { if (x.id !== cur) return x; const n = structuredClone(x); fn(n); n.updated = new Date().toISOString();
+    clearTimeout(saveT.current[n.id]); saveT.current[n.id] = setTimeout(() => Store.put(n), 400); return n; }));
+  useEffect(() => { if (cur) localStorage.setItem('ss.cur', cur); }, [cur]);
+  const C = useMemo(() => p ? calc(p) : null, [p]);
+  const create = async () => { const name = prompt('專案（工程）名稱：'); if (!name) return; const n = newProject(name); await Store.put(n); setProjects(ps => [...ps, n]); setCur(n.id); setTab('import'); };
+  const del = async () => { if (!confirm(`確定刪除「${p.info.name}」？所有匯入資料與填報紀錄都會刪除，建議先下載 JSON 備份。`)) return; await Store.del(p.id); const rest = projects.filter(x => x.id !== p.id); setProjects(rest); setCur(rest[0]?.id || null); setTab('home'); };
+  const restore = async doc => { if (!doc?.info || !doc.items) return alert('不是有效的專案備份檔'); const exist = projects.some(x => x.id === doc.id);
+    if (exist && !confirm('已有相同專案，要以備份內容覆蓋嗎？')) return; const n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; await Store.put(n);
+    setProjects(ps => exist ? ps.map(x => x.id === n.id ? n : x) : [...ps, n]); setCur(n.id); alert('已還原：' + n.info.name); };
+  const quick = pr => { setPreset(pr); setTab('insp'); };
+  if (!projects) return html`<div className="empty">載入中…</div>`;
+  const props = {p, C, update};
+  return html`<div>
+    <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.20-7</span></h1>
+      <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${projects.map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
+      <button className="b" onClick=${create}>＋ 新增專案</button></header>
+    ${p ? html`<nav>${TABS.map(([k, t]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${t}</button>`)}</nav>
+      <main>
+        ${tab === 'home' && html`<${Dashboard} ...${props} go=${setTab} />`}
+        ${tab === 'import' && html`<${ImportTab} ...${props} />`}
+        ${tab === 'items' && html`<${ContractTab} ...${props} />`}
+        ${tab === 'log' && html`<${LogTab} ...${props} />`}
+        ${tab === 'insp' && html`<${InspectionTab} ...${props} preset=${preset} clearPreset=${() => setPreset(null)} />`}
+        ${tab === 'tests' && html`<${TestTab} ...${props} />`}
+        ${tab === 'tech' && html`<${TechTab} ...${props} />`}
+        ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
+        ${tab === 'forms' && html`<${FormTab} ...${props} />`}
+        ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} />`}
+        ${tab === 'set' && html`<${SettingsTab} ...${props} onDelete=${del} onRestore=${restore} />`}
+      </main>`
+    : html`<main><div className="card empty"><h2>歡迎使用 Ironaudit 智慧監造報表</h2><p>建立專案後，於「資料匯入」匯入契約詳細價目表、預定進度表與廠商施工日誌。</p>
+        <div className="row" style=${{justifyContent: 'center'}}><button className="b p" onClick=${create}>＋ 新增專案</button>
+        <label className="b" style=${{cursor: 'pointer'}}>從 JSON 備份還原<input type="file" accept=".json" style=${{display: 'none'}} onChange=${async e => { const f = e.target.files[0]; if (f) restore(JSON.parse(await f.text())); }} /></label></div></div></main>`}
+  </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+</script>
+</body>
+</html>
