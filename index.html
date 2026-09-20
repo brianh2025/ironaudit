@@ -46,6 +46,7 @@ tr.g td{background:#f7f9fb;font-weight:bold}
 .list{max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
 .list div{padding:5px 8px;cursor:pointer;border-bottom:1px solid #eef1f4;display:flex;justify-content:space-between;gap:6px}
 .list div.on{background:var(--pri2);font-weight:bold}
+.list div.mh{position:sticky;top:0;background:#eef1f4;font-weight:bold;color:var(--pri);border-bottom:1px solid var(--line)}
 .pick{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:5px;padding:4px;background:#fff}
 .pick label{display:flex;gap:6px;font-size:13px;padding:2px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;z-index:20;overflow:auto}
@@ -580,6 +581,8 @@ async function parsePdfSchedule(file, startDate) {
   return {sheet: `PDF${noText ? `（${noText} 頁無文字層未讀）` : ''}`, how: [...new Set(cands.map(c => c.how))].join('、'), points: pts};
 }
 /* 廠商活頁簿：從「日資料庫」二～五項記事欄與「輸入1」（取樣試驗／重要事項）的文字行，依關鍵字辨識填報 */
+const MAT_PRI = ['基樁', '鋼板樁', '異型塊', '鋼筋', '瀝青', '塊石', '拋石', '回填', '混凝土'];
+const matKey = t => MAT_PRI.find(k => String(t).includes(k)); // 材料種類（依優先順序，預力混凝土基樁 → 基樁）
 function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
@@ -588,7 +591,7 @@ function classifyLine(raw, date) {
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
   if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
-  if (/自主檢查|防汛/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
+  if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
 }
 const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋']];
@@ -601,15 +604,17 @@ function inferItems(items, text, qtyDay) {
 }
 function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: []}, seen = new Set(), tests = [];
-  const mk = t => (String(t).match(/鋼筋|混凝土|瀝青|回填|塊石|拋石|異型塊|鋼板樁|基樁/) || [])[0];
+  const mk = matKey;
   const cap = Object.keys(logs || {}).sort().pop() || todayISO(); // 廠商表已預填未來日期的例行文字，只收到最後一筆日誌日期
-  const add = (raw, date) => {
+  const add = (raw, date) => { const c = classifyLine(raw, date); if (c) put(c, date); };
+  const put = (c, date, mat) => {
     if (date > cap) return;
-    const c = classifyLine(raw, date); if (!c) return; const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
+    const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
     if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
-    if (r.type === '材料查驗') { if (r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
-      const k = mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === '材料查驗' && mk(x.content) === k);
-      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; return; } }
+    if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
+      const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && (x.mat || mk(x.content)) === k);
+      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; return; }
+      if (mat) r.mat = mat; }
     out[c.list].push({id: uid(), ...r});
   };
   const db = wb.SheetNames.find(n => /^日資料庫1/.test(n));
@@ -623,6 +628,11 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
+  for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) { // 施工概況：混凝土澆置 → 混凝土材料進場查驗＋混凝土施工查驗
+    const t = raw.replace(/^\s*\d+[.、．]\s*/, '').trim(); if (!/澆置|澆築|澆灌/.test(t) || !/混凝土/.test(t) || /瀝青/.test(t)) continue;
+    for (const [type, nm] of [['材料查驗', '混凝土材料進場查驗'], ['施工查驗', '混凝土施工查驗']]) put({list: 'inspections', r: {date: d, type, items: [], content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
+  }
+  out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
     const k = mk(t.r.content), kg = (t.r.content.match(/(\d+)\s*kgf/i) || [])[1], cand = out.inspections.filter(x => x.type === '材料查驗' && x.date <= t.date && (!k || mk(x.content) === k)).sort((a, b) => b.date.localeCompare(a.date)),
       o = (kg && cand.find(x => new RegExp(kg + '\\s*kgf', 'i').test(x.content))) || cand[0];
@@ -1157,13 +1167,20 @@ function LogTab({p, C, update}) {
   const W = ['', '晴', '陰', '雨', '颱風', '豪雨', '停工'];
   let g = null;
   const items = p.items.filter(x => x.kind === 'normal' && (all || l.qty?.[x.code]));
+  const noInsp = String(l.summary || '').split(/\n/).map(x => x.replace(/^\s*\d+[.、．]\s*/, '').trim()).filter(t => /進場|進料/.test(t) && !/查驗/.test(t)) // 進場但當日沒有對應的材料查驗
+    .filter(t => { const k = matKey(t); return !p.inspections.some(r => r.date === sel && r.type === '材料查驗' && (!k || matKey([r.content, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ')) === k)); });
+  const months = useMemo(() => { const m = []; for (const d of dates) { const k = d.slice(0, 7); if (!m.length || m.at(-1).k !== k) m.push({k, ds: []}); m.at(-1).ds.push(d); } return m; }, [dates]);
+  const [open, setOpen] = useState({});
   if (!p.info.startDate) return html`<div className="empty">請先於「專案設定」填寫開工日期</div>`;
   return html`<div className="split">
-    <div className="list">${dates.map(d => { const x = p.logs[d]; const has = x && Object.keys(x.qty || {}).length; return html`<div key=${d} className=${d === sel ? 'on' : ''} onClick=${() => setSel(d)}>
-      <span>${roc(d)}（${wkday(d)}）</span><span>${has ? html`<span className="tag ok">${Object.keys(x.qty).length}項</span>` : x && (x.summary || x.wAm) ? html`<span className="tag">記事</span>` : ''}</span></div>`; })}</div>
+    <div className="list">${months.map(m => { const isOpen = open[m.k] ?? m.k === sel.slice(0, 7), n = m.ds.filter(d => Object.keys(p.logs[d]?.qty || {}).length).length;
+      return html`<${React.Fragment} key=${m.k}><div className="mh" onClick=${() => setOpen({...open, [m.k]: !isOpen})}><span>${isOpen ? '▼' : '▶'} ${+m.k.slice(0, 4) - 1911}年${+m.k.slice(5)}月</span><span className="mute">${n} 天有日誌</span></div>
+        ${isOpen && m.ds.map(d => { const x = p.logs[d]; const has = x && Object.keys(x.qty || {}).length; return html`<div key=${d} className=${d === sel ? 'on' : ''} onClick=${() => setSel(d)}>
+          <span>${roc(d)}（${wkday(d)}）</span><span>${has ? html`<span className="tag ok">${Object.keys(x.qty).length}項</span>` : x && (x.summary || x.wAm) ? html`<span className="tag">記事</span>` : ''}</span></div>`; })}<//>`; })}</div>
     <div>
       <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>${roc(sel)}（${wkday(sel)}）施工日誌</h2>
         <span className="mute">第 ${di.used} 天／契約 ${di.total} 天，剩餘 ${di.left} 天</span></div>
+        ${noInsp.length > 0 && html`<div className="msg warn">有進場材料未查驗（不列入查驗填報）：${noInsp.join('；')}</div>`}
         <div className="kpis">
           <div className="kpi"><div className="l">本日完成金額</div><div className="v">${money(s?.amt || 0)}</div></div>
           <div className="kpi"><div className="l">本日實際進度</div><div className="v">${pct(s?.day || 0)}</div></div>
