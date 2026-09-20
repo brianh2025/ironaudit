@@ -716,6 +716,12 @@ function dayInfo(p, d) {
 const inspItemsNeeded = p => p.items.filter(x => x.inspect);
 
 /* ================= 每週稽核 ================= */
+/* 施工概況載明進場、但當日沒有對應材料查驗者（不列入查驗填報，於稽核提醒） */
+function entryNoInsp(p, d) {
+  return String(p.logs[d]?.summary || '').split(/\n/).map(x => x.replace(/^\s*\d+[.、．]\s*/, '').trim()).filter(t => /進場|進料/.test(t) && !/查驗/.test(t))
+    .filter(t => { const k = matKey(t); return !p.inspections.some(r => r.date === d && r.type === '材料查驗' && (!k || matKey(r.content) === k)); })
+    .map(text => ({date: d, text}));
+}
 function auditWeek(p, monday) {
   const days = [...Array(7)].map((_, i) => addDays(monday, i)), end = days[6];
   const tol = +p.settings.tolerance || 0;
@@ -736,8 +742,9 @@ function auditWeek(p, monday) {
   const forms = {}; ['職安衛', '環保', '交維', '防汛'].forEach(c => forms[c] = p.forms.filter(f => f.cat === c && inWeek(f)).length);
   const failOpen = p.inspections.filter(r => r.result === '不合格' && !r.fixDone && r.date <= end);
   const sup = p.supervisions.filter(inWeek);
+  const noEntry = days.flatMap(d => entryNoInsp(p, d));
   const flood = +monday.slice(5, 7) >= 5 && +monday.slice(5, 7) <= 11;
-  return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood,
+  return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood, noEntry,
     miss: rows.filter(r => r.status !== 'ok').length};
 }
 const SITE_CODE = [[/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'], [/坡面工/, 'N'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'],
@@ -915,7 +922,9 @@ async function exportAuditExcel(p, A) {
   A.rows.forEach(r => s.addRow([r.it.code, r.it.name, r.it.unit, r.work.map(roc).join('、'), r.qty, r.nos.join('、'), r.missDays.map(roc).join('、'), {ok: '已查驗', part: '部分未查驗', none: '未查驗'}[r.status]]));
   s.addRow([]); s.addRow(['試驗報告未回填']); s.addRow(['表單號', '試驗項目', '取樣日', '已過天數']);
   A.pendingTests.forEach(t => s.addRow([t.r.no, t.r.testName, t.r.sampleDate || t.r.date, t.age]));
-  s.addRow([]); s.addRow(['本週表單數', ...Object.entries(A.forms).map(([k, v]) => `${k} ${v} 件`)]);
+  s.addRow([]); s.addRow(['進場材料未查驗']); s.addRow(['日期', '施工概況記載']);
+  if (A.noEntry.length) A.noEntry.forEach(e => s.addRow([roc(e.date), e.text])); else s.addRow(['無']);
+  s.addRow([]); s.addRow(['本週表單數',...Object.entries(A.forms).map(([k, v]) => `${k} ${v} 件`)]);
   [8, 46, 6, 30, 10, 24, 24, 12].forEach((w, i) => s.getColumn(i + 1).width = w);
   s.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; }));
   downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_週稽核_${A.monday}.xlsx`);
@@ -1167,8 +1176,6 @@ function LogTab({p, C, update}) {
   const W = ['', '晴', '陰', '雨', '颱風', '豪雨', '停工'];
   let g = null;
   const items = p.items.filter(x => x.kind === 'normal' && (all || l.qty?.[x.code]));
-  const noInsp = String(l.summary || '').split(/\n/).map(x => x.replace(/^\s*\d+[.、．]\s*/, '').trim()).filter(t => /進場|進料/.test(t) && !/查驗/.test(t)) // 進場但當日沒有對應的材料查驗
-    .filter(t => { const k = matKey(t); return !p.inspections.some(r => r.date === sel && r.type === '材料查驗' && (!k || matKey([r.content, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ')) === k)); });
   const months = useMemo(() => { const m = []; for (const d of dates) { const k = d.slice(0, 7); if (!m.length || m.at(-1).k !== k) m.push({k, ds: []}); m.at(-1).ds.push(d); } return m; }, [dates]);
   const [open, setOpen] = useState({});
   if (!p.info.startDate) return html`<div className="empty">請先於「專案設定」填寫開工日期</div>`;
@@ -1180,7 +1187,6 @@ function LogTab({p, C, update}) {
     <div>
       <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>${roc(sel)}（${wkday(sel)}）施工日誌</h2>
         <span className="mute">第 ${di.used} 天／契約 ${di.total} 天，剩餘 ${di.left} 天</span></div>
-        ${noInsp.length > 0 && html`<div className="msg warn">有進場材料未查驗（不列入查驗填報）：${noInsp.join('；')}</div>`}
         <div className="kpis">
           <div className="kpi"><div className="l">本日完成金額</div><div className="v">${money(s?.amt || 0)}</div></div>
           <div className="kpi"><div className="l">本日實際進度</div><div className="v">${pct(s?.day || 0)}</div></div>
@@ -1307,6 +1313,8 @@ function AuditTab({p, C, quick}) {
       <div className="card"><h2>本週表單填報</h2><table><tbody>${Object.entries(A.forms).map(([k, v]) => html`<tr key=${k}><td>${k}</td><td className="n">${v} 件</td><td>${!v && (k !== '防汛' || A.flood) ? html`<span className="tag warn">本週未填報</span>` : ''}</td></tr>`)}
         <tr><td>技師督導／查核</td><td className="n">${A.sup.length} 件</td><td></td></tr></tbody></table>
         ${A.flood && html`<div className="mute" style=${{marginTop: '6px'}}>目前為防汛期（5～11 月），建議每週至少一次防汛檢查。</div>`}</div>
+      <div className="card"><h2>進場材料未查驗</h2>${A.noEntry.length ? html`<table><tbody>${A.noEntry.map((e, i) => html`<tr key=${i}><td>${roc(e.date)}</td><td>${e.text}</td><td className="noprint"><button className="b s" onClick=${() => quick({date: e.date, type: '材料查驗', content: e.text})}>補填查驗</button></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}
+        <div className="mute" style=${{marginTop: '6px'}}>依施工概況載明「進場」、當日卻沒有對應材料查驗紀錄者。</div></div>
       <div className="card"><h2>不合格未改善</h2>${A.failOpen.length ? html`<table><tbody>${A.failOpen.map(r => html`<tr key=${r.id}><td>${r.no}</td><td>${roc(r.date)}</td><td>${shortList(itemNames(p, r.items))}</td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}</div>
     </div></div>`;
 }
