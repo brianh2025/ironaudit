@@ -1203,8 +1203,89 @@ function SettingsTab({p, update, onDelete, onRestore}) {
 
 /* ================= 主程式 ================= */
 const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
+/* ================= Google 雲端硬碟一鍵導入 =================
+   父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
+const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
+const loadGis = () => window.google?.accounts?.oauth2 ? Promise.resolve() : new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error('無法載入 Google 登入元件（需連網）')); document.head.appendChild(s); });
+const driveToken = async clientId => { await loadGis(); return new Promise((res, rej) => { const t = google.accounts.oauth2.initTokenClient({client_id: clientId, scope: 'https://www.googleapis.com/auth/drive.readonly',
+  callback: r => r.access_token ? res(r.access_token) : rej(new Error(r.error_description || r.error || '授權失敗')), error_callback: e => rej(new Error(e.message || e.type))}); t.requestAccessToken(); }); };
+async function driveFetch(tok, url) { const r = await fetch(url, {headers: {Authorization: 'Bearer ' + tok}}); if (!r.ok) throw new Error(`Drive ${r.status}：${(await r.text()).slice(0, 160)}`); return r; }
+async function driveList(tok, parentId, extra = '') {
+  const out = []; let pt = '';
+  do { const q = encodeURIComponent(`'${parentId}' in parents and trashed=false${extra}`);
+    const j = await (await driveFetch(tok, `${DRIVE_API}?q=${q}&fields=nextPageToken,files(id,name,mimeType,modifiedTime)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true${pt ? '&pageToken=' + pt : ''}`)).json();
+    out.push(...j.files); pt = j.nextPageToken || ''; } while (pt);
+  return out;
+}
+const FOLDER = 'application/vnd.google-apps.folder', GSHEET = 'application/vnd.google-apps.spreadsheet';
+async function driveFile(tok, f) {
+  const url = f.mimeType === GSHEET ? `${DRIVE_API}/${f.id}/export?mimeType=${encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}` : `${DRIVE_API}/${f.id}?alt=media&supportsAllDrives=true`;
+  return new File([await (await driveFetch(tok, url)).blob()], f.name);
+}
+/* 依「整合活頁簿一鍵匯入」邏輯解析多個 Excel，回傳可直接套用的內容 */
+async function parseReportFiles(files, p) {
+  const out = {info: {}, items: null, schedule: null, logs: null, notes: []};
+  for (const f of files) {
+    try {
+      const wb = await readWB(f); out.info = {...parseInfo(wb), ...out.info};
+      const c = parseContract(wb); if (c) out.items = c;
+      const sc = parseSchedule(wb); if (sc) out.schedule = sc;
+      const L = parseLogs(wb, out.items?.items || p.items);
+      if (Object.keys(L.logs).length) { out.logs = out.logs || {logs: {}, unmatched: []}; Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); }
+    } catch (e) { out.notes.push(`${f.name} 解析失敗：${e.message}`); }
+  }
+  return out;
+}
+function applyReport(d, r) {
+  for (const k in r.info) if (r.info[k] !== '' && r.info[k] != null && k !== 'name') d.info[k] = r.info[k];
+  if (r.items) d.items = r.items.items;
+  if (r.schedule) d.schedule = r.schedule.points;
+  if (r.logs) for (const [dt, l] of Object.entries(r.logs.logs)) {
+    for (const g of ['labor', 'machines']) for (const k in l[g]) if (!d.settings[g].includes(k)) d.settings[g].push(k);
+    d.logs[dt] = {...blankLog(), ...l};
+  }
+}
+function DriveImport({existing, onCreate, onClose}) {
+  const [cid, setCid] = useState(localStorage.getItem('ss.gcid') || ''), [root, setRoot] = useState(localStorage.getItem('ss.groot') || '');
+  const [log, setLog] = useState([]), [busy, setBusy] = useState(false);
+  const say = m => setLog(l => [...l, m]);
+  const go = async () => {
+    const rid = (root.match(/folders\/([\w-]+)/) || root.match(/[?&]id=([\w-]+)/) || [, root.trim()])[1];
+    if (!cid.trim() || !rid) return alert('請填入 OAuth Client ID 與父資料夾網址／ID');
+    localStorage.setItem('ss.gcid', cid.trim()); localStorage.setItem('ss.groot', root.trim()); setBusy(true); setLog([]);
+    try {
+      say('登入 Google…'); const tok = await driveToken(cid.trim());
+      const subs = (await driveList(tok, rid, ` and mimeType='${FOLDER}'`)).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+      say(`找到 ${subs.length} 個子資料夾`); let made = 0; const names = new Set(existing.map(x => x.info.name));
+      for (const sub of subs) {
+        if (names.has(sub.name)) { say(`略過（專案已存在）：${sub.name}`); continue; }
+        const p = newProject(sub.name);
+        const rpt = (await driveList(tok, sub.id, ` and mimeType='${FOLDER}'`)).find(f => /監造日報/.test(f.name));
+        if (!rpt) say(`${sub.name}：沒有「監造日報」資料夾，只建立空專案`);
+        else {
+          const fs = (await driveList(tok, rpt.id)).filter(f => (f.mimeType === GSHEET || /\.(xlsx|xlsm|xls)$/i.test(f.name)) && !f.name.startsWith('~$')).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+          say(`${sub.name}：讀取 ${fs.length} 個監造報表…`);
+          const files = []; for (const f of fs) files.push(await driveFile(tok, f));
+          const r = await parseReportFiles(files, p); applyReport(p, r); r.notes.forEach(say);
+          say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
+        }
+        await onCreate(p); names.add(sub.name); made++;
+      }
+      say(`完成：新建立 ${made} 個專案`);
+    } catch (e) { say('失敗：' + e.message); console.error(e); }
+    setBusy(false);
+  };
+  return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
+    <div className="mute" style=${{marginBottom: '8px'}}>父資料夾底下每個子資料夾＝一個專案（名稱即專案名稱）；讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在同名專案會略過。只需唯讀權限。</div>
+    <label>OAuth Client ID（Google Cloud 建立「網頁應用程式」，已授權的 JavaScript 來源加入 ${location.origin}）<input style=${{width: '100%'}} value=${cid} onChange=${e => setCid(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" /></label>
+    <label>父資料夾網址或 ID<input style=${{width: '100%'}} value=${root} onChange=${e => setRoot(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>
+    <div style=${{margin: '10px 0'}}><button className="b p" disabled=${busy} onClick=${go}>${busy ? '導入中…' : '登入並一鍵導入'}</button></div>
+    <pre style=${{whiteSpace: 'pre-wrap', maxHeight: '260px', overflow: 'auto', fontSize: '12px'}}>${log.join('\n')}</pre>
+  <//>`;
+}
+
 function App() {
-  const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null);
+  const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null), [drv, setDrv] = useState(false);
   useEffect(() => { Store.list().then(l => { setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
   const p = projects?.find(x => x.id === cur);
   const saveT = useRef({});
@@ -1217,13 +1298,16 @@ function App() {
   const restore = async doc => { if (!doc?.info || !doc.items) return alert('不是有效的專案備份檔'); const exist = projects.some(x => x.id === doc.id);
     if (exist && !confirm('已有相同專案，要以備份內容覆蓋嗎？')) return; const n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; await Store.put(n);
     setProjects(ps => exist ? ps.map(x => x.id === n.id ? n : x) : [...ps, n]); setCur(n.id); alert('已還原：' + n.info.name); };
+  const addProject = async n => { await Store.put(n); setProjects(ps => [...ps, n]); setCur(c => c || n.id); };
   const quick = pr => { setPreset(pr); setTab('insp'); };
   if (!projects) return html`<div className="empty">載入中…</div>`;
   const props = {p, C, update};
   return html`<div>
     <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.20-7</span></h1>
       <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${projects.map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
-      <button className="b" onClick=${create}>＋ 新增專案</button></header>
+      <button className="b" onClick=${create}>＋ 新增專案</button>
+      <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></header>
+    ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onClose=${() => setDrv(false)} />`}
     ${p ? html`<nav>${TABS.map(([k, t]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${t}</button>`)}</nav>
       <main>
         ${tab === 'home' && html`<${Dashboard} ...${props} go=${setTab} />`}
