@@ -1074,7 +1074,7 @@ function ImportTab({p, update}) {
           const items = out.items?.items || p.items; const L = parseLogs(wb, items);
           if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
           Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`));
-          const R = parseRecords(wb, items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
+          const R = parseRecords(wb, items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: [], flags: []}; for (const k in R) out.records[k].push(...R[k]); }
         }
       }
       if (out.logs && !Object.keys(out.logs.logs).length) out.logs = null;
@@ -1390,7 +1390,7 @@ async function parseReportFiles(files, p) {
       const c = parseContract(wb); if (c) out.items = c;
       const sc = parseSchedule(wb); if (sc) out.schedule = sc;
       const L = parseLogs(wb, out.items?.items || p.items);
-      const R = parseRecords(wb, out.items?.items || p.items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
+      const R = parseRecords(wb, out.items?.items || p.items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: [], flags: []}; for (const k in R) out.records[k].push(...R[k]); }
       if (Object.keys(L.logs).length) { out.logs = out.logs || {logs: {}, unmatched: []}; Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); }
     } catch (e) { out.notes.push(`${f.name} 解析失敗：${e.message}`); }
   }
