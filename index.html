@@ -593,7 +593,7 @@ function classifyLine(raw, date) {
 }
 const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋']];
 function inferItems(items, text, qtyDay) {
-  const its = items.filter(x => x.kind === 'normal'), n = norm(text), hit = new Set();
+  const its = items.filter(x => x.kind === 'normal' && !/品質管理|試驗|檢驗/.test(x.name)), n = norm(text), hit = new Set(); // 試驗費工項只走日誌完成數量，不掛在查驗上
   its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code); });
   if (!hit.size) for (const [k, m] of ITEM_KW) if (text.includes(k)) its.filter(x => x.name.includes(m)).forEach(x => hit.add(x.code));
   let c = [...hit]; if (qtyDay) { const q = c.filter(code => qtyDay[code]); if (q.length) c = q; }
