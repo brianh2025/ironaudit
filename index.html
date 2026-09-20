@@ -1318,6 +1318,7 @@ function SettingsTab({p, update, onDelete, onRestore}) {
 const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
+const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
 const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 const loadGis = () => window.google?.accounts?.oauth2 ? Promise.resolve() : new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error('無法載入 Google 登入元件（需連網）')); document.head.appendChild(s); });
 const driveToken = async clientId => { await loadGis(); return new Promise((res, rej) => { const t = google.accounts.oauth2.initTokenClient({client_id: clientId, scope: 'https://www.googleapis.com/auth/drive.readonly',
@@ -1370,7 +1371,7 @@ function DriveImport({existing, onCreate, onClose}) {
     localStorage.setItem('ss.gcid', cid.trim()); localStorage.setItem('ss.groot', root.trim()); setBusy(true); setLog([]);
     try {
       say('登入 Google…'); const tok = await driveToken(cid.trim());
-      const subs = (await driveList(tok, rid, ` and mimeType='${FOLDER}'`)).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+      const subs = (await driveList(tok, rid, ` and mimeType='${FOLDER}'`)).sort((a, b) => seqCmp(a.name, b.name));
       say(`找到 ${subs.length} 個子資料夾`); let made = 0; const names = new Set(existing.map(x => x.info.name));
       for (const sub of subs) {
         if (names.has(sub.name)) { say(`略過（專案已存在）：${sub.name}`); continue; }
@@ -1419,7 +1420,7 @@ function App() {
   const props = {p, C, update};
   return html`<div>
     <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.20-7</span></h1>
-      <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${projects.map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
+      <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
       <button className="b" onClick=${create}>＋ 新增專案</button>
       <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></header>
     ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onClose=${() => setDrv(false)} />`}
