@@ -595,12 +595,19 @@ function classifyLine(raw, date) {
   return null;
 }
 const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋']];
-function inferItems(items, text, qtyDay) {
+/* 查驗工項只依查驗文字判斷；不參考當天有無計數量（有計數量不代表有施工、更不代表有查驗）。文字對不到唯一工項就留空，由人工勾選 */
+function inferItems(items, text) {
   const its = items.filter(x => x.kind === 'normal' && !/品質管理|試驗|檢驗/.test(x.name)), n = norm(text), hit = new Set(); // 試驗費工項只走日誌完成數量，不掛在查驗上
   its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code); });
-  if (!hit.size) for (const [k, m] of ITEM_KW) if (text.includes(k)) its.filter(x => x.name.includes(m)).forEach(x => hit.add(x.code));
-  let c = [...hit]; if (qtyDay) { const q = c.filter(code => qtyDay[code]); if (q.length) c = q; }
-  return c.length > 6 ? [] : c;
+  const OTHER = ['模板', '鋼筋', '異型塊', '基樁', '坡面工', '瀝青', '植筋', '伸縮縫', '銲接']; // 「混凝土」不含這些類別的工項（場鑄結構混凝土用模板、預鑄混凝土異型塊…），除非內容本身提到
+  if (hit.size) return [...hit].slice(0, 6); // 名稱直接出現在文字中
+  const kg = (text.match(/(\d+)\s*kgf/i) || [])[1];
+  for (const [k, m] of ITEM_KW) if (text.includes(k)) {
+    let c = its.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !text.includes(o))));
+    if (kg && c.length > 1) { const g = c.filter(x => new RegExp(kg + '\\s*kgf', 'i').test(x.name)); if (g.length) c = g; } // 強度等級相同者
+    if (c.length === 1) hit.add(c[0].code); // 只靠關鍵字者，該類別必須唯一才採用
+  }
+  return [...hit];
 }
 function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: [], flags: []}, seen = new Set(), tests = []; // flags：記事欄載明查驗、但施工概況未載明該項工作（不建查驗，改列稽核）
@@ -610,7 +617,7 @@ function parseVendorRecords(wb, items, logs) {
   const put = (c, date, mat) => {
     if (date > cap) return;
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
-    if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
+    if (r.items) r.items = inferItems(items, r.content);
     if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
       if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
