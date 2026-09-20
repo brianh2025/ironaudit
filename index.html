@@ -605,22 +605,25 @@ function classifyLine(raw, date) {
   if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
 }
-const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋']];
+const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混凝土'], ['異型塊', '異型塊'], ['塊石', '塊石'], ['拋石', '塊石'], ['瀝青', '瀝青'], ['基樁', '基樁'], ['鋼板樁', '鋼板樁'], ['止水帶', '填縫材'], ['伸縮縫', '伸縮縫'], ['放樣', '施工測量'], ['圍籬', '圍籬'], ['告示牌', '告示牌'], ['坡面工', '坡面工'], ['回填', '回填'], ['植筋', '植筋'], ['開挖', '方(機械']];
 /* 查驗工項只依查驗文字判斷；不參考當天有無計數量（有計數量不代表有施工、更不代表有查驗）。文字對不到唯一工項就留空，由人工勾選 */
-function inferItems(items, text) {
+function inferItems(items, text) { return inferItems2(items, text).codes; }
+/* 回傳 codes＝對到的工項；ambig＝關鍵字有寫、但契約同類有兩項以上（如模板乙種／丙種）而無法判定者，供提示人工勾選 */
+function inferItems2(items, text) {
   const its = items.filter(x => x.kind === 'normal' && !/品質管理|試驗|檢驗/.test(x.name)), n = norm(text), hit = new Set(); // 試驗費工項只走日誌完成數量，不掛在查驗上
-  if (/職安設備|安衛設備|安全衛生設備/.test(text)) return its.filter(x => /職業安全衛生/.test(x.group || '') && !/人員|教育|講習|文書|動力救生船|上下設備/.test(x.name)).map(x => x.code); // 寫「職安設備」＝職業安全衛生費組內全部設備類工項（動力救生船、開挖空間上下設備另有單獨查驗，不含）
+  if (/職安設備|安衛設備|安全衛生設備/.test(text)) return {ambig: [], codes: its.filter(x => /職業安全衛生/.test(x.group || '') && !/人員|教育|講習|文書|動力救生船|上下設備/.test(x.name)).map(x => x.code)}; // 寫「職安設備」＝職業安全衛生費組內全部設備類工項（動力救生船、開挖空間上下設備另有單獨查驗，不含）
   its.forEach(x => { const m = norm(x.name); if (m.length >= 4 && n.includes(m)) hit.add(x.code);
     else if (x.name.split(/[，,]/).some(seg => { const g = norm(seg); return g.length >= 3 && !/^(產品|租用|其他|一般|費用|材料)/.test(g) && n.includes(g); })) hit.add(x.code); }); // 名稱的其中一段（動力救生船、工程告示牌…）出現在文字中
   const OTHER = ['模板', '鋼筋', '異型塊', '基樁', '坡面工', '瀝青', '植筋', '伸縮縫', '銲接']; // 「混凝土」不含這些類別的工項（場鑄結構混凝土用模板、預鑄混凝土異型塊…），除非內容本身提到
-  if (hit.size) return [...hit].slice(0, 6); // 名稱直接出現在文字中
-  const kg = (text.match(/(\d+)\s*kgf/i) || [])[1];
+  if (hit.size) return {codes: [...hit].slice(0, 6), ambig: []}; // 名稱直接出現在文字中
+  const kg = (text.match(/(\d+)\s*kgf/i) || [])[1], ambig = [];
   for (const [k, m] of ITEM_KW) if (text.includes(k)) {
     let c = its.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !text.includes(o))));
     if (kg && c.length > 1) { const g = c.filter(x => new RegExp(kg + '\\s*kgf', 'i').test(x.name)); if (g.length) c = g; } // 強度等級相同者
     if (c.length === 1) hit.add(c[0].code); // 只靠關鍵字者，該類別必須唯一才採用
+    else if (c.length > 1) ambig.push({k, names: c.map(x => x.name)});
   }
-  return [...hit];
+  return {codes: [...hit], ambig};
 }
 function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: [], flags: []}, seen = new Set(), tests = []; // flags：記事欄載明查驗、但施工概況未載明該項工作（不建查驗，改列稽核）
@@ -630,14 +633,15 @@ function parseVendorRecords(wb, items, logs) {
   const put = (c, date, mat) => {
     if (date > cap) return;
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
-    if (r.items && !r.keepItems) r.items = inferItems(items, r.content);
+    if (r.items && !r.keepItems) { const q = inferItems2(items, r.content); r.items = q.codes;
+      if (q.ambig.length) r.itemNote = q.ambig.map(a => `${a.k}未載明規格：${a.names.map(nm => nm.slice(0, 22)).join('／')}`).join('；'); } // 提示要勾選哪個工項
     const keep = r.keepItems; delete r.keepItems;
     if (c.list === 'inspections') r.location = r.location || parseLocation(r.content);
     if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
       if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
       const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && ((x.mat || mk(x.content)) === k || (mat && /澆置|澆築/.test(x.content))) && (!x.location || !r.location || x.location === r.location)); // 位置不同＝不同張查驗，不合併
-      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; o.location = o.location || r.location; if (keep && !o.items.length) o.items = r.items; return; }
+      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; o.location = o.location || r.location; o.itemNote = o.itemNote || r.itemNote; if (keep && !o.items.length) o.items = r.items; return; }
       if (mat) r.mat = mat; }
     out[c.list].push({id: uid(), ...r});
   };
@@ -783,8 +787,9 @@ function auditWeek(p, monday) {
   return {monday, end, days, rows, pendingTests, forms, failOpen, sup, flood, noEntry, noWork, claims,
     miss: rows.filter(r => r.status !== 'ok').length};
 }
-const SITE_CODE = [[/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'], [/坡面工/, 'N'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'],
-  [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土/, 'F'], [/回填|塊石|拋石/, 'C'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
+/* 先看工種（混凝土施工查驗、測量、開挖、鋼筋、模板、混凝土、回填…），最後才看結構名稱（擋土、坡面工），避免「坡面工…混凝土澆置」被判成坡面工程 */
+const SITE_CODE = [[/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
+  [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
 /* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
 function formPrefix(p, r, listKey) {
   const P = p.settings.prefix || {}, base = k => P[k] || DEFAULT_PREFIX[k] || k;
@@ -1268,6 +1273,7 @@ function InspectionTab(props) {
     {k: 'date', label: '查驗日期', type: 'date'}, {k: 'type', label: '查驗類別', type: 'select', options: ['施工查驗', '材料查驗']},
     {k: 'no', label: '表單號'}, {k: 'inspector', label: '查驗人員'},
     {k: 'items', label: '查驗工項（對應契約項目）', type: 'items'},
+    {k: 'itemNote', label: '工項提示（日誌未載明規格，請勾選上方工項）', wide: true, show: r => r.itemNote && !(r.items || []).length},
     {k: 'location', label: '位置／里程', wide: true}, {k: 'content', label: '查驗項目及內容', type: 'textarea'},
     {k: 'result', label: '查驗結果', type: 'select', options: ['', '合格', '有條件合格', '不合格', '待複查']},
     {k: 'fixDone', label: '缺失改善完成日', type: 'date', show: r => r.result === '不合格' || r.result === '有條件合格'},
@@ -1276,7 +1282,7 @@ function InspectionTab(props) {
     {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣／會驗日期', type: 'date', show: r => r.testNeed},
     {k: 'reportNo', label: '試驗報告編號（取得報告後回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => shortList(itemNames(p, r.items))], ['位置', r => r.location], ['結果', r => resTag(r.result)],
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => r.items?.length ? shortList(itemNames(p, r.items)) : r.itemNote ? html`<span className="tag warn">${r.itemNote}</span>` : ''], ['位置', r => r.location], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
