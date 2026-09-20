@@ -584,7 +584,7 @@ function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
   const res = /不合格/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
-  if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, testName: t, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
+  if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
   if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
@@ -624,9 +624,10 @@ function parseVendorRecords(wb, items, logs) {
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
-    const k = mk(t.r.content), kg = (t.r.content.match(/(d+)s*kgf/i) || [])[1], cand = out.inspections.filter(x => x.type === '材料查驗' && x.date <= t.date && (!k || mk(x.content) === k)).sort((a, b) => b.date.localeCompare(a.date)),
-      o = (kg && cand.find(x => new RegExp(kg + '\s*kgf', 'i').test(x.content))) || cand[0], lab = `${+t.date.slice(5, 7)}/${+t.date.slice(8)} ${t.r.content}`;
-    if (o) { o.testNeed = true; o.testName = o.testName ? o.testName + '；' + lab : lab; o.sampleDate = o.sampleDate || t.date; } else out.inspections.push({id: uid(), ...t.r}); // 找不到進場查驗：以會驗當日獨立成一筆
+    const k = mk(t.r.content), kg = (t.r.content.match(/(\d+)\s*kgf/i) || [])[1], cand = out.inspections.filter(x => x.type === '材料查驗' && x.date <= t.date && (!k || mk(x.content) === k)).sort((a, b) => b.date.localeCompare(a.date)),
+      o = (kg && cand.find(x => new RegExp(kg + '\\s*kgf', 'i').test(x.content))) || cand[0];
+    // 試驗數量由日誌完成數量帶入，這裡只標記待回填報告；找不到進場查驗時以會驗當日獨立成一筆
+    if (o) { o.testNeed = true; o.sampleDate = o.sampleDate || t.date; } else out.inspections.push({id: uid(), ...t.r});
   }
   return out;
 }
