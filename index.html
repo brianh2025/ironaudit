@@ -576,6 +576,68 @@ async function parsePdfSchedule(file, startDate) {
   if (!pts.length) return null;
   return {sheet: `PDF${noText ? `（${noText} 頁無文字層未讀）` : ''}`, how: [...new Set(cands.map(c => c.how))].join('、'), points: pts};
 }
+/* 廠商活頁簿：從「日資料庫」二～五項記事欄與「輸入1」（取樣試驗／重要事項）的文字行，依關鍵字辨識填報 */
+function classifyLine(raw, date) {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
+  if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
+  const res = /不合格/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
+  if (/會驗|抗壓強度|試驗結果/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}};
+  if (/取樣/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, testName: t, sampleDate: date}};
+  if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
+  if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
+  if (/自主檢查|防汛/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
+  return null;
+}
+function parseVendorRecords(wb, items) {
+  const out = {inspections: [], supervisions: [], forms: []}, seen = new Set();
+  const add = (raw, date) => {
+    const c = classifyLine(raw, date); if (!c) return; const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
+    if (r.items) { const txt = norm(r.content); r.items = items.filter(x => x.kind === 'normal' && norm(x.name).length >= 4 && txt.includes(norm(x.name))).map(x => x.code); }
+    out[c.list].push({id: uid(), ...r});
+  };
+  const db = wb.SheetNames.find(n => /^日資料庫1/.test(n));
+  if (db) { const rows = aoa(wb.Sheets[db]); const hr = rows.slice(0, 8).findIndex(r => r.some(v => /^[二三四五]、/.test(clean(v))));
+    if (hr >= 0) { const H = rows[hr], cols = H.map((v, i) => /^[二三四五]、/.test(clean(v)) ? i : -1).filter(i => i >= 0);
+      const secs = cols.map((c, i) => [c, Math.min(cols[i + 1] ?? c + 8, c + 8)]);
+      for (const r of rows) { const d = parseAnyDate(r[2]); if (!d) continue; for (const [a, b] of secs) for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
+  const inp = wb.SheetNames.find(n => n === '輸入1');
+  if (inp) { const rows = aoa(wb.Sheets[inp]), h = rows[0] || [], secs = [];
+    h.forEach((v, c) => { if (/取樣試驗|重要事項|協力廠商/.test(clean(v))) secs.push(c); });
+    const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
+    for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
+      for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
+  return out;
+}
+/* ---- 各項填報：查驗紀錄／督導查核／安環交汛表單（本系統整合連動版的同名分頁）---- */
+function parseRecords(wb, items) {
+  const out = {inspections: [], supervisions: [], forms: []};
+  const read = (sn, fn) => {
+    const ws = wb.Sheets[sn]; if (!ws) return; const rows = aoa(ws), h = (rows[0] || []).map(clean);
+    for (const r of rows.slice(1)) {
+      const raw = k => { const i = h.indexOf(k); return i < 0 ? null : r[i]; }, s = k => String(raw(k) ?? '').trim();
+      const date = parseAnyDate(raw('日期')); if (date) fn(s, date, k => parseAnyDate(raw(k)) || '');
+    }
+  };
+  const codes = t => t.split(/[、,，]/).map(x => x.trim()).filter(Boolean).map(n => items.find(x => x.code === n)?.code || matchItem(items, n)?.code).filter(Boolean);
+  read('查驗紀錄', (s, date, d) => out.inspections.push({id: uid(), date, no: s('表單號'), type: s('類別') || '施工查驗', items: codes(s('工項')), location: s('位置'), content: s('查驗內容'), result: s('結果'),
+    testNeed: s('需試驗') === '是', testName: s('試驗項目'), sampleDate: d('取樣日'), reportNo: s('試驗報告編號'), reportDate: d('報告日期'), testResult: s('試驗結果')}));
+  read('督導查核', (s, date, d) => out.supervisions.push({id: uid(), date, kind: s('類別') || '技師督導', no: s('表單號'), person: s('單位/人員'), items: [], content: s('內容'), score: s('分數/等級'), defects: +s('缺失件數') || 0, fixDue: d('改善期限'), fixDone: d('改善完成')}));
+  read('安環交汛表單', (s, date) => out.forms.push({id: uid(), date, cat: s('類別'), no: s('表單號'), title: s('表單名稱'), result: s('結果'), note: s('備註')}));
+  const V = parseVendorRecords(wb, items);
+  for (const k in V) { const have = new Set(out[k].map(x => x.date + norm(x.content || x.title))); out[k].push(...V[k].filter(x => !have.has(x.date + norm(x.content || x.title)))); }
+  return out.inspections.length + out.supervisions.length + out.forms.length ? out : null;
+}
+const recCount = r => r.inspections.length + r.supervisions.length + r.forms.length;
+/* 併入專案：同表單號＋日期視為同一筆（以匯入內容更新），否則新增 */
+function mergeRecords(d, r) {
+  for (const k of ['inspections', 'supervisions', 'forms']) for (const x of r[k]) {
+    const i = d[k].findIndex(y => x.no ? y.no === x.no && y.date === x.date : y.date === x.date && (y.content || y.title) === (x.content || x.title));
+    if (i >= 0) { d[k][i] = {...x, no: x.no || d[k][i].no, id: d[k][i].id}; continue; }
+    if (!x.no) x.no = nextNo(d, d[k], k === 'inspections' ? x.type : k === 'forms' ? x.cat : x.kind === '技師督導' ? '技師督導' : '查核');
+    d[k].push(x);
+  }
+}
+
 /* ================= 連動計算 ================= */
 function calc(p) {
   /* 實際進度 = Σ(計量項目完成金額 + 比例項目分攤金額) ÷ 契約總價
@@ -909,7 +971,7 @@ function Dashboard({p, C, go}) {
 const INFO_LABEL = {name: '工程名稱', contractNo: '契約編號', owner: '主辦機關', supervisor: '監造單位', contractor: '承攬廠商', startDate: '開工日期', duration: '契約工期', amount: '契約金額', extendDays: '展延天數', location: '施工地點'};
 function ImportTab({p, update}) {
   const [res, setRes] = useState(null), [busy, setBusy] = useState(''), [paste, setPaste] = useState('');
-  const [pick, setPick] = useState({info: true, items: true, schedule: true, logs: true});
+  const [pick, setPick] = useState({info: true, items: true, schedule: true, logs: true, records: true});
   const [amap, setAmap] = useState({});
   const run = async (mode, files) => {
     if (!files.length) return; setBusy('解析中…'); ALIAS = p.settings.alias || {};
@@ -930,13 +992,14 @@ function ImportTab({p, update}) {
           const items = out.items?.items || p.items; const L = parseLogs(wb, items);
           if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
           Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`));
+          const R = parseRecords(wb, items); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
         }
       }
       if (out.logs && !Object.keys(out.logs.logs).length) out.logs = null;
       if (out.logs) { const items = (out.items?.items || p.items).filter(x => x.kind === 'normal'), m = {};
         for (const u of out.logs.unmatched) { const k = norm(u.name); if (!m[k]) m[k] = suggestItem(items, u.name, u.unit)?.code || ''; }
         setAmap(m); }
-      setPick({info: true, items: true, schedule: true, logs: true}); setRes(out);
+      setPick({info: true, items: true, schedule: true, logs: true, records: true}); setRes(out);
     } catch (e) { alert('解析失敗：' + e.message); console.error(e); }
     setBusy('');
   };
@@ -945,6 +1008,7 @@ function ImportTab({p, update}) {
       if (res.info && pick.info) for (const k in res.info) if (res.info[k] !== '' && res.info[k] != null) d.info[k] = res.info[k];
       if (res.items && pick.items) { const old = Object.fromEntries(d.items.map(x => [x.code, x])); d.items = res.items.items.map(x => old[x.code] ? {...x, inspect: old[x.code].inspect, kind: old[x.code].kind} : x); }
       if (res.schedule && pick.schedule) d.schedule = res.schedule.points;
+      if (res.records && pick.records) mergeRecords(d, res.records);
       if (res.logs && pick.logs) for (const u of res.logs.unmatched) { const code = amap[norm(u.name)]; if (!code) continue; // 手動對應
         d.settings.alias = {...(d.settings.alias || {}), [norm(u.name)]: code};
         const l = res.logs.logs[u.date] || (res.logs.logs[u.date] = blankLog()); l.qty[code] = (l.qty[code] || 0) + u.q; }
@@ -983,8 +1047,10 @@ function ImportTab({p, update}) {
       ${res.logs && html`<h3><label><input type="checkbox" checked=${pick.logs} onChange=${e => setPick({...pick, logs: e.target.checked})} /> 施工日誌：${ld.length} 天（${roc(ld[0])}～${roc(ld.at(-1))}）</label></h3>
         <div className="mute">${res.logs.sources.join('；')}</div>
         ${res.logs.unmatched.length > 0 && html`<${UnmatchedMap} list=${res.logs.unmatched} items=${(res.items?.items || p.items).filter(x => x.kind === 'normal')} amap=${amap} setAmap=${setAmap} />`}`}
-      ${!res.items && !res.schedule && !res.logs && html`<div className="msg bad">檔案中找不到可辨識的資料。</div>`}
-      <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${apply} disabled=${!res.items && !res.schedule && !res.logs}>確認匯入</button></div>
+      ${res.records && html`<h3><label><input type="checkbox" checked=${pick.records} onChange=${e => setPick({...pick, records: e.target.checked})} /> 各項填報：查驗 ${res.records.inspections.length}、督導查核 ${res.records.supervisions.length}、安環交汛表單 ${res.records.forms.length} 筆</label></h3>
+        <div className="mute">同表單號與日期者以匯入內容更新，其餘新增。</div>`}
+      ${!res.items && !res.schedule && !res.logs && !res.records && html`<div className="msg bad">檔案中找不到可辨識的資料。</div>`}
+      <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${apply} disabled=${!res.items && !res.schedule && !res.logs && !res.records}>確認匯入</button></div>
     </${Modal}>`}
   </div>`;
 }
@@ -1224,13 +1290,14 @@ async function driveFile(tok, f) {
 }
 /* 依「整合活頁簿一鍵匯入」邏輯解析多個 Excel，回傳可直接套用的內容 */
 async function parseReportFiles(files, p) {
-  const out = {info: {}, items: null, schedule: null, logs: null, notes: []};
+  const out = {info: {}, items: null, schedule: null, logs: null, records: null, notes: []};
   for (const f of files) {
     try {
       const wb = await readWB(f); out.info = {...parseInfo(wb), ...out.info};
       const c = parseContract(wb); if (c) out.items = c;
       const sc = parseSchedule(wb); if (sc) out.schedule = sc;
       const L = parseLogs(wb, out.items?.items || p.items);
+      const R = parseRecords(wb, out.items?.items || p.items); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: []}; for (const k in R) out.records[k].push(...R[k]); }
       if (Object.keys(L.logs).length) { out.logs = out.logs || {logs: {}, unmatched: []}; Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); }
     } catch (e) { out.notes.push(`${f.name} 解析失敗：${e.message}`); }
   }
@@ -1240,6 +1307,7 @@ function applyReport(d, r) {
   for (const k in r.info) if (r.info[k] !== '' && r.info[k] != null && k !== 'name') d.info[k] = r.info[k];
   if (r.items) d.items = r.items.items;
   if (r.schedule) d.schedule = r.schedule.points;
+  if (r.records) mergeRecords(d, r.records);
   if (r.logs) for (const [dt, l] of Object.entries(r.logs.logs)) {
     for (const g of ['labor', 'machines']) for (const k in l[g]) if (!d.settings[g].includes(k)) d.settings[g].push(k);
     d.logs[dt] = {...blankLog(), ...l};
@@ -1267,7 +1335,7 @@ function DriveImport({existing, onCreate, onClose}) {
           say(`${sub.name}：讀取 ${fs.length} 個監造報表…`);
           const files = []; for (const f of fs) files.push(await driveFile(tok, f));
           const r = await parseReportFiles(files, p); applyReport(p, r); r.notes.forEach(say);
-          say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
+          say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天、各項填報 ${p.inspections.length + p.supervisions.length + p.forms.length} 筆` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
         }
         await onCreate(p); names.add(sub.name); made++;
       }
