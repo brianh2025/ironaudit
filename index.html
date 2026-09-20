@@ -617,12 +617,13 @@ function parseVendorRecords(wb, items, logs) {
   const put = (c, date, mat) => {
     if (date > cap) return;
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
-    if (r.items) r.items = inferItems(items, r.content);
+    if (r.items && !r.keepItems) r.items = inferItems(items, r.content);
+    const keep = r.keepItems; delete r.keepItems;
     if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
       if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
       const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && (x.mat || mk(x.content)) === k);
-      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; return; }
+      if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; if (keep && !o.items.length) o.items = r.items; return; }
       if (mat) r.mat = mat; }
     out[c.list].push({id: uid(), ...r});
   };
@@ -637,9 +638,12 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
-  for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) { // 施工概況：混凝土澆置 → 混凝土材料進場查驗＋混凝土施工查驗
+  // 例外：混凝土澆置一定有混凝土施工查驗與材料取樣（其餘施工項目，有寫或有計數量都不代表有查驗）。工項只掛混凝土，寫 PC／襯底／打底者為 140kgf，其餘 210kgf
+  const conc = items.filter(x => x.kind === 'normal' && /混凝土/.test(x.name) && /預拌/.test(x.name) && !/模板|鋼筋|瀝青|基樁|異型塊|預鑄|坡面工|試體|CLSM|低強度|試驗|檢驗/.test(x.name));
+  for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) {
     const t = raw.replace(/^\s*\d+[.、．]\s*/, '').trim(); if (!/澆置|澆築|澆灌/.test(t) || !/混凝土/.test(t) || /瀝青/.test(t)) continue;
-    for (const [type, nm] of [['材料查驗', '混凝土材料進場查驗'], ['施工查驗', '混凝土施工查驗']]) put({list: 'inspections', r: {date: d, type, items: [], content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
+    const g = /PC|襯底|打底/.test(t) ? '140' : '210', its = /異型塊/.test(t) ? [] : conc.filter(x => x.name.includes(g + 'kgf')).map(x => x.code);
+    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
   }
   out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
