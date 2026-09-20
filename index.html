@@ -601,7 +601,9 @@ function inferItems(items, text, qtyDay) {
 }
 function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: []}, seen = new Set();
+  const cap = Object.keys(logs || {}).sort().pop() || todayISO(); // 廠商表已預填未來日期的例行文字，只收到最後一筆日誌日期
   const add = (raw, date) => {
+    if (date > cap) return;
     const c = classifyLine(raw, date); if (!c) return; const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
     if (r.items) r.items = inferItems(items, r.content, logs?.[date]?.qty);
     out[c.list].push({id: uid(), ...r});
