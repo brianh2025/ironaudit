@@ -1363,6 +1363,8 @@ function SettingsTab({p, update, onDelete, onRestore}) {
       ${Object.keys(DEFAULT_PREFIX).map(k => html`<label key=${k} className="f">表單號前綴：${k}<input value=${p.settings.prefix[k] || ''} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`)}
       ${[['labor', '出工工別（以、分隔）'], ['machines', '機具名稱（以、分隔）']].map(([k, t]) => html`<label key=${k} className="f wide">${t}<input defaultValue=${p.settings[k].join('、')} onBlur=${e => { const v = e.target.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean); update(d => { d.settings[k] = v; }); }} /></label>`)}
     </div></div>
+    <div className="card"><h2>清除匯入資料</h2><div className="mute" style=${{marginBottom: '8px'}}>清除契約項目、預定進度、施工日誌與所有查驗／督導／表單填報，保留專案本身、工程資料與設定，之後可重新匯入。</div>
+      <button className="b d" onClick=${() => { if (confirm(`確定清除「${p.info.name}」的所有匯入資料與填報？專案本身、工程資料與設定會保留。\n手動填報的內容（如試驗報告編號）也會一併清除，建議先下載 JSON 備份。`)) { update(d => clearProjectData(d)); alert('已清除，可重新匯入。'); } }}>清除資料（保留專案）…</button></div>
     <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
 }
 
@@ -1371,7 +1373,9 @@ const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約�
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
-const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
+/* 清除匯入的資料與填報，保留專案本身（編號、工程資料、設定），供重新匯入 */
+function clearProjectData(d) { d.items = []; d.schedule = []; d.logs = {}; d.inspections = []; d.supervisions = []; d.forms = []; d.flags = []; }
+const DRIVE_API ='https://www.googleapis.com/drive/v3/files';
 const loadGis = () => window.google?.accounts?.oauth2 ? Promise.resolve() : new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error('無法載入 Google 登入元件（需連網）')); document.head.appendChild(s); });
 const driveToken = async clientId => { await loadGis(); return new Promise((res, rej) => { const t = google.accounts.oauth2.initTokenClient({client_id: clientId, scope: 'https://www.googleapis.com/auth/drive.readonly',
   callback: r => r.access_token ? res(r.access_token) : rej(new Error(r.error_description || r.error || '授權失敗')), error_callback: e => rej(new Error(e.message || e.type))}); t.requestAccessToken(); }); };
@@ -1413,9 +1417,9 @@ function applyReport(d, r) {
     d.logs[dt] = {...blankLog(), ...l};
   }
 }
-function DriveImport({existing, onCreate, onClose}) {
+function DriveImport({existing, onCreate, onReplace, onClose}) {
   const [cid, setCid] = useState(localStorage.getItem('ss.gcid') || ''), [root, setRoot] = useState(localStorage.getItem('ss.groot') || '');
-  const [log, setLog] = useState([]), [busy, setBusy] = useState(false);
+  const [log, setLog] = useState([]), [busy, setBusy] = useState(false), [redo, setRedo] = useState(false);
   const say = m => setLog(l => [...l, m]);
   const go = async () => {
     const rid = (root.match(/folders\/([\w-]+)/) || root.match(/[?&]id=([\w-]+)/) || [, root.trim()])[1];
@@ -1424,10 +1428,11 @@ function DriveImport({existing, onCreate, onClose}) {
     try {
       say('登入 Google…'); const tok = await driveToken(cid.trim());
       const subs = (await driveList(tok, rid, ` and mimeType='${FOLDER}'`)).sort((a, b) => seqCmp(a.name, b.name));
-      say(`找到 ${subs.length} 個子資料夾`); let made = 0; const names = new Set(existing.map(x => x.info.name));
+      say(`找到 ${subs.length} 個子資料夾`); let made = 0, redone = 0;
       for (const sub of subs) {
-        if (names.has(sub.name)) { say(`略過（專案已存在）：${sub.name}`); continue; }
-        const p = newProject(sub.name);
+        const old = existing.find(x => x.info.name === sub.name);
+        if (old && !redo) { say(`略過（專案已存在）：${sub.name}`); continue; }
+        let p; if (old) { p = structuredClone(old); clearProjectData(p); say(`${sub.name}：清除舊資料，重新導入`); } else p = newProject(sub.name);
         const rpt = (await driveList(tok, sub.id, ` and mimeType='${FOLDER}'`)).find(f => /監造日報/.test(f.name));
         if (!rpt) say(`${sub.name}：沒有「監造日報」資料夾，只建立空專案`);
         else {
@@ -1437,16 +1442,17 @@ function DriveImport({existing, onCreate, onClose}) {
           const r = await parseReportFiles(files, p); applyReport(p, r); r.notes.forEach(say);
           say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天、各項填報 ${p.inspections.length + p.supervisions.length + p.forms.length} 筆` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
         }
-        await onCreate(p); names.add(sub.name); made++;
+        if (old) { await onReplace(p); redone++; } else { await onCreate(p); made++; }
       }
-      say(`完成：新建立 ${made} 個專案`);
+      say(`完成：新建立 ${made} 個、重新導入 ${redone} 個專案`);
     } catch (e) { say('失敗：' + e.message); console.error(e); }
     setBusy(false);
   };
   return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
-    <div className="mute" style=${{marginBottom: '8px'}}>父資料夾底下每個子資料夾＝一個專案（名稱即專案名稱）；讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在同名專案會略過。只需唯讀權限。</div>
+    <div className="mute" style=${{marginBottom: '8px'}}>父資料夾底下每個子資料夾＝一個專案（名稱即專案名稱）；讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在的同名專案預設略過；勾選下方選項可清除資料後重新導入。只需唯讀權限。</div>
     <label>OAuth Client ID（Google Cloud 建立「網頁應用程式」，已授權的 JavaScript 來源加入 ${location.origin}）<input style=${{width: '100%'}} value=${cid} onChange=${e => setCid(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" /></label>
     <label>父資料夾網址或 ID<input style=${{width: '100%'}} value=${root} onChange=${e => setRoot(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>
+    <label style=${{display: 'block', marginTop: '8px'}}><input type="checkbox" checked=${redo} onChange=${e => setRedo(e.target.checked)} /> 已存在的專案也重新導入（清除該專案的契約項目、預定進度、日誌與所有填報後重讀；專案本身、工程資料與設定保留，手動填報的內容會被清除）</label>
     <div style=${{margin: '10px 0'}}><button className="b p" disabled=${busy} onClick=${go}>${busy ? '導入中…' : '登入並一鍵導入'}</button></div>
     <pre style=${{whiteSpace: 'pre-wrap', maxHeight: '260px', overflow: 'auto', fontSize: '12px'}}>${log.join('\n')}</pre>
   <//>`;
@@ -1467,6 +1473,7 @@ function App() {
     if (exist && !confirm('已有相同專案，要以備份內容覆蓋嗎？')) return; const n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; migrateProject(n); await Store.put(n);
     setProjects(ps => exist ? ps.map(x => x.id === n.id ? n : x) : [...ps, n]); setCur(n.id); alert('已還原：' + n.info.name); };
   const addProject = async n => { await Store.put(n); setProjects(ps => [...ps, n]); setCur(c => c || n.id); };
+  const replaceProject = async n => { await Store.put(n); setProjects(ps => ps.map(x => x.id === n.id ? n : x)); };
   const quick = pr => { setPreset(pr); setTab('insp'); };
   if (!projects) return html`<div className="empty">載入中…</div>`;
   const props = {p, C, update};
@@ -1475,7 +1482,7 @@ function App() {
       <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
       <button className="b" onClick=${create}>＋ 新增專案</button>
       <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></header>
-    ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onClose=${() => setDrv(false)} />`}
+    ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onReplace=${replaceProject} onClose=${() => setDrv(false)} />`}
     ${p ? html`<nav>${TABS.map(([k, t]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${t}</button>`)}</nav>
       <main>
         ${tab === 'home' && html`<${Dashboard} ...${props} go=${setTab} />`}
