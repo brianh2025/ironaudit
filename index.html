@@ -14,7 +14,16 @@ header{background:#1B2632;color:#fff;padding:6px 10px;display:flex;gap:6px;align
 header h1{font-size:18px;margin:0;flex:1 1 auto;min-width:0}
 header select{flex:1 1 100%;max-width:none;min-width:0;order:3}
 .hbtn{display:flex;gap:6px;flex:0 0 auto;order:2}
-.hbtn button{white-space:nowrap;padding:5px 9px}
+header .hbtn button.b{white-space:nowrap;padding:4px 12px;font-size:13px;font-weight:500;border-radius:999px;background:rgba(255,255,255,.06);color:#e8edf2;border:1px solid rgba(255,255,255,.2);box-shadow:none}
+header .hbtn button.b:hover{background:rgba(255,255,255,.14)}
+header .hbtn button.b:first-child{color:#ffb27a;border-color:rgba(242,107,29,.7);background:rgba(242,107,29,.12)}
+header .hbtn button.b:first-child:hover{background:rgba(242,107,29,.3);color:#fff}
+header select{background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px}
+header select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(242,107,29,.25)}
+header select option{color:#1f2933;background:#fff}
+.nw{white-space:nowrap;overflow-wrap:normal}
+header h1{overflow:hidden;white-space:nowrap}
+@media(max-width:560px){header .ver{display:none}}
 nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 6px;position:sticky;top:0;z-index:5}
 .subnav{display:flex;gap:4px;flex-wrap:wrap;background:#f7f9fb;border-bottom:1px solid var(--line);padding:4px 6px}
 .subnav button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:13px;color:var(--mute);cursor:pointer}
@@ -1412,7 +1421,7 @@ function TestTab({p, update}) {
   const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
   const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
   const due = +p.settings.testDue || 30;
-  const cols = [['查驗表單號', r => r.no], ['材料', r => matName(r.content || r.testName)], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
+  const cols = [['查驗表單號', r => r.no], ['材料', r => matName(r.content || r.testName), false, 'nw'], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
     ['已過天數', r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span>`; }, false, 'n'],
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
@@ -1596,7 +1605,7 @@ function App() {
   if (!projects) return html`<div className="empty">載入中…</div>`;
   const props = {p, C, update};
   return html`<div>
-    <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.21-3</span></h1>
+    <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span className="ver" style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.21-3</span></h1>
       <div className="hbtn"><button className="b" onClick=${create}>＋ 新增</button>
       <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></div>
       <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select></header>
