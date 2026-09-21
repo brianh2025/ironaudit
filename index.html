@@ -93,6 +93,9 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .modal>.card{width:min(960px,100%);box-shadow:0 12px 32px rgba(16,24,40,.18);border-radius:12px}
 .empty{color:var(--mute);padding:26px 16px;text-align:center;font-size:13px}
 @media(max-width:760px){.split{grid-template-columns:1fr}main{padding:6px}.list{max-height:40vh}.card{padding:8px;margin-bottom:6px}.kpis{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.kpi .v{font-size:19px}header h1 img{height:24px!important}}
+.split>*{min-width:0;max-width:100%}
+.xrow td{background:#f8fafc}.xrow div{padding:2px 0}
+@media(max-width:760px){td,th{overflow-wrap:anywhere}.tw table{font-size:12.5px}}
 @media print{header,nav,.noprint{display:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
@@ -1058,6 +1061,20 @@ function Modal({title, onClose, children}) {
 const Tag = ({s}) => s === 'ok' ? html`<span className="tag ok">已查驗</span>` : s === 'part' ? html`<span className="tag warn">部分未查驗</span>` : html`<span className="tag bad">未查驗</span>`;
 
 /* 通用紀錄表（查驗／督導／查核／表單共用） */
+function useNarrow() {
+  const [n, setN] = useState(() => window.matchMedia('(max-width:760px)').matches);
+  useEffect(() => { const m = window.matchMedia('(max-width:760px)'), f = () => setN(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  return n;
+}
+/* cols：[標題, 顯示函式, 次要欄(手機收合)?, 欄位 class?]。手機只顯示主要欄，點 ▶ 展開該筆的細節 */
+function CTable({cols, rows, onRow}) {
+  const narrow = useNarrow(), [ex, setEx] = useState({});
+  const sec = narrow ? cols.filter(c => c[2]) : [], pri = narrow ? cols.filter(c => !c[2]) : cols;
+  return html`<div className="tw"><table><thead><tr>${sec.length ? html`<th style=${{width: '1%'}}></th>` : ''}${pri.map(c => html`<th key=${c[0]} className=${c[3] || ''}>${c[0]}</th>`)}</tr></thead><tbody>
+    ${rows.flatMap(r => [html`<tr key=${r.id} style=${onRow ? {cursor: 'pointer'} : null} onClick=${onRow ? () => onRow(r) : null}>${sec.length ? html`<td onClick=${e => { e.stopPropagation(); setEx({...ex, [r.id]: !ex[r.id]}); }}>${ex[r.id] ? '▼' : '▶'}</td>` : ''}${pri.map(c => html`<td key=${c[0]} className=${c[3] || ''}>${c[1](r)}</td>`)}</tr>`,
+      ex[r.id] && sec.length ? html`<tr key=${r.id + 'x'} className="xrow"><td colSpan=${pri.length + 1}>${sec.map(c => html`<div key=${c[0]}><span className="mute">${c[0]}：</span>${c[1](r)}</div>`)}</td></tr>` : null])}
+  </tbody></table></div>`;
+}
 function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, prefixKey, preset, clearPreset, note}) {
   const list = p[listKey].filter(filter || (() => true)).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.no || '').localeCompare(a.no || ''));
   const [ed, setEd] = useState(null), [q, setQ] = useState('');
@@ -1071,9 +1088,7 @@ function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, p
     <div className="row" style=${{justifyContent: 'space-between'}}><h2>${title}（${list.length}）</h2>
       <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} /><button className="b p" onClick=${() => setEd(mkNew())}>＋ 新增</button></div></div>
     ${note && html`<div className="mute" style=${{marginBottom: '8px'}}>${note}</div>`}
-    ${shown.length ? html`<div className="tw"><table><thead><tr>${cols.map(c => html`<th key=${c[0]}>${c[0]}</th>`)}</tr></thead><tbody>
-      ${shown.map(r => html`<tr key=${r.id} style=${{cursor: 'pointer'}} onClick=${() => setEd({...r})}>${cols.map(c => html`<td key=${c[0]}>${c[1](r)}</td>`)}</tr>`)}</tbody></table></div>`
-      : html`<div className="empty">尚無紀錄</div>`}
+    ${shown.length ? html`<${CTable} cols=${cols} rows=${shown} onRow=${r => setEd({...r})} />` : html`<div className="empty">尚無紀錄</div>`}
     ${ed && html`<${Modal} title=${(p[listKey].some(x => x.id === ed.id) ? '編輯' : '新增') + title} onClose=${() => setEd(null)}>
       <div className="grid">${fields.filter(f => !f.show || f.show(ed)).map(f => html`<${Field} key=${f.k} f=${f} rec=${ed} set=${set} p=${p} />`)}</div>
       <div className="row" style=${{marginTop: '12px', justifyContent: 'space-between'}}>
@@ -1195,18 +1210,18 @@ function ImportTab({p, update}) {
     });
     setRes(null); alert('已匯入並完成連動計算。');
   };
-  const F = (mode, label, desc, multi) => html`<div className="card"><h2>${label}</h2><div className="mute" style=${{marginBottom: '8px'}}>${desc}</div>
+  const F = (mode, label, desc, multi, short) => html`<div className="card"><h2>${label}</h2><div className="mute">${short}</div><details className="mute" style=${{margin: '4px 0 8px'}}><summary>格式說明</summary>${desc}</details>
     <input type="file" accept=${mode === 'all' ? '.xlsx,.xlsm,.xls' : '.xlsx,.xlsm,.xls,.pdf'} multiple=${!!multi} onChange=${e => { run(mode, e.target.files); e.target.value = ''; }} /></div>`;
   const ld = res?.logs ? Object.keys(res.logs.logs).sort() : [];
   return html`<div>
-    ${F('all', '① 一鍵匯入整合活頁簿', '既有的施工日誌整合活頁簿（含「契約詳細表」「工程項目」「記事」「出工機具」「工程資料」分頁）或本系統匯出、廠商填回的「整合連動版」，一次讀入工程資料、契約項目、預定進度與施工日誌。')}
+    ${F('all', '① 一鍵匯入整合活頁簿', '既有的施工日誌整合活頁簿（含「契約詳細表」「工程項目」「記事」「出工機具」「工程資料」分頁）或本系統匯出、廠商填回的「整合連動版」，一次讀入工程資料、契約項目、預定進度與施工日誌。', false, 'Excel（整合活頁簿或整合連動版），一次讀入全部')}
     <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))'}}>
-      ${F('items', '② 契約詳細價目表（預算書）', 'Excel 或 PDF 皆可。自動尋找含「項次／項目及說明／單位／數量／單價」表頭的分頁；利潤管理費、營業稅自動判為比例項目（依前方項目完成比例分攤）。')}
-      <div className="card"><h2>③ 預定進度表</h2><div className="mute" style=${{marginBottom: '8px'}}>Excel 或 PDF 皆可（PDF 需先填開工日期以補年份）。自動辨識「累計預定進度」欄（直式）或「累計」列（橫式 10 日區塊）；只有 S 曲線圖、沒有數字的 PDF 讀不到。格式特殊時，可直接貼上兩欄：日期、累計預定%。</div>
+      ${F('items', '② 契約詳細價目表（預算書）', 'Excel 或 PDF 皆可。自動尋找含「項次／項目及說明／單位／數量／單價」表頭的分頁；利潤管理費、營業稅自動判為比例項目（依前方項目完成比例分攤）。', false, 'Excel 或 PDF')}
+      <div className="card"><h2>③ 預定進度表</h2><div className="mute">Excel 或 PDF，或貼上兩欄</div><details className="mute" style=${{margin: '4px 0 8px'}}><summary>格式說明</summary>Excel 或 PDF 皆可（PDF 需先填開工日期以補年份）。自動辨識「累計預定進度」欄（直式）或「累計」列（橫式 10 日區塊）；只有 S 曲線圖、沒有數字的 PDF 讀不到。格式特殊時，可直接貼上兩欄：日期、累計預定%。</details>
         <input type="file" accept=".xlsx,.xlsm,.xls,.pdf" onChange=${e => { run('schedule', e.target.files); e.target.value = ''; }} />
         <textarea style=${{width: '100%', marginTop: '8px'}} placeholder=${'115/08/12\t1.25\n115/08/22\t3.80'} value=${paste} onChange=${e => setPaste(e.target.value)} />
         <button className="b" onClick=${() => { const pts = parsePastedSchedule(paste); if (!pts.length) return alert('讀不到「日期＋百分比」資料'); setRes({mode: 'schedule', files: ['貼上資料'], schedule: {sheet: '貼上', how: '手動貼上', points: pts}}); }}>解析貼上內容</button></div>
-      ${F('logs', '④ 廠商施工日誌', '支援：整合活頁簿（工程項目矩陣＋記事＋出工機具）、本系統整合連動版、一日一頁的「公共工程施工日誌」Excel，或廠商提供的施工日誌 PDF（文字型，可多檔、一檔多日；掃描影像檔需先 OCR）。工項以名稱、單價、單位對應契約項目。', true)}
+      ${F('logs', '④ 廠商施工日誌', '支援：整合活頁簿（工程項目矩陣＋記事＋出工機具）、本系統整合連動版、一日一頁的「公共工程施工日誌」Excel，或廠商提供的施工日誌 PDF（文字型，可多檔、一檔多日；掃描影像檔需先 OCR）。工項以名稱、單價、單位對應契約項目。', true, 'Excel 或 PDF，可多檔')}
     </div>
     ${busy && html`<div className="msg warn">${busy}</div>`}
     ${res && html`<${Modal} title="匯入預覽" onClose=${() => setRes(null)}>
@@ -1250,7 +1265,7 @@ function suggestItem(items, name, unit) {
 
 /* ================= 契約項目 ================= */
 function ContractTab({p, C, update}) {
-  const [onlyI, setOnlyI] = useState(false);
+  const [onlyI, setOnlyI] = useState(false), [gopen, setGopen] = useState({});
   const set = (code, k, v) => update(d => { const it = d.items.find(x => x.code === code); it[k] = v; });
   let g = null;
   const rows = p.items.filter(x => !onlyI || x.inspect);
@@ -1259,7 +1274,8 @@ function ContractTab({p, C, update}) {
     <div className="row"><span className="mute">複價合計 ${money(total)}</span><label><input type="checkbox" checked=${onlyI} onChange=${e => setOnlyI(e.target.checked)} /> 只看需查驗</label></div></div>
     <div className="mute" style=${{marginBottom: '6px'}}>「需查驗」決定每週稽核要檢核的工項；「比例」項目（利潤管理費、營業稅）不填每日數量，依其前方各項目完成比例自動分攤。</div>
     ${p.items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>項次</th><th>項目及說明</th><th>單位</th><th className="n">數量</th><th className="n">單價</th><th className="n">複價</th><th>類型</th><th>需查驗</th><th className="n">累計完成</th><th className="n">完成率</th><th>查驗次數</th></tr></thead><tbody>
-      ${rows.flatMap(it => { const out = []; if (it.group !== g) { g = it.group; out.push(html`<tr className="g" key=${'g' + it.code}><td></td><td>${it.gseq}</td><td colSpan="10">${it.group}</td></tr>`); }
+      ${rows.flatMap(it => { const out = []; if (it.group !== g) { g = it.group; const gi = rows.filter(x => x.group === it.group), gk = it.group; out.push(html`<tr className="g" key=${'g' + it.code} style=${{cursor: 'pointer'}} onClick=${() => setGopen({...gopen, [gk]: !gopen[gk]})}><td>${gopen[gk] ? '▼' : '▶'}</td><td>${it.gseq}</td><td colSpan="10">${it.group}<span className="mute">　${gi.length} 項　${money(gi.reduce((a, x) => a + x.qty * x.price, 0))}</span></td></tr>`); }
+        if (!gopen[it.group]) return out;
         const cq = C.cumQty[it.code] || 0, n = p.inspections.filter(r => (r.items || []).includes(it.code)).length;
         out.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.seq}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(it.price)}</td><td className="n">${money(it.qty * it.price)}</td>
           <td><select value=${it.kind} onChange=${e => set(it.code, 'kind', e.target.value)}><option value="normal">計量</option><option value="ratio">比例</option></select></td>
@@ -1284,13 +1300,14 @@ function LogTab({p, C, update}) {
   let g = null;
   const items = p.items.filter(x => x.kind === 'normal' && (all || l.qty?.[x.code]));
   const months = useMemo(() => { const m = []; for (const d of dates) { const k = d.slice(0, 7); if (!m.length || m.at(-1).k !== k) m.push({k, ds: []}); m.at(-1).ds.push(d); } return m; }, [dates]);
-  const [open, setOpen] = useState({});
+  const [open, setOpen] = useState({}), narrow = useNarrow(), [dOpen, setDOpen] = useState(null), listShown = dOpen ?? !narrow;
   if (!p.info.startDate) return html`<div className="empty">請先於「專案設定」填寫開工日期</div>`;
-  return html`<div className="split">
-    <div className="list">${months.map(m => { const isOpen = open[m.k] ?? m.k === sel.slice(0, 7), n = m.ds.filter(d => Object.keys(p.logs[d]?.qty || {}).length).length;
+  return html`<div className="split"><div>
+    <button className="b" style=${{width: '100%', display: 'flex', justifyContent: 'space-between', marginBottom: '6px'}} onClick=${() => setDOpen(!listShown)}><span>📅 ${roc(sel)}（${wkday(sel)}）</span><span>${listShown ? '收合日期 ▲' : '選擇日期 ▼'}</span></button>
+    ${listShown && html`<div className="list">${months.map(m => { const isOpen = open[m.k] ?? m.k === sel.slice(0, 7), n = m.ds.filter(d => Object.keys(p.logs[d]?.qty || {}).length).length;
       return html`<${React.Fragment} key=${m.k}><div className="mh" onClick=${() => setOpen({...open, [m.k]: !isOpen})}><span>${isOpen ? '▼' : '▶'} ${+m.k.slice(0, 4) - 1911}年${+m.k.slice(5)}月</span><span className="mute">${n} 天有日誌</span></div>
-        ${isOpen && m.ds.map(d => { const x = p.logs[d]; const has = x && Object.keys(x.qty || {}).length; return html`<div key=${d} className=${d === sel ? 'on' : ''} onClick=${() => setSel(d)}>
-          <span>${roc(d)}（${wkday(d)}）</span><span>${has ? html`<span className="tag ok">${Object.keys(x.qty).length}項</span>` : x && (x.summary || x.wAm) ? html`<span className="tag">記事</span>` : ''}</span></div>`; })}<//>`; })}</div>
+        ${isOpen && m.ds.map(d => { const x = p.logs[d]; const has = x && Object.keys(x.qty || {}).length; return html`<div key=${d} className=${d === sel ? 'on' : ''} onClick=${() => { setSel(d); if (narrow) setDOpen(false); }}>
+          <span>${roc(d)}（${wkday(d)}）</span><span>${has ? html`<span className="tag ok">${Object.keys(x.qty).length}項</span>` : x && (x.summary || x.wAm) ? html`<span className="tag">記事</span>` : ''}</span></div>`; })}<//>`; })}</div>`}</div>
     <div>
       <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>${roc(sel)}（${wkday(sel)}）施工日誌</h2>
         <span className="mute">第 ${di.used} 天／契約 ${di.total} 天，剩餘 ${di.left} 天</span></div>
@@ -1344,7 +1361,7 @@ function InspectionTab(props) {
     {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣／會驗日期', type: 'date', show: r => r.testNeed},
     {k: 'reportNo', label: '試驗報告編號（取得報告後回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type], ['工項', r => { if (r.items?.length) return shortList(itemNames(p, r.items)); const q = inferItems2(p.items, r.content || '').ambig; return html`<span className="tag warn" title=${itemHint(p.items, r.content || '') || '尚未勾選工項'}>${q.length ? q.map(a => a.k).join('、') + '規格未載明' : '工項未勾選'}</span>`; }], ['位置', r => r.location], ['結果', r => resTag(r.result)],
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type, true], ['工項', r => { if (r.items?.length) return shortList(itemNames(p, r.items)); const q = inferItems2(p.items, r.content || '').ambig; return html`<span className="tag warn" title=${itemHint(p.items, r.content || '') || '尚未勾選工項'}>${q.length ? q.map(a => a.k).join('、') + '規格未載明' : '工項未勾選'}</span>`; }], ['位置', r => r.location, true], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
@@ -1380,16 +1397,15 @@ function TestTab({p, update}) {
   const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
   const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
   const due = +p.settings.testDue || 30;
+  const cols = [['查驗表單號', r => r.no], ['工項', r => shortList(itemNames(p, r.items)), true], ['試驗項目', r => r.testName, true], ['取樣日', r => roc(r.sampleDate || r.date), true],
+    ['已過天數', r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span>`; }, false, 'n'],
+    ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
+    ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
+    ['結果', r => html`<select value=${r.testResult || ''} onChange=${e => set(r.id, 'testResult', e.target.value)}><option value="">—</option><option>合格</option><option>不合格</option></select>`, true]];
   return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
     <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已回填</label></div>
     <div className="mute" style=${{marginBottom: '6px'}}>取樣超過 ${due} 天仍未回填者標紅（天數可於專案設定調整）。</div>
-    ${list.length ? html`<div className="tw"><table><thead><tr><th>查驗表單號</th><th>工項</th><th>試驗項目</th><th>取樣日</th><th className="n">已過天數</th><th>試驗報告編號</th><th>報告日期</th><th>結果</th></tr></thead><tbody>
-      ${list.map(r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<tr key=${r.id}><td>${r.no}</td><td>${shortList(itemNames(p, r.items))}</td><td>${r.testName}</td><td>${roc(r.sampleDate || r.date)}</td>
-        <td className="n"><span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span></td>
-        <td><input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" /></td>
-        <td><input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} /></td>
-        <td><select value=${r.testResult || ''} onChange=${e => set(r.id, 'testResult', e.target.value)}><option value="">—</option><option>合格</option><option>不合格</option></select></td></tr>`; })}
-    </tbody></table></div>` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div>`;
+    ${list.length ? html`<${CTable} cols=${cols} rows=${list} />` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div>`;
 }
 
 /* ================= 每週稽核 ================= */
