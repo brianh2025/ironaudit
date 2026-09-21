@@ -635,6 +635,13 @@ function parseLocation(t) {
 }
 const MAT_PRI = ['基樁', '鋼板樁', '異型塊', '鋼筋', '瀝青', '塊石', '拋石', '回填', '混凝土'];
 const matKey = t => MAT_PRI.find(k => String(t).includes(k)); // 材料種類（依優先順序，預力混凝土基樁 → 基樁）
+/* 試驗回填表用：由查驗內容取材料名稱（混凝土帶強度等級），例如「混凝土 210kgf/cm2」「鋼筋」「預力混凝土基樁」 */
+function matName(text) {
+  const t = String(text || ''), kg = (t.match(/(\d+)\s*kgf/i) || [])[1];
+  if (/CLSM|低強度/i.test(t)) return 'CLSM 控制性低強度回填材料';
+  const k = matKey(t); if (!k) return '（未載明材料）';
+  return k === '基樁' ? '預力混凝土基樁' : k === '異型塊' ? '混凝土異型塊' : k === '拋石' || k === '塊石' ? '塊石' : k === '混凝土' && kg ? `混凝土 ${kg}kgf/cm2` : k;
+}
 function classifyLine(raw, date) {
   const t = String(raw ?? '').replace(/\s+/g, ' ').trim().replace(/^\d+[.、．]\s*/, '');
   if (!t || /^[（(][一二三四五六七八九十][）)]/.test(t) || /^[\d.\s]+$/.test(t) || /^本日無施工|^無$/.test(t)) return null;
@@ -1405,7 +1412,7 @@ function TestTab({p, update}) {
   const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
   const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
   const due = +p.settings.testDue || 30;
-  const cols = [['查驗表單號', r => r.no], ['查驗內容', r => String(r.content || r.testName || '').slice(0, 40)], ['工項', r => itemCell(p, r), true], ['位置', r => r.location, true], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
+  const cols = [['查驗表單號', r => r.no], ['材料', r => matName(r.content || r.testName)], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
     ['已過天數', r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span>`; }, false, 'n'],
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
