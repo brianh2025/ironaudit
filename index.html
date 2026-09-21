@@ -1300,7 +1300,11 @@ function LogTab({p, C, update}) {
   let g = null;
   const items = p.items.filter(x => x.kind === 'normal' && (all || l.qty?.[x.code]));
   const months = useMemo(() => { const m = []; for (const d of dates) { const k = d.slice(0, 7); if (!m.length || m.at(-1).k !== k) m.push({k, ds: []}); m.at(-1).ds.push(d); } return m; }, [dates]);
-  const [open, setOpen] = useState({}), narrow = useNarrow(), [dOpen, setDOpen] = useState(null), listShown = dOpen ?? !narrow;
+  const [open, setOpen] = useState({}), narrow = useNarrow(), [dOpen, setDOpen] = useState(null), listShown = dOpen ?? !narrow, [qOpen, setQOpen] = useState(false);
+  const TXT = [['summary', '施工概況'], ['safety', '職安衛督導'], ['tests', '取樣試驗紀錄'], ['notify', '通知協力廠商辦理事項'], ['notes', '重要事項紀錄']];
+  const emptyK = useMemo(() => TXT.map(x => x[0]).filter(k => !(p.logs[sel]?.[k])), [sel, p.id]); // 選定日期時沒內容的欄位（打字時不重算，避免欄位跳動）
+  const crewEmpty = useMemo(() => !['labor', 'machines'].some(g => Object.keys(p.logs[sel]?.[g] || {}).length), [sel, p.id]);
+  const TA = ([k, t]) => html`<label key=${k} className="f wide">${t}<textarea value=${l[k] || ''} onChange=${e => { const v = e.target.value; up(x => { x[k] = v; }); }} /></label>`;
   if (!p.info.startDate) return html`<div className="empty">請先於「專案設定」填寫開工日期</div>`;
   return html`<div className="split"><div>
     <button className="b" style=${{width: '100%', display: 'flex', justifyContent: 'space-between', marginBottom: '6px'}} onClick=${() => setDOpen(!listShown)}><span>📅 ${roc(sel)}（${wkday(sel)}）</span><span>${listShown ? '收合日期 ▲' : '選擇日期 ▼'}</span></button>
@@ -1319,22 +1323,23 @@ function LogTab({p, C, update}) {
         <div className="grid" style=${{marginTop: '10px'}}>
           <label className="f">上午天氣<select value=${l.wAm} onChange=${e => up(x => x.wAm = e.target.value)}>${W.map(w => html`<option key=${w}>${w}</option>`)}</select></label>
           <label className="f">下午天氣<select value=${l.wPm} onChange=${e => up(x => x.wPm = e.target.value)}>${W.map(w => html`<option key=${w}>${w}</option>`)}</select></label>
-          ${[['summary', '施工概況'], ['safety', '職安衛督導'], ['tests', '取樣試驗紀錄'], ['notify', '通知協力廠商辦理事項'], ['notes', '重要事項紀錄']].map(([k, t]) =>
-            html`<label key=${k} className="f wide">${t}<textarea value=${l[k] || ''} onChange=${e => { const v = e.target.value; up(x => x[k] = v); }} /></label>`)}
+          ${TXT.filter(x => !emptyK.includes(x[0])).map(TA)}
         </div>
-        <h3>出工人數／機具</h3>
-        <div className="row">${[...p.settings.labor.map(k => ['labor', k]), ...p.settings.machines.map(k => ['machines', k])].map(([grp, k]) =>
-          html`<label key=${grp + k} className="f">${k}<input type="number" min="0" style=${{width: '80px'}} value=${l[grp]?.[k] ?? ''} onChange=${e => { const v = +e.target.value; up(x => { x[grp] = x[grp] || {}; if (v) x[grp][k] = v; else delete x[grp][k]; }); }} /></label>`)}</div>
+        ${emptyK.length > 0 && html`<details key=${'e' + sel} style=${{marginTop: '8px'}}><summary className="mute">無內容（${emptyK.length}）：${TXT.filter(x => emptyK.includes(x[0])).map(x => x[1]).join('、')}</summary>
+          <div className="grid" style=${{marginTop: '6px'}}>${TXT.filter(x => emptyK.includes(x[0])).map(TA)}</div></details>`}
+        <details key=${'c' + sel} open=${!crewEmpty} style=${{marginTop: '8px'}}><summary><b>出工人數／機具</b>${crewEmpty ? html`<span className="mute">（無內容）</span>` : ''}</summary>
+          <div className="row" style=${{marginTop: '6px'}}>${[...p.settings.labor.map(k => ['labor', k]), ...p.settings.machines.map(k => ['machines', k])].map(([grp, k]) =>
+            html`<label key=${grp + k} className="f">${k}<input type="number" min="0" style=${{width: '80px'}} value=${l[grp]?.[k] ?? ''} onChange=${e => { const v = +e.target.value; up(x => { x[grp] = x[grp] || {}; if (v) x[grp][k] = v; else delete x[grp][k]; }); }} /></label>`)}</div></details>
       </div>
-      <div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>本日完成數量</h2>
-        <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 顯示全部工項以填報</label></div>
-        ${items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工程項目</th><th>單位</th><th className="n">契約數量</th><th className="n">前日累計</th><th className="n">本日完成</th><th className="n">本日金額</th><th className="n">累計完成率</th></tr></thead><tbody>
+      <div className="card"><div className="row" style=${{justifyContent: 'space-between', cursor: 'pointer'}} onClick=${() => setQOpen(!qOpen)}><h2>${qOpen ? '▼' : '▶'} 本日完成數量<span className="mute" style=${{fontWeight: 'normal', fontSize: '13px'}}>　${Object.keys(l.qty || {}).length} 項　${money(s?.amt || 0)}</span></h2>
+        ${qOpen && html`<label onClick=${e => e.stopPropagation()}><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 顯示全部工項以填報</label>`}</div>
+        ${qOpen && (items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工程項目</th><th>單位</th><th className="n">契約數量</th><th className="n">前日累計</th><th className="n">本日完成</th><th className="n">本日金額</th><th className="n">累計完成率</th></tr></thead><tbody>
           ${items.flatMap(it => { const o = []; if (it.group !== g) { g = it.group; o.push(html`<tr className="g" key=${'g' + it.code}><td colSpan="8">${it.gseq}　${it.group}</td></tr>`); }
             const pc = prevCum(it.code), q = l.qty?.[it.code] || 0;
             o.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(pc)}</td>
               <td className="n"><input key=${sel + it.code} type="number" step="any" min="0" style=${{width: '90px', textAlign: 'right'}} defaultValue=${q || ''} onChange=${e => setQ(it.code, e.target.value)} /></td>
               <td className="n">${q ? money(q * it.price) : ''}</td><td className="n"><span className=${pc + q > it.qty ? 'tag bad' : ''}>${pct(it.qty ? (pc + q) / it.qty : 0, 1)}</span></td></tr>`); return o; })}
-        </tbody></table></div>` : html`<div className="empty">本日無完成數量${p.items.length ? '，勾選「顯示全部工項」即可填報' : '（請先匯入契約項目）'}</div>`}
+        </tbody></table></div>` : html`<div className="empty">本日無完成數量${p.items.length ? '，勾選「顯示全部工項」即可填報' : '（請先匯入契約項目）'}</div>`)}
       </div></div></div>`;
 }
 /* ================= 查驗／督導／查核／表單 ================= */
