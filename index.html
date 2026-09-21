@@ -652,6 +652,9 @@ const ITEM_KW = [['鋼筋', '鋼筋'], ['模板', '模板'], ['混凝土', '混�
 /* 查驗工項只依查驗文字判斷；不參考當天有無計數量（有計數量不代表有施工、更不代表有查驗）。文字對不到唯一工項就留空，由人工勾選 */
 function inferItems(items, text) { return inferItems2(items, text).codes; }
 /* 工項提示：日誌有寫該類工作、但契約同類有多項而未載明規格時，提示要勾選哪個（顯示時即時計算，舊資料也適用） */
+/* 查驗／試驗回填表的「工項」欄：有勾選顯示名稱；沒勾選則顯示原因（哪類規格未載明），不留空白 */
+const itemCell = (p, r) => { if (r.items?.length) return shortList(itemNames(p, r.items)); const q = inferItems2(p.items, r.content || '').ambig;
+  return html`<span className="tag warn" title=${itemHint(p.items, r.content || '') || '尚未勾選工項'}>${q.length ? q.map(a => a.k).join('、') + '規格未載明' : '工項未勾選'}</span>`; };
 const itemHint = (items, text) => inferItems2(items, text).ambig.map(a => `${a.k}未載明規格：${a.names.map(nm => nm.slice(0, 22)).join('／')}`).join('；');
 /* 回傳 codes＝對到的工項；ambig＝關鍵字有寫、但契約同類有兩項以上（如模板乙種／丙種）而無法判定者，供提示人工勾選 */
 function inferItems2(items, text) {
@@ -1366,7 +1369,7 @@ function InspectionTab(props) {
     {k: 'testName', label: '試驗項目', list: TESTS, show: r => r.testNeed}, {k: 'sampleDate', label: '取樣／會驗日期', type: 'date', show: r => r.testNeed},
     {k: 'reportNo', label: '試驗報告編號（取得報告後回填）', show: r => r.testNeed}, {k: 'reportDate', label: '報告日期', type: 'date', show: r => r.testNeed},
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type, true], ['工項', r => { if (r.items?.length) return shortList(itemNames(p, r.items)); const q = inferItems2(p.items, r.content || '').ambig; return html`<span className="tag warn" title=${itemHint(p.items, r.content || '') || '尚未勾選工項'}>${q.length ? q.map(a => a.k).join('、') + '規格未載明' : '工項未勾選'}</span>`; }], ['位置', r => r.location, true], ['結果', r => resTag(r.result)],
+  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type, true], ['工項', r => itemCell(p, r)], ['位置', r => r.location, true], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
@@ -1402,7 +1405,7 @@ function TestTab({p, update}) {
   const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
   const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
   const due = +p.settings.testDue || 30;
-  const cols = [['查驗表單號', r => r.no], ['工項', r => shortList(itemNames(p, r.items)), true], ['試驗項目', r => r.testName, true], ['取樣日', r => roc(r.sampleDate || r.date), true],
+  const cols = [['查驗表單號', r => r.no], ['查驗內容', r => String(r.content || r.testName || '').slice(0, 40)], ['工項', r => itemCell(p, r), true], ['位置', r => r.location, true], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
     ['已過天數', r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span>`; }, false, 'n'],
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
