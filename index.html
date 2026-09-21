@@ -8,51 +8,91 @@
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--ink:#1f2933;--mute:#6b7785;--line:#d9dee4;--pri:#1B2632;--pri2:#fdeee4;--acc:#F26B1D;--ok:#1a7f37;--okbg:#e6f4ea;--warn:#9a6700;--warnbg:#fff4d6;--bad:#cf222e;--badbg:#ffe5e5}
 *{box-sizing:border-box}
-body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
-header{background:#1B2632;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-header h1{font-size:18px;margin:0 8px 0 0}
-header select{max-width:420px}
-nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 12px;position:sticky;top:0;z-index:5}
-nav button{border:0;background:none;padding:10px 12px;cursor:pointer;font-size:14px;color:var(--mute);border-bottom:3px solid transparent}
+body{margin:0;font-family:"Inter","Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+header{background:#1B2632;color:#fff;padding:6px 10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;flex:1 1 auto;min-width:0}
+header select{flex:1 1 100%;max-width:none;min-width:0;order:3}
+.hbtn{display:flex;gap:6px;flex:0 0 auto;order:2}
+.hbtn button{white-space:nowrap;padding:5px 9px}
+nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 6px;position:sticky;top:0;z-index:5}
+.subnav{display:flex;gap:4px;flex-wrap:wrap;background:#f7f9fb;border-bottom:1px solid var(--line);padding:4px 6px}
+.subnav button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:13px;color:var(--mute);cursor:pointer}
+.subnav button.on{background:var(--pri);border-color:var(--pri);color:#fff}
+nav button{border:0;background:none;padding:7px 10px;cursor:pointer;font-size:15px;color:var(--mute);border-bottom:3px solid transparent}
 nav button.on{color:var(--pri);border-bottom-color:var(--acc);font-weight:bold}
-main{padding:16px;max-width:1400px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
-.card h2{font-size:16px;margin:0 0 10px}
-.card h3{font-size:14px;margin:12px 0 6px}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
-.kpi{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px}
-.kpi .l{color:var(--mute);font-size:12px}.kpi .v{font-size:22px;font-weight:bold;margin-top:4px}
-label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute)}
+main{padding:8px;max-width:1400px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+/* ---- 總覽版面 ---- */
+.phead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.phead h2{font-size:17px;line-height:1.35;margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12.5px;color:var(--mute)}
+.chips b{color:var(--ink);font-weight:600;margin-left:4px;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--okbg);color:var(--ok)}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.bad{background:var(--badbg);color:var(--bad)}
+.sect{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:600;margin:0 0 8px}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:10px}
+.hero .big{font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.hero .sub{font-size:12px;color:var(--mute);margin-top:4px}
+.track{margin-top:9px}
+.track .lab{display:flex;justify-content:space-between;font-size:12px;color:var(--mute);margin-bottom:3px}
+.track .lab b{color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{height:7px;border-radius:999px;background:#eef1f5;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tile{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.tile .l{font-size:11.5px;color:var(--mute);line-height:1.3}
+.tile .v{font-size:20px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+.tile.on-bad{border-left-color:var(--bad)}.tile.on-bad .v{color:var(--bad)}
+.tile.on-warn{border-left-color:var(--warn)}.tile.on-warn .v{color:var(--warn)}
+.tile.on-ok{border-left-color:#cbd5e1}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.meta>div{flex:1 1 140px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.meta .l{font-size:11.5px;color:var(--mute)}.meta .v{font-size:15px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+.card h2{font-size:15px;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
+.card h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:600;margin:12px 0 6px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.kpi .rows{display:flex;flex-direction:column;gap:3px;margin-top:3px}
+.kpi .rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.kpi .rows .n{font-size:19px;font-weight:bold}
+.info{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px}
+.info .k{color:var(--mute);white-space:nowrap}
+.info .v{word-break:break-word}
+.kpi .l{color:var(--mute);font-size:11.5px}.kpi .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--mute);font-weight:500}
 label.f.wide{grid-column:1/-1}
-input,select,textarea{font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--ink)}
+input,select,textarea{font:inherit;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(242,107,29,.15)}
 textarea{min-height:60px;resize:vertical}
-button.b{font:inherit;padding:6px 12px;border-radius:5px;border:1px solid var(--line);background:#fff;cursor:pointer}
-button.b:hover{background:#f0f3f6}
+button.b{font:inherit;font-weight:500;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.04);transition:background .12s}
+button.b:hover{background:#f1f5f9}
 button.p{background:var(--pri);color:#fff;border-color:var(--pri)}button.p:hover{background:#2c3b4a}
 button.d{color:var(--bad);border-color:#f0b4b8}
 button.s{padding:2px 8px;font-size:12px}
-table{border-collapse:collapse;width:100%;font-size:13px}
-th,td{border:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
-th{background:#eef2f6;position:sticky;top:0}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+tbody tr:hover td{background:#f8fafc}
+th{background:#f4f6f9;position:sticky;top:0;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
 td.n,th.n{text-align:right;white-space:nowrap}
-tr.g td{background:#f7f9fb;font-weight:bold}
-.tw{overflow:auto;max-height:70vh}
-.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:12px;white-space:nowrap}
+tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
+.tw{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
 .ok{background:var(--okbg);color:var(--ok)}.warn{background:var(--warnbg);color:var(--warn)}.bad{background:var(--badbg);color:var(--bad)}.mute{color:var(--mute)}
-.msg{padding:8px 12px;border-radius:6px;margin:8px 0}
+.msg{padding:9px 12px;border-radius:8px;margin:8px 0;border-left:3px solid currentColor;font-size:13px}
 .split{display:grid;grid-template-columns:220px 1fr;gap:14px}
-.list{max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff}
-.list div{padding:5px 8px;cursor:pointer;border-bottom:1px solid #eef1f4;display:flex;justify-content:space-between;gap:6px}
-.list div.on{background:var(--pri2);font-weight:bold}
+.list{max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.list div{padding:7px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;gap:6px;font-variant-numeric:tabular-nums}
+.list div.on{background:var(--pri2);font-weight:600;box-shadow:inset 3px 0 0 var(--acc)}
 .list div.mh{position:sticky;top:0;background:#eef1f4;font-weight:bold;color:var(--pri);border-bottom:1px solid var(--line)}
-.pick{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:5px;padding:4px;background:#fff}
+.pick{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;background:#fff}
 .pick label{display:flex;gap:6px;font-size:13px;padding:2px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;z-index:20;overflow:auto}
-.modal>.card{width:min(960px,100%)}
-.empty{color:var(--mute);padding:20px;text-align:center}
-@media(max-width:760px){.split{grid-template-columns:1fr}}
+.modal>.card{width:min(960px,100%);box-shadow:0 12px 32px rgba(16,24,40,.18);border-radius:12px}
+.empty{color:var(--mute);padding:26px 16px;text-align:center;font-size:13px}
+@media(max-width:760px){.split{grid-template-columns:1fr}main{padding:6px}.list{max-height:40vh}.card{padding:8px;margin-bottom:6px}.kpis{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.kpi .v{font-size:19px}header h1 img{height:24px!important}}
 @media print{header,nav,.noprint{display:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
@@ -1049,13 +1089,13 @@ function SCurve({p, C}) {
   const W = 760, H = 240, M = 36, X = d => M + (W - 2 * M) * Math.min(1, Math.max(0, dayDiff(s, d) / di.total)), Y = v => H - M + (M * 2 - H) * v;
   const sp = [{date: addDays(s, -1), cum: 0}, ...p.schedule]; const act = C.series.filter(x => x.date <= (C.last?.date || ''));
   const line = (pts, k) => pts.map(x => `${X(x.date).toFixed(1)},${Y(x[k]).toFixed(1)}`).join(' ');
-  return html`<svg viewBox=${`0 0 ${W} ${H}`} style=${{width: '100%', maxWidth: W + 'px'}}>
+  return html`<svg viewBox=${`0 0 ${W} ${H}`} style=${{width: '100%'}}>
     ${[0, .25, .5, .75, 1].map(v => html`<g key=${v}><line x1=${M} x2=${W - M} y1=${Y(v)} y2=${Y(v)} stroke="#e3e7ec" /><text x=${M - 4} y=${Y(v) + 4} fontSize="10" textAnchor="end" fill="#6b7785">${v * 100}%</text></g>`)}
     <text x=${M} y=${H - 12} fontSize="10" fill="#6b7785">${roc(s)}</text><text x=${W - M} y=${H - 12} fontSize="10" textAnchor="end" fill="#6b7785">${roc(di.end)}</text>
-    ${p.schedule.length > 0 && html`<polyline points=${line(sp, 'cum')} fill="none" stroke="#9aa5b1" strokeWidth="2" strokeDasharray="5 4" />`}
-    ${act.length > 0 && html`<polyline points=${line(act, 'cum')} fill="none" stroke="#1f6feb" strokeWidth="2.5" />`}
-    <g fontSize="11"><line x1=${W - 220} x2=${W - 196} y1=${M - 14} y2=${M - 14} stroke="#9aa5b1" strokeWidth="2" strokeDasharray="5 4" /><text x=${W - 192} y=${M - 10}>預定</text>
-    <line x1=${W - 150} x2=${W - 126} y1=${M - 14} y2=${M - 14} stroke="#1f6feb" strokeWidth="2.5" /><text x=${W - 122} y=${M - 10}>實際</text></g></svg>`;
+    ${p.schedule.length > 0 && html`<polyline points=${line(sp, 'cum')} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="5 4" />`}
+    ${act.length > 0 && html`<polyline points=${line(act, 'cum')} fill="none" stroke="#F26B1D" strokeWidth="2.5" />`}
+    <g fontSize="11"><line x1=${W - 220} x2=${W - 196} y1=${M - 14} y2=${M - 14} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5 4" /><text x=${W - 192} y=${M - 10}>預定</text>
+    <line x1=${W - 150} x2=${W - 126} y1=${M - 14} y2=${M - 14} stroke="#F26B1D" strokeWidth="2.5" /><text x=${W - 122} y=${M - 10}>實際</text></g></svg>`;
 }
 function Dashboard({p, C, go}) {
   const d = C.last?.date || todayISO(), di = dayInfo(p, d), A = auditWeek(p, mondayOf(d));
@@ -1063,22 +1103,41 @@ function Dashboard({p, C, go}) {
   const pend = p.inspections.filter(r => r.testNeed && !r.reportNo).length;
   const fails = p.inspections.filter(r => r.result === '不合格' && !r.fixDone).length;
   const K = (l, v, cls, t) => html`<div className="kpi" style=${{cursor: t ? 'pointer' : 'default'}} onClick=${() => t && go(t)}><div className="l">${l}</div><div className=${'v ' + (cls || '')}>${v}</div></div>`;
+  const ahead = gap >= 0, gs = !Number.isFinite(gap) ? '' : gap < -0.05 ? 'bad' : gap < 0 ? 'warn' : 'ok';
+  const bar = (v, c) => html`<div className="bar"><i style=${{width: Math.max(0, Math.min(1, v || 0)) * 100 + '%', background: c}} /></div>`;
+  const T = (l, v, cls, t) => html`<div className=${'tile on-' + (cls || 'ok')} onClick=${() => t && go(t)}><div className="l">${l}</div><div className="v">${v}</div></div>`;
   return html`<div>
-    <div className="card"><h2>${p.info.name || '（未命名專案）'}</h2>
-      <div className="mute">${p.info.contractNo} ｜ 承攬：${p.info.contractor || '—'} ｜ 開工 ${roc(p.info.startDate)} ｜ 完工期限 ${roc(di.end)} ｜ 契約金額 ${money(+p.info.amount)} 元</div></div>
-    ${!p.items.length && html`<div className="msg warn">尚未匯入契約詳細價目表，請先到「資料匯入」。</div>`}
-    <div className="kpis" style=${{marginBottom: '14px'}}>
-      ${K('資料截至', roc(d) + '（' + wkday(d) + '）')}
-      ${K('工期 已用／剩餘', `${di.used}／${di.left} 天`, di.left < 0 ? 'bad' : '')}
-      ${K('累計預定進度', pct(C.last?.sched))}
-      ${K('累計實際進度', pct(C.last?.cum))}
-      ${K('進度差異', Number.isFinite(gap) ? (gap >= 0 ? '+' : '') + (gap * 100).toFixed(2) + '%' : '—', gap < -0.05 ? 'bad' : gap < 0 ? 'warn' : '')}
-      ${K('本週查驗缺漏', A.miss + ' 項', A.miss ? 'bad' : '', 'audit')}
-      ${K('試驗報告待回填', pend + ' 件', pend ? 'warn' : '', 'tests')}
-      ${K('不合格未改善', fails + ' 件', fails ? 'bad' : '', 'insp')}
+    <div className="card">
+      <div className="phead"><h2>${p.info.name || '（未命名專案）'}</h2>
+        ${Number.isFinite(gap) && html`<span className=${'pill ' + gs}>${ahead ? '超前' : '落後'} ${Math.abs(gap * 100).toFixed(2)}%</span>`}</div>
+      <div className="chips">
+        <span>契約編號<b>${p.info.contractNo || '—'}</b></span>
+        <span>承攬<b>${p.info.contractor || '—'}</b></span>
+        <span>工期<b>${roc(p.info.startDate)}～${roc(di.end)}</b></span>
+        <span>契約金額<b>${money(+p.info.amount)} 元</b></span></div>
     </div>
-    <div className="card"><h2>進度 S 曲線</h2>${p.schedule.length || C.series.length ? html`<${SCurve} p=${p} C=${C} />` : html`<div className="empty">匯入預定進度表與施工日誌後顯示</div>`}
-      ${Number.isFinite(gap) && gap < -0.05 && html`<div className="msg bad">實際進度落後預定 ${(-gap * 100).toFixed(2)}%，已超過 5%，依規定應檢討趕工計畫。</div>`}</div>
+    ${!p.items.length && html`<div className="msg warn">尚未匯入契約詳細價目表，請先到「資料匯入」。</div>`}
+    <div className="meta">
+      <div><div className="l">資料截至</div><div className="v">${roc(d)}（${wkday(d)}）</div></div>
+      <div><div className="l">工期 已用／剩餘</div><div className=${'v ' + (di.left < 0 ? 'bad' : '')}>${di.used}／${di.left} 天</div></div>
+    </div>
+    <div className="card">
+      <div className="sect">工程進度</div>
+      <div className="hero">
+        <div><div className="big">${pct(C.last?.cum)}</div><div className="sub">累計實際進度</div></div>
+        <div style=${{textAlign: 'right'}}><div style=${{fontSize: '20px', fontWeight: 600}} className="num">${pct(C.last?.sched)}</div><div className="sub">累計預定進度</div></div>
+      </div>
+      <div className="track"><div className="lab"><span>實際</span><b>${pct(C.last?.cum)}</b></div>${bar(C.last?.cum, 'var(--acc)')}</div>
+      <div className="track"><div className="lab"><span>預定</span><b>${pct(C.last?.sched)}</b></div>${bar(C.last?.sched, '#94a3b8')}</div>
+      <div className="track"><div className="lab"><span>工期進度</span><b>${di.total ? Math.round(di.used / di.total * 100) : 0}%（第 ${di.used}／${di.total} 天）</b></div>${bar(di.total ? di.used / di.total : 0, '#cbd5e1')}</div>
+      ${Number.isFinite(gap) && gap < -0.05 && html`<div className="msg bad" style=${{marginBottom: 0}}>實際進度落後預定 ${(-gap * 100).toFixed(2)}%，已超過 5%，依規定應檢討趕工計畫。</div>`}
+    </div>
+    <div className="tiles">
+      ${T('本週查驗缺漏', A.miss + ' 項', A.miss ? 'bad' : 'ok', 'audit')}
+      ${T('試驗報告待回填', pend + ' 件', pend ? 'warn' : 'ok', 'tests')}
+      ${T('不合格未改善', fails + ' 件', fails ? 'bad' : 'ok', 'insp')}
+    </div>
+    <div className="card" style=${{marginTop: '8px'}}><div className="sect">進度 S 曲線</div>${p.schedule.length || C.series.length ? html`<${SCurve} p=${p} C=${C} />` : html`<div className="empty">匯入預定進度表與施工日誌後顯示</div>`}</div>
   </div>`;
 }
 
@@ -1396,6 +1455,7 @@ function SettingsTab({p, update, onDelete, onRestore}) {
 }
 
 /* ================= 主程式 ================= */
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'check', 'forms']], ['稽核', ['audit']], ['設定', ['set']]];
 const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
@@ -1505,12 +1565,13 @@ function App() {
   if (!projects) return html`<div className="empty">載入中…</div>`;
   const props = {p, C, update};
   return html`<div>
-    <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.20-7</span></h1>
-      <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select>
-      <button className="b" onClick=${create}>＋ 新增專案</button>
-      <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></header>
+    <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.21-3</span></h1>
+      <div className="hbtn"><button className="b" onClick=${create}>＋ 新增</button>
+      <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button></div>
+      <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select></header>
     ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onReplace=${replaceProject} onClose=${() => setDrv(false)} />`}
-    ${p ? html`<nav>${TABS.map(([k, t]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${t}</button>`)}</nav>
+    ${p ? html`<nav>${GROUPS.map(([g, ks]) => html`<button key=${g} className=${ks.includes(tab) ? 'on' : ''} onClick=${() => setTab(ks[0])}>${g}</button>`)}</nav>
+      ${(GROUPS.find(([, ks]) => ks.includes(tab))?.[1] || []).length > 1 && html`<div className="subnav">${GROUPS.find(([, ks]) => ks.includes(tab))[1].map(k => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${TABS.find(t => t[0] === k)[1]}</button>`)}</div>`}
       <main>
         ${tab === 'home' && html`<${Dashboard} ...${props} go=${setTab} />`}
         ${tab === 'import' && html`<${ImportTab} ...${props} />`}
