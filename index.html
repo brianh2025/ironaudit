@@ -120,7 +120,7 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 /* ================= 共用工具 ================= */
 const LOGO_DARK = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NDkgMTIwIiB3aWR0aD0iNDQ5IiBoZWlnaHQ9IjEyMCI+PHBvbHlnb24gZmlsbD0iI0ZGRkZGRiIgcG9pbnRzPSIxNC4wMCwyMC4wMCA3OC4wMCwyMC4wMCA3OC4wMCwzNi4wMCA1NC4wMCwzNi4wMCA1NC4wMCwxMDAuMDAgMTQuMDAsMTAwLjAwIDE0LjAwLDg0LjAwIDM4LjAwLDg0LjAwIDM4LjAwLDM2LjAwIDE0LjAwLDM2LjAwIi8+PHBvbHlnb24gZmlsbD0iI0YyNkIxRCIgcG9pbnRzPSI1NC4wMCw4NC4wMCAxMDIuMDAsMjIuMDAgMTAyLjAwLDQyLjAwIDU0LjAwLDEwMC4wMCIvPjxwYXRoIGQ9Ik0xMzYuMDQyOTY4NzUgODYuMFY0Ni42OTUzMTI1SDE0OC4zMTI1Vjg2LjBaTTE0Mi4xNjAxNTYyNSA0Mi4wODk4NDM3NVExMzkuNTU4NTkzNzUgNDIuMDg5ODQzNzUgMTM3LjY5NTMxMjUgNDAuMzQ5NjA5Mzc1UTEzNS44MzIwMzEyNSAzOC42MDkzNzUgMTM1LjgzMjAzMTI1IDM2LjE4MzU5Mzc1UTEzNS44MzIwMzEyNSAzMy43MjI2NTYyNSAxMzcuNjk1MzEyNSAzMi4wUTEzOS41NTg1OTM3NSAzMC4yNzczNDM3NSAxNDIuMTYwMTU2MjUgMzAuMjc3MzQzNzVRMTQ0Ljc5Njg3NSAzMC4yNzczNDM3NSAxNDYuNjYwMTU2MjUgMzEuOTgyNDIxODc1UTE0OC41MjM0Mzc1IDMzLjY4NzUgMTQ4LjUyMzQzNzUgMzYuMTgzNTkzNzVRMTQ4LjUyMzQzNzUgMzguNjQ0NTMxMjUgMTQ2LjY2MDE1NjI1IDQwLjM2NzE4NzVRMTQ0Ljc5Njg3NSA0Mi4wODk4NDM3NSAxNDIuMTYwMTU2MjUgNDIuMDg5ODQzNzVaIE0xNTQuOTkzNTkzNzUgODYuMFY0Ni42OTUzMTI1SDE2Ni45MTE1NjI1VjUzLjg2NzE4NzVIMTY3LjMzMzQzNzVRMTY4LjM4ODEyNSA0OS45NjQ4NDM3NSAxNzAuODMxNDg0Mzc1IDQ4LjA4Mzk4NDM3NVExNzMuMjc0ODQzNzUgNDYuMjAzMTI1IDE3Ni41MDkyMTg3NSA0Ni4yMDMxMjVRMTc3LjM1Mjk2ODc1IDQ2LjIwMzEyNSAxNzguMjg0NjA5Mzc1IDQ2LjMwODU5Mzc1UTE3OS4yMTYyNSA0Ni40MTQwNjI1IDE3OS45ODk2ODc1IDQ2LjYyNVY1Ny4zMTI1UTE3OS4xMTA3ODEyNSA1Ni45OTYwOTM3NSAxNzcuNjg2OTUzMTI1IDU2LjgzNzg5MDYyNVExNzYuMjYzMTI1IDU2LjY3OTY4NzUgMTc1LjEzODEyNSA1Ni42Nzk2ODc1UTE3Mi44ODgxMjUgNTYuNjc5Njg3NSAxNzEuMDk1MTU2MjUgNTcuNjgxNjQwNjI1UTE2OS4zMDIxODc1IDU4LjY4MzU5Mzc1IDE2OC4yODI2NTYyNSA2MC40NDE0MDYyNVExNjcuMjYzMTI1IDYyLjE5OTIxODc1IDE2Ny4yNjMxMjUgNjQuNTU0Njg3NVY4Ni4wWiBNMjAyLjAzNDA2MjUgODYuNzM4MjgxMjVRMTk1Ljg4MTcxODc1IDg2LjczODI4MTI1IDE5MS40NTIwMzEyNSA4NC4xODk0NTMxMjVRMTg3LjAyMjM0Mzc1IDgxLjY0MDYyNSAxODQuNjQ5Mjk2ODc1IDc3LjA4Nzg5MDYyNVExODIuMjc2MjUgNzIuNTM1MTU2MjUgMTgyLjI3NjI1IDY2LjQ4ODI4MTI1UTE4Mi4yNzYyNSA2MC40MDYyNSAxODQuNjQ5Mjk2ODc1IDU1Ljg1MzUxNTYyNVExODcuMDIyMzQzNzUgNTEuMzAwNzgxMjUgMTkxLjQ1MjAzMTI1IDQ4Ljc1MTk1MzEyNVExOTUuODgxNzE4NzUgNDYuMjAzMTI1IDIwMi4wMzQwNjI1IDQ2LjIwMzEyNVEyMDguMTg2NDA2MjUgNDYuMjAzMTI1IDIxMi42MTYwOTM3NSA0OC43NTE5NTMxMjVRMjE3LjA0NTc4MTI1IDUxLjMwMDc4MTI1IDIxOS40MDEyNSA1NS44NTM1MTU2MjVRMjIxLjc1NjcxODc1IDYwLjQwNjI1IDIyMS43NTY3MTg3NSA2Ni40ODgyODEyNVEyMjEuNzU2NzE4NzUgNzIuNTM1MTU2MjUgMjE5LjQwMTI1IDc3LjA4Nzg5MDYyNVEyMTcuMDQ1NzgxMjUgODEuNjQwNjI1IDIxMi42MTYwOTM3NSA4NC4xODk0NTMxMjVRMjA4LjE4NjQwNjI1IDg2LjczODI4MTI1IDIwMi4wMzQwNjI1IDg2LjczODI4MTI1Wk0yMDIuMDM0MDYyNSA3Ny4zNTE1NjI1UTIwNC4zODk1MzEyNSA3Ny4zNTE1NjI1IDIwNi4wMDY3MTg3NSA3NS45ODA0Njg3NVEyMDcuNjIzOTA2MjUgNzQuNjA5Mzc1IDIwOC40NTAwNzgxMjUgNzIuMTQ4NDM3NVEyMDkuMjc2MjUgNjkuNjg3NSAyMDkuMjc2MjUgNjYuNDE3OTY4NzVRMjA5LjI3NjI1IDYzLjE0ODQzNzUgMjA4LjQ1MDA3ODEyNSA2MC43MDUwNzgxMjVRMjA3LjYyMzkwNjI1IDU4LjI2MTcxODc1IDIwNi4wMDY3MTg3NSA1Ni45MjU3ODEyNVEyMDQuMzg5NTMxMjUgNTUuNTg5ODQzNzUgMjAyLjAzNDA2MjUgNTUuNTg5ODQzNzVRMTk5LjY3ODU5Mzc1IDU1LjU4OTg0Mzc1IDE5OC4wNjE0MDYyNSA1Ni45MjU3ODEyNVExOTYuNDQ0MjE4NzUgNTguMjYxNzE4NzUgMTk1LjYxODA0Njg3NSA2MC43MDUwNzgxMjVRMTk0Ljc5MTg3NSA2My4xNDg0Mzc1IDE5NC43OTE4NzUgNjYuNDE3OTY4NzVRMTk0Ljc5MTg3NSA2OS42ODc1IDE5NS42MTgwNDY4NzUgNzIuMTQ4NDM3NVExOTYuNDQ0MjE4NzUgNzQuNjA5Mzc1IDE5OC4wNjE0MDYyNSA3NS45ODA0Njg3NVExOTkuNjc4NTkzNzUgNzcuMzUxNTYyNSAyMDIuMDM0MDYyNSA3Ny4zNTE1NjI1WiBNMjM5LjE5NTYyNSA2My41NzAzMTI1Vjg2LjBIMjI2LjkyNjA5Mzc1VjQ2LjY5NTMxMjVIMjM4LjQ1NzM0Mzc1TDIzOC42NjgyODEyNSA1NS4yMDMxMjVRMjQwLjEwOTY4NzUgNTEuNDc2NTYyNSAyNDIuNzExMjUgNDkuMDUwNzgxMjVRMjQ1Ljc2OTg0Mzc1IDQ2LjIwMzEyNSAyNTAuOTcyOTY4NzUgNDYuMjAzMTI1UTI1NS4wODYyNSA0Ni4yMDMxMjUgMjU4LjE0NDg0Mzc1IDQ4LjAzMTI1UTI2MS4yMDM0Mzc1IDQ5Ljg1OTM3NSAyNjIuODkwOTM3NSA1My4xOTkyMTg3NVEyNjQuNTc4NDM3NSA1Ni41MzkwNjI1IDI2NC41Nzg0Mzc1IDYwLjk2ODc1Vjg2LjBIMjUyLjMwODkwNjI1VjYzLjM1OTM3NVEyNTIuMzA4OTA2MjUgNjAuMDU0Njg3NSAyNTAuNjIxNDA2MjUgNTguMTczODI4MTI1UTI0OC45MzM5MDYyNSA1Ni4yOTI5Njg3NSAyNDUuOTEwNDY4NzUgNTYuMjkyOTY4NzVRMjQzLjk0MTcxODc1IDU2LjI5Mjk2ODc1IDI0Mi40MTI0MjE4NzUgNTcuMTU0Mjk2ODc1UTI0MC44ODMxMjUgNTguMDE1NjI1IDI0MC4wMzkzNzUgNTkuNjMyODEyNVEyMzkuMTk1NjI1IDYxLjI1IDIzOS4xOTU2MjUgNjMuNTcwMzEyNVoiIGZpbGw9IiNGRkZGRkYiLz48cGF0aCBkPSJNMjg1LjM4ODQzNzUgODYuODc4OTA2MjVRMjgxLjY2MTg3NSA4Ni44Nzg5MDYyNSAyNzguNjM4NDM3NSA4NS40OTAyMzQzNzVRMjc1LjYxNSA4NC4xMDE1NjI1IDI3My44NTcxODc1IDgxLjQyOTY4NzVRMjcyLjA5OTM3NSA3OC43NTc4MTI1IDI3Mi4wOTkzNzUgNzQuODkwNjI1UTI3Mi4wOTkzNzUgNzEuNTUwNzgxMjUgMjczLjM4MjU3ODEyNSA2OS40MDYyNVEyNzQuNjY1NzgxMjUgNjcuMjYxNzE4NzUgMjc2Ljg2MzA0Njg3NSA2NS45OTYwOTM3NVEyNzkuMDYwMzEyNSA2NC43MzA0Njg3NSAyODEuNzQ5NzY1NjI1IDY0LjA5NzY1NjI1UTI4NC40MzkyMTg3NSA2My40NjQ4NDM3NSAyODcuMjE2NTYyNSA2My4xNDg0Mzc1UTI5MC42OTcwMzEyNSA2Mi43MjY1NjI1IDI5Mi44NzY3MTg3NSA2Mi40NjI4OTA2MjVRMjk1LjA1NjQwNjI1IDYyLjE5OTIxODc1IDI5Ni4wOTM1MTU2MjUgNjEuNTgzOTg0Mzc1UTI5Ny4xMzA2MjUgNjAuOTY4NzUgMjk3LjEzMDYyNSA1OS41OTc2NTYyNVY1OS4zODY3MTg3NVEyOTcuMTMwNjI1IDU3LjE3MTg3NSAyOTYuMjg2ODc1IDU1LjY2MDE1NjI1UTI5NS40NDMxMjUgNTQuMTQ4NDM3NSAyOTMuNzczMjAzMTI1IDUzLjMyMjI2NTYyNVEyOTIuMTAzMjgxMjUgNTIuNDk2MDkzNzUgMjg5LjYwNzE4NzUgNTIuNDk2MDkzNzVRMjg3LjA0MDc4MTI1IDUyLjQ5NjA5Mzc1IDI4NS4xOTUwNzgxMjUgNTMuMjg3MTA5Mzc1UTI4My4zNDkzNzUgNTQuMDc4MTI1IDI4Mi4yMDY3OTY4NzUgNTUuMzA4NTkzNzVRMjgxLjA2NDIxODc1IDU2LjUzOTA2MjUgMjgwLjUwMTcxODc1IDU3Ljg3NUwyNzMuMjI0Mzc1IDU1Ljk3NjU2MjVRMjc0LjU2MDMxMjUgNTIuNDYwOTM3NSAyNzcuMDU2NDA2MjUgNTAuMzE2NDA2MjVRMjc5LjU1MjUgNDguMTcxODc1IDI4Mi43ODY4NzUgNDcuMTg3NVEyODYuMDIxMjUgNDYuMjAzMTI1IDI4OS40NjY1NjI1IDQ2LjIwMzEyNVEyOTEuODU3MTg3NSA0Ni4yMDMxMjUgMjk0LjUyOTA2MjUgNDYuNzY1NjI1UTI5Ny4yMDA5Mzc1IDQ3LjMyODEyNSAyOTkuNTU2NDA2MjUgNDguODA0Njg3NVEzMDEuOTExODc1IDUwLjI4MTI1IDMwMy4zODg0Mzc1IDUyLjk1MzEyNVEzMDQuODY1IDU1LjYyNSAzMDQuODY1IDU5LjkxNDA2MjVWODYuMEgyOTcuMzc2NzE4NzVWODAuNjIxMDkzNzVIMjk2Ljk5UTI5Ni4yMTY1NjI1IDgyLjEzMjgxMjUgMjk0LjcwNDg0Mzc1IDgzLjU3NDIxODc1UTI5My4xOTMxMjUgODUuMDE1NjI1IDI5MC44OTAzOTA2MjUgODUuOTQ3MjY1NjI1UTI4OC41ODc2NTYyNSA4Ni44Nzg5MDYyNSAyODUuMzg4NDM3NSA4Ni44Nzg5MDYyNVpNMjg3LjExMTA5Mzc1IDgwLjY1NjI1UTI5MC4yNzUxNTYyNSA4MC42NTYyNSAyOTIuNTI1MTU2MjUgNzkuNDI1NzgxMjVRMjk0Ljc3NTE1NjI1IDc4LjE5NTMxMjUgMjk1Ljk3MDQ2ODc1IDc2LjE1NjI1UTI5Ny4xNjU3ODEyNSA3NC4xMTcxODc1IDI5Ny4xNjU3ODEyNSA3MS44MzIwMzEyNVY2Ni44MDQ2ODc1UTI5Ni43NDM5MDYyNSA2Ny4yMjY1NjI1IDI5NS41NjYxNzE4NzUgNjcuNTYwNTQ2ODc1UTI5NC4zODg0Mzc1IDY3Ljg5NDUzMTI1IDI5Mi44NzY3MTg3NSA2OC4xNTgyMDMxMjVRMjkxLjM2NSA2OC40MjE4NzUgMjg5Ljk1ODc1IDY4LjU5NzY1NjI1UTI4OC41NTI1IDY4Ljc3MzQzNzUgMjg3LjYzODQzNzUgNjguODc4OTA2MjVRMjg1LjQ1ODc1IDY5LjE2MDE1NjI1IDI4My42NDgyMDMxMjUgNjkuODI4MTI1UTI4MS44Mzc2NTYyNSA3MC40OTYwOTM3NSAyODAuNzY1MzkwNjI1IDcxLjcyNjU2MjVRMjc5LjY5MzEyNSA3Mi45NTcwMzEyNSAyNzkuNjkzMTI1IDc0Ljk5NjA5Mzc1UTI3OS42OTMxMjUgNzYuODU5Mzc1IDI4MC42NTk5MjE4NzUgNzguMTI1UTI4MS42MjY3MTg3NSA3OS4zOTA2MjUgMjgzLjI3OTA2MjUgODAuMDIzNDM3NVEyODQuOTMxNDA2MjUgODAuNjU2MjUgMjg3LjExMTA5Mzc1IDgwLjY1NjI1WiBNMzI3LjIyNTc4MTI1IDg2LjQ5MjE4NzVRMzIzLjIxNzk2ODc1IDg2LjQ5MjE4NzUgMzIwLjE5NDUzMTI1IDg0LjgwNDY4NzVRMzE3LjE3MTA5Mzc1IDgzLjExNzE4NzUgMzE1LjUwMTE3MTg3NSA3OS44MTI1UTMxMy44MzEyNSA3Ni41MDc4MTI1IDMxMy44MzEyNSA3MS42NTYyNVY0Ni42OTUzMTI1SDMyMS41NjU2MjVWNzAuNzA3MDMxMjVRMzIxLjU2NTYyNSA3NC45NjA5Mzc1IDMyMy43OTgwNDY4NzUgNzcuMzUxNTYyNVEzMjYuMDMwNDY4NzUgNzkuNzQyMTg3NSAzMjkuODYyNSA3OS43NDIxODc1UTMzMi40OTkyMTg3NSA3OS43NDIxODc1IDMzNC41NTU4NTkzNzUgNzguNTk5NjA5Mzc1UTMzNi42MTI1IDc3LjQ1NzAzMTI1IDMzNy44MDc4MTI1IDc1LjI1OTc2NTYyNVEzMzkuMDAzMTI1IDczLjA2MjUgMzM5LjAwMzEyNSA2OS45Njg3NVY0Ni42OTUzMTI1SDM0Ni43Mzc1Vjg2LjBIMzM5LjM1NDY4NzVMMzM5LjMxOTUzMTI1IDc4LjMzNTkzNzVRMzM3LjcwMjM0Mzc1IDgyLjE2Nzk2ODc1IDMzNS4wMzA0Njg3NSA4NC4xMDE1NjI1UTMzMS43MjU3ODEyNSA4Ni40OTIxODc1IDMyNy4yMjU3ODEyNSA4Ni40OTIxODc1WiBNMzcwLjMyODc1IDg2Ljc3MzQzNzVRMzY1LjU0NzUgODYuNzczNDM3NSAzNjEuODIwOTM3NSA4NC4zMzAwNzgxMjVRMzU4LjA5NDM3NSA4MS44ODY3MTg3NSAzNTUuOTg1IDc3LjMzMzk4NDM3NVEzNTMuODc1NjI1IDcyLjc4MTI1IDM1My44NzU2MjUgNjYuNDUzMTI1UTM1My44NzU2MjUgNjAuMDU0Njg3NSAzNTYuMDIwMTU2MjUgNTUuNTE5NTMxMjVRMzU4LjE2NDY4NzUgNTAuOTg0Mzc1IDM2MS44OTEyNSA0OC41OTM3NVEzNjUuNjE3ODEyNSA0Ni4yMDMxMjUgMzcwLjMyODc1IDQ2LjIwMzEyNVEzNzMuOTg1IDQ2LjIwMzEyNSAzNzYuMjE3NDIxODc1IDQ3LjQxNjAxNTYyNVEzNzguNDQ5ODQzNzUgNDguNjI4OTA2MjUgMzc5LjcxNTQ2ODc1IDUwLjI0NjA5Mzc1UTM4MC45ODEwOTM3NSA1MS44NjMyODEyNSAzODEuNjQ5MDYyNSA1My4wOTM3NUgzODIuMDcwOTM3NVYzMy42MTcxODc1SDM4OS44MDUzMTI1Vjg2LjBIMzgyLjI4MTg3NVY3OS44NDc2NTYyNUgzODEuNjQ5MDYyNVEzODAuOTgxMDkzNzUgODEuMTEzMjgxMjUgMzc5LjY4MDMxMjUgODIuNzMwNDY4NzVRMzc4LjM3OTUzMTI1IDg0LjM0NzY1NjI1IDM3Ni4xMjk1MzEyNSA4NS41NjA1NDY4NzVRMzczLjg3OTUzMTI1IDg2Ljc3MzQzNzUgMzcwLjMyODc1IDg2Ljc3MzQzNzVaTTM3Mi4wMTYyNSA4MC4xOTkyMTg3NVEzNzUuMzIwOTM3NSA4MC4xOTkyMTg3NSAzNzcuNTg4NTE1NjI1IDc4LjQ0MTQwNjI1UTM3OS44NTYwOTM3NSA3Ni42ODM1OTM3NSAzODEuMDMzODI4MTI1IDczLjU3MjI2NTYyNVEzODIuMjExNTYyNSA3MC40NjA5Mzc1IDM4Mi4yMTE1NjI1IDY2LjM4MjgxMjVRMzgyLjIxMTU2MjUgNjIuMjY5NTMxMjUgMzgxLjA1MTQwNjI1IDU5LjIyODUxNTYyNVEzNzkuODkxMjUgNTYuMTg3NSAzNzcuNjIzNjcxODc1IDU0LjQ4MjQyMTg3NVEzNzUuMzU2MDkzNzUgNTIuNzc3MzQzNzUgMzcyLjAxNjI1IDUyLjc3NzM0Mzc1UTM2OC42MDYwOTM3NSA1Mi43NzczNDM3NSAzNjYuMzM4NTE1NjI1IDU0LjU3MDMxMjVRMzY0LjA3MDkzNzUgNTYuMzYzMjgxMjUgMzYyLjkyODM1OTM3NSA1OS40Mzk0NTMxMjVRMzYxLjc4NTc4MTI1IDYyLjUxNTYyNSAzNjEuNzg1NzgxMjUgNjYuMzgyODEyNVEzNjEuNzg1NzgxMjUgNzAuMjg1MTU2MjUgMzYyLjk0NTkzNzUgNzMuNDE0MDYyNVEzNjQuMTA2MDkzNzUgNzYuNTQyOTY4NzUgMzY2LjM5MTI1IDc4LjM3MTA5Mzc1UTM2OC42NzY0MDYyNSA4MC4xOTkyMTg3NSAzNzIuMDE2MjUgODAuMTk5MjE4NzVaIE0zOTguNzcxNTYyNSA4Ni4wVjQ2LjY5NTMxMjVINDA2LjUwNTkzNzVWODYuMFpNNDAyLjY3MzkwNjI1IDQwLjY4MzU5Mzc1UTQwMC42NyA0MC42ODM1OTM3NSAzOTkuMjQ2MTcxODc1IDM5LjM0NzY1NjI1UTM5Ny44MjIzNDM3NSAzOC4wMTE3MTg3NSAzOTcuODIyMzQzNzUgMzYuMTEzMjgxMjVRMzk3LjgyMjM0Mzc1IDM0LjE3OTY4NzUgMzk5LjI0NjE3MTg3NSAzMi44NDM3NVE0MDAuNjcgMzEuNTA3ODEyNSA0MDIuNjczOTA2MjUgMzEuNTA3ODEyNVE0MDQuNjc3ODEyNSAzMS41MDc4MTI1IDQwNi4xMTkyMTg3NSAzMi44NDM3NVE0MDcuNTYwNjI1IDM0LjE3OTY4NzUgNDA3LjU2MDYyNSAzNi4xMTMyODEyNVE0MDcuNTYwNjI1IDM4LjAxMTcxODc1IDQwNi4xMTkyMTg3NSAzOS4zNDc2NTYyNVE0MDQuNjc3ODEyNSA0MC42ODM1OTM3NSA0MDIuNjczOTA2MjUgNDAuNjgzNTkzNzVaIE00MzIuMjc2ODc1IDQ2LjY5NTMxMjVWNTIuOTg4MjgxMjVINDI0LjQzNzAzMTI1Vjc1LjM4MjgxMjVRNDI0LjQzNzAzMTI1IDc3LjczODI4MTI1IDQyNS40Mzg5ODQzNzUgNzguODQ1NzAzMTI1UTQyNi40NDA5Mzc1IDc5Ljk1MzEyNSA0MjguNzI2MDkzNzUgNzkuOTUzMTI1UTQyOS4zMjM3NSA3OS45NTMxMjUgNDMwLjMwODEyNSA3OS44MTI1UTQzMS4yOTI1IDc5LjY3MTg3NSA0MzEuOTk1NjI1IDc5LjUzMTI1TDQzMy4zNjY3MTg3NSA4NS43MTg3NVE0MzIuMTM2MjUgODYuMTQwNjI1IDQzMC43MyA4Ni4zMzM5ODQzNzVRNDI5LjMyMzc1IDg2LjUyNzM0Mzc1IDQyNy45NTI2NTYyNSA4Ni41MjczNDM3NVE0MjIuNjA4OTA2MjUgODYuNTI3MzQzNzUgNDE5LjY1NTc4MTI1IDgzLjc2NzU3ODEyNVE0MTYuNzAyNjU2MjUgODEuMDA3ODEyNSA0MTYuNzAyNjU2MjUgNzYuMDE1NjI1VjUyLjk4ODI4MTI1SDQxMC45NzIxODc1VjQ2LjY5NTMxMjVINDE2LjcwMjY1NjI1VjM3LjM0Mzc1SDQyNC40MzcwMzEyNVY0Ni42OTUzMTI1WiIgZmlsbD0iI0M5RDFEOSIvPjwvc3ZnPg==';
 const html = htm.bind(React.createElement);
-const {useState, useEffect, useMemo, useRef} = React;
+const {useState, useEffect, useMemo, useCallback, useRef} = React;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const toISO = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -1494,9 +1494,174 @@ function SettingsTab({p, update, onDelete, onRestore}) {
     <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
 }
 
+/* ================= 資料夾採購統計 =================
+   和其他分頁不同，這一頁不分專案：統計每個工程要買幾個實體資料夾（放紙本的卷宗夾）。
+   資料存在 RT-PMIS 的共用 Supabase，同事登入後看到同一份，填完即時同步。
+   Supabase 元件在第一次進入這個分頁時才下載，需連網。 */
+const SB_URL = 'https://xbdchvmxgmypcyawavju.supabase.co';
+const SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban';  // publishable key 本來就是公開金鑰；資料表開了 RLS，只有登入者能讀寫
+let sbPromise;
+const loadSb = () => sbPromise || (sbPromise = new Promise((res, rej) => {
+  if (window.supabase) return res(window.supabase.createClient(SB_URL, SB_KEY));
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
+  s.onload = () => res(window.supabase.createClient(SB_URL, SB_KEY));
+  s.onerror = () => rej(new Error('無法載入 Supabase 元件（需連網）'));
+  document.head.appendChild(s);
+}));
+const fbWhen = ts => { if (!ts) return ''; const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+function FolderLogin({sb}) {
+  const [email, setEmail] = useState(''), [pw, setPw] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  const go = async e => {
+    e.preventDefault(); setBusy(true); setErr('');
+    const {error} = await sb.auth.signInWithPassword({email: email.trim(), password: pw});
+    if (error) setErr(error.message === 'Invalid login credentials' ? '帳號或密碼不正確' : error.message);
+    setBusy(false);
+  };
+  return html`<form className="card" style=${{maxWidth: '340px', margin: '24px auto'}} onSubmit=${go}>
+    <div className="sect">資料夾採購統計</div>
+    <p style=${{fontSize: '12.5px', color: 'var(--mute)', margin: '0 0 8px'}}>這一頁的資料是公司共用的，請用 RT-PMIS 的帳號登入。</p>
+    <input type="email" placeholder="電子郵件" value=${email} onChange=${e => setEmail(e.target.value)} autoComplete="username" required style=${{width: '100%', marginBottom: '6px'}} />
+    <input type="password" placeholder="密碼" value=${pw} onChange=${e => setPw(e.target.value)} autoComplete="current-password" required style=${{width: '100%'}} />
+    ${err && html`<p style=${{color: 'var(--bad)', fontSize: '12.5px', margin: '8px 0 0'}}>${err}</p>`}
+    <button className="b" disabled=${busy} style=${{width: '100%', marginTop: '10px'}}>${busy ? '登入中…' : '登入'}</button>
+  </form>`;
+}
+
+/* 一個工程一格數字。本地先改、離開欄位才寫回，避免打字途中被同事的即時更新蓋掉。 */
+function FolderLine({row, onSave}) {
+  const [v, setV] = useState(row.qty == null ? '' : String(row.qty));
+  const editing = useRef(false);
+  useEffect(() => { if (!editing.current) setV(row.qty == null ? '' : String(row.qty)); }, [row.qty]);
+  const commit = () => {
+    editing.current = false;
+    const t = v.trim(), qty = t === '' ? null : Math.max(0, parseInt(t, 10) || 0);
+    if (qty === row.qty) { setV(row.qty == null ? '' : String(row.qty)); return; }
+    onSave(row, qty);
+  };
+  return html`<tr>
+    <td>${row.name}</td>
+    <td className="n"><input type="number" min="0" placeholder="—" value=${v} style=${{width: '86px', textAlign: 'right'}}
+      onChange=${e => { editing.current = true; setV(e.target.value); }}
+      onBlur=${commit} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} /></td>
+    <td>${row.filled_by ? row.filled_by.split('@')[0] : ''}</td>
+    <td className="nw">${fbWhen(row.updated_at)}</td>
+  </tr>`;
+}
+
+function FolderList({sb, me}) {
+  const [projects, setProjects] = useState([]), [rows, setRows] = useState([]), [extra, setExtra] = useState([]);
+  const [err, setErr] = useState(''), [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const [p, r] = await Promise.all([
+      sb.from('projects').select('id,name').order('name'),
+      sb.from('folder_requirements').select('*'),
+    ]);
+    const e = p.error || r.error;
+    if (e) { setErr(e.message); setLoading(false); return; }
+    setProjects(p.data); setRows(r.data); setLoading(false);
+  }, [sb]);
+  useEffect(() => { load(); }, [load]);
+
+  /* 同事改的數字即時出現；公司網路擋掉 WebSocket 時按「重新整理」也拿得到 */
+  useEffect(() => {
+    const ch = sb.channel('folder-req').on('postgres_changes', {event: '*', schema: 'public', table: 'folder_requirements'}, ev => {
+      setRows(cur => {
+        if (ev.eventType === 'DELETE') return cur.filter(x => x.id !== ev.old.id);
+        const i = cur.findIndex(x => x.id === ev.new.id);
+        if (i < 0) return [...cur, ev.new];
+        const next = cur.slice(); next[i] = ev.new; return next;
+      });
+    }).subscribe();
+    return () => { sb.removeChannel(ch); };
+  }, [sb]);
+
+  /* 工程清單＝共用資料庫的既有工程 ＋ 已填過的自訂案名 ＋ 這次新輸入的 */
+  const list = useMemo(() => {
+    const byName = new Map(rows.map(r => [r.project_name, r]));
+    const names = new Map();
+    projects.forEach(x => names.set(x.name, x.id));
+    rows.forEach(r => { if (!names.has(r.project_name)) names.set(r.project_name, r.project_id || null); });
+    extra.forEach(n => { if (!names.has(n)) names.set(n, null); });
+    return [...names.entries()].map(([name, id]) => {
+      const r = byName.get(name);
+      return {name, id, qty: r ? r.qty : null, filled_by: r && r.filled_by, updated_at: r && r.updated_at};
+    }).sort((a, b) => seqCmp(a.name, b.name));
+  }, [projects, rows, extra]);
+
+  const total = list.reduce((s, x) => s + (x.qty || 0), 0);
+  const filled = list.filter(x => x.qty != null).length;
+
+  const save = async (row, qty) => {
+    if (qty == null) {
+      setRows(c => c.filter(x => x.project_name !== row.name));
+      const {error} = await sb.from('folder_requirements').delete().eq('project_name', row.name);
+      if (error) { setErr(error.message); load(); }
+      return;
+    }
+    const rec = {project_id: row.id, project_name: row.name, qty, filled_by: me, updated_at: new Date().toISOString()};
+    const {data, error} = await sb.from('folder_requirements').upsert(rec, {onConflict: 'project_name'}).select().single();
+    if (error) { setErr(error.message); load(); return; }
+    setRows(c => { const i = c.findIndex(x => x.project_name === row.name); if (i < 0) return [...c, data]; const n = c.slice(); n[i] = data; return n; });
+  };
+
+  const addProject = () => { const n = prompt('工程名稱'); if (n && n.trim()) setExtra(x => x.includes(n.trim()) ? x : [...x, n.trim()]); };
+
+  const exportXlsx = () => {
+    const wb = XLSX.utils.book_new();
+    const aoa = [['工程', '資料夾數量', '填報人', '更新時間'],
+      ...list.filter(x => x.qty != null).map(x => [x.name, x.qty, x.filled_by || '', fbWhen(x.updated_at)]),
+      ['合計', total, '', '']];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '資料夾採購統計');
+    const d = new Date();
+    XLSX.writeFile(wb, `資料夾採購統計_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
+  };
+
+  if (loading) return html`<div className="card empty">載入中…</div>`;
+  return html`<div>
+    <div className="card">
+      <div className="hero">
+        <div><div className="big">${total.toLocaleString()}</div><div className="sub">個資料夾　${filled}／${list.length} 個工程已填</div></div>
+        <div className="row noprint"><button className="b" onClick=${exportXlsx}>匯出 Excel</button>
+        <button className="b" onClick=${addProject}>＋ 其他工程</button>
+        <button className="b" onClick=${load}>重新整理</button>
+        <button className="b" onClick=${() => sb.auth.signOut()}>登出（${me.split('@')[0]}）</button></div>
+      </div>
+      <p style=${{fontSize: '12.5px', color: 'var(--mute)', margin: 0}}>每個工程填一個數量就好，不分種類與用途。離開欄位自動存檔，同事那邊即時看到；清空數字代表這個工程還沒填。</p>
+      ${err && html`<p style=${{color: 'var(--bad)', fontSize: '12.5px', margin: '8px 0 0', cursor: 'pointer'}} onClick=${() => setErr('')}>${err}（點一下關閉）</p>`}
+    </div>
+    <div className="tw"><table>
+      <thead><tr><th>工程</th><th className="n">數量</th><th>填報人</th><th>更新</th></tr></thead>
+      <tbody>
+        ${list.map(x => html`<${FolderLine} key=${x.name} row=${x} onSave=${save} />`)}
+        <tr className="g"><td>合計</td><td className="n">${total.toLocaleString()}</td><td></td><td></td></tr>
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function FolderTab() {
+  const [sb, setSb] = useState(null), [session, setSession] = useState(null), [ready, setReady] = useState(false), [err, setErr] = useState('');
+  useEffect(() => {
+    let off;
+    loadSb().then(c => {
+      setSb(c);
+      c.auth.getSession().then(({data}) => { setSession(data.session); setReady(true); });
+      const {data} = c.auth.onAuthStateChange((_e, s) => setSession(s));
+      off = () => data.subscription.unsubscribe();
+    }).catch(e => { setErr(e.message); setReady(true); });
+    return () => off && off();
+  }, []);
+  if (err) return html`<div className="card empty">${err}</div>`;
+  if (!ready) return html`<div className="card empty">載入中…</div>`;
+  return session ? html`<${FolderList} sb=${sb} me=${session.user.email || ''} />` : html`<${FolderLogin} sb=${sb} />`;
+}
+
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'check', 'forms']], ['稽核', ['audit']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'check', 'forms']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -1623,6 +1788,7 @@ function App() {
         ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
         ${tab === 'forms' && html`<${FormTab} ...${props} />`}
         ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} />`}
+        ${tab === 'folder' && html`<${FolderTab} />`}
         ${tab === 'set' && html`<${SettingsTab} ...${props} onDelete=${del} onRestore=${restore} />`}
       </main>`
     : html`<main><div className="card empty"><h2>歡迎使用 Ironaudit 智慧監造報表</h2><p>建立專案後，於「資料匯入」匯入契約詳細價目表、預定進度表與廠商施工日誌。</p>
