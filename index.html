@@ -1496,10 +1496,10 @@ function SettingsTab({p, update, onDelete, onRestore}) {
 
 /* ================= 資料夾採購統計 =================
    和其他分頁不同，這一頁不分專案：統計每個工程要買幾個實體資料夾（放紙本的卷宗夾）。
-   資料存在 RT-PMIS 的共用 Supabase，同事登入後看到同一份，填完即時同步。
+   資料存在 RT-PMIS 的共用 Supabase，不需登入，同事打開就看到同一份，填完即時同步。
    Supabase 元件在第一次進入這個分頁時才下載，需連網。 */
 const SB_URL = 'https://xbdchvmxgmypcyawavju.supabase.co';
-const SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban';  // publishable key 本來就是公開金鑰；資料表開了 RLS，只有登入者能讀寫
+const SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban';  // publishable key 本來就是公開金鑰；RLS 只放行 folder_requirements 與 projects 的 id、name 兩欄
 let sbPromise;
 const loadSb = () => sbPromise || (sbPromise = new Promise((res, rej) => {
   if (window.supabase) return res(window.supabase.createClient(SB_URL, SB_KEY));
@@ -1510,24 +1510,6 @@ const loadSb = () => sbPromise || (sbPromise = new Promise((res, rej) => {
   document.head.appendChild(s);
 }));
 const fbWhen = ts => { if (!ts) return ''; const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-
-function FolderLogin({sb}) {
-  const [email, setEmail] = useState(''), [pw, setPw] = useState(''), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
-  const go = async e => {
-    e.preventDefault(); setBusy(true); setErr('');
-    const {error} = await sb.auth.signInWithPassword({email: email.trim(), password: pw});
-    if (error) setErr(error.message === 'Invalid login credentials' ? '帳號或密碼不正確' : error.message);
-    setBusy(false);
-  };
-  return html`<form className="card" style=${{maxWidth: '340px', margin: '24px auto'}} onSubmit=${go}>
-    <div className="sect">資料夾採購統計</div>
-    <p style=${{fontSize: '12.5px', color: 'var(--mute)', margin: '0 0 8px'}}>這一頁的資料是公司共用的，請用 RT-PMIS 的帳號登入。</p>
-    <input type="email" placeholder="電子郵件" value=${email} onChange=${e => setEmail(e.target.value)} autoComplete="username" required style=${{width: '100%', marginBottom: '6px'}} />
-    <input type="password" placeholder="密碼" value=${pw} onChange=${e => setPw(e.target.value)} autoComplete="current-password" required style=${{width: '100%'}} />
-    ${err && html`<p style=${{color: 'var(--bad)', fontSize: '12.5px', margin: '8px 0 0'}}>${err}</p>`}
-    <button className="b" disabled=${busy} style=${{width: '100%', marginTop: '10px'}}>${busy ? '登入中…' : '登入'}</button>
-  </form>`;
-}
 
 /* 一個工程一格數字。本地先改、離開欄位才寫回，避免打字途中被同事的即時更新蓋掉。 */
 function FolderLine({row, onSave}) {
@@ -1545,12 +1527,11 @@ function FolderLine({row, onSave}) {
     <td className="n"><input type="number" min="0" placeholder="—" value=${v} style=${{width: '86px', textAlign: 'right'}}
       onChange=${e => { editing.current = true; setV(e.target.value); }}
       onBlur=${commit} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} /></td>
-    <td>${row.filled_by ? row.filled_by.split('@')[0] : ''}</td>
     <td className="nw">${fbWhen(row.updated_at)}</td>
   </tr>`;
 }
 
-function FolderList({sb, me}) {
+function FolderList({sb}) {
   const [projects, setProjects] = useState([]), [rows, setRows] = useState([]), [extra, setExtra] = useState([]);
   const [err, setErr] = useState(''), [loading, setLoading] = useState(true);
 
@@ -1587,7 +1568,7 @@ function FolderList({sb, me}) {
     extra.forEach(n => { if (!names.has(n)) names.set(n, null); });
     return [...names.entries()].map(([name, id]) => {
       const r = byName.get(name);
-      return {name, id, qty: r ? r.qty : null, filled_by: r && r.filled_by, updated_at: r && r.updated_at};
+      return {name, id, qty: r ? r.qty : null, updated_at: r && r.updated_at};
     }).sort((a, b) => seqCmp(a.name, b.name));
   }, [projects, rows, extra]);
 
@@ -1601,7 +1582,7 @@ function FolderList({sb, me}) {
       if (error) { setErr(error.message); load(); }
       return;
     }
-    const rec = {project_id: row.id, project_name: row.name, qty, filled_by: me, updated_at: new Date().toISOString()};
+    const rec = {project_id: row.id, project_name: row.name, qty, updated_at: new Date().toISOString()};
     const {data, error} = await sb.from('folder_requirements').upsert(rec, {onConflict: 'project_name'}).select().single();
     if (error) { setErr(error.message); load(); return; }
     setRows(c => { const i = c.findIndex(x => x.project_name === row.name); if (i < 0) return [...c, data]; const n = c.slice(); n[i] = data; return n; });
@@ -1611,9 +1592,9 @@ function FolderList({sb, me}) {
 
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
-    const aoa = [['工程', '資料夾數量', '填報人', '更新時間'],
-      ...list.filter(x => x.qty != null).map(x => [x.name, x.qty, x.filled_by || '', fbWhen(x.updated_at)]),
-      ['合計', total, '', '']];
+    const aoa = [['工程', '資料夾數量', '更新時間'],
+      ...list.filter(x => x.qty != null).map(x => [x.name, x.qty, fbWhen(x.updated_at)]),
+      ['合計', total, '']];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '資料夾採購統計');
     const d = new Date();
     XLSX.writeFile(wb, `資料夾採購統計_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
@@ -1626,37 +1607,27 @@ function FolderList({sb, me}) {
         <div><div className="big">${total.toLocaleString()}</div><div className="sub">個資料夾　${filled}／${list.length} 個工程已填</div></div>
         <div className="row noprint"><button className="b" onClick=${exportXlsx}>匯出 Excel</button>
         <button className="b" onClick=${addProject}>＋ 其他工程</button>
-        <button className="b" onClick=${load}>重新整理</button>
-        <button className="b" onClick=${() => sb.auth.signOut()}>登出（${me.split('@')[0]}）</button></div>
+        <button className="b" onClick=${load}>重新整理</button></div>
       </div>
       <p style=${{fontSize: '12.5px', color: 'var(--mute)', margin: 0}}>每個工程填一個數量就好，不分種類與用途。離開欄位自動存檔，同事那邊即時看到；清空數字代表這個工程還沒填。</p>
       ${err && html`<p style=${{color: 'var(--bad)', fontSize: '12.5px', margin: '8px 0 0', cursor: 'pointer'}} onClick=${() => setErr('')}>${err}（點一下關閉）</p>`}
     </div>
     <div className="tw"><table>
-      <thead><tr><th>工程</th><th className="n">數量</th><th>填報人</th><th>更新</th></tr></thead>
+      <thead><tr><th>工程</th><th className="n">數量</th><th>更新</th></tr></thead>
       <tbody>
         ${list.map(x => html`<${FolderLine} key=${x.name} row=${x} onSave=${save} />`)}
-        <tr className="g"><td>合計</td><td className="n">${total.toLocaleString()}</td><td></td><td></td></tr>
+        <tr className="g"><td>合計</td><td className="n">${total.toLocaleString()}</td><td></td></tr>
       </tbody>
     </table></div>
   </div>`;
 }
 
 function FolderTab() {
-  const [sb, setSb] = useState(null), [session, setSession] = useState(null), [ready, setReady] = useState(false), [err, setErr] = useState('');
-  useEffect(() => {
-    let off;
-    loadSb().then(c => {
-      setSb(c);
-      c.auth.getSession().then(({data}) => { setSession(data.session); setReady(true); });
-      const {data} = c.auth.onAuthStateChange((_e, s) => setSession(s));
-      off = () => data.subscription.unsubscribe();
-    }).catch(e => { setErr(e.message); setReady(true); });
-    return () => off && off();
-  }, []);
+  const [sb, setSb] = useState(null), [err, setErr] = useState('');
+  useEffect(() => { loadSb().then(setSb).catch(e => setErr(e.message)); }, []);
   if (err) return html`<div className="card empty">${err}</div>`;
-  if (!ready) return html`<div className="card empty">載入中…</div>`;
-  return session ? html`<${FolderList} sb=${sb} me=${session.user.email || ''} />` : html`<${FolderLogin} sb=${sb} />`;
+  if (!sb) return html`<div className="card empty">載入中…</div>`;
+  return html`<${FolderList} sb=${sb} />`;
 }
 
 /* ================= 主程式 ================= */
