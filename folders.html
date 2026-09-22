@@ -3,24 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ironaudit 資料夾需求統計</title>
+<title>資料夾採購統計</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCI+PHJlY3Qgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiIHJ4PSIyNiIgZmlsbD0iIzFCMjYzMiIvPjxwb2x5Z29uIGZpbGw9IiNGRkZGRkYiIHBvaW50cz0iMjEuMzYsMjYuNDAgNzUuMTIsMjYuNDAgNzUuMTIsMzkuODQgNTQuOTYsMzkuODQgNTQuOTYsOTMuNjAgMjEuMzYsOTMuNjAgMjEuMzYsODAuMTYgNDEuNTIsODAuMTYgNDEuNTIsMzkuODQgMjEuMzYsMzkuODQiLz48cG9seWdvbiBmaWxsPSIjRjI2QjFEIiBwb2ludHM9IjU0Ljk2LDgwLjE2IDk1LjI4LDI4LjA4IDk1LjI4LDQ0Ljg4IDU0Ljk2LDkzLjYwIi8+PC9zdmc+">
 <style>
-:root{--bg:#f4f6f8;--card:#fff;--ink:#1f2933;--mute:#6b7785;--line:#d9dee4;--pri:#1B2632;--acc:#F26B1D;--ok:#1a7f37;--okbg:#e6f4ea;--bad:#cf222e;--badbg:#ffe5e5}
+:root{--bg:#f4f6f8;--card:#fff;--ink:#1f2933;--mute:#6b7785;--line:#d9dee4;--pri:#1B2632;--acc:#F26B1D;--ok:#1a7f37;--bad:#cf222e;--badbg:#ffe5e5}
 *{box-sizing:border-box}
 body{margin:0;font-family:"Inter","Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
-.num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 header{background:var(--pri);color:#fff;padding:6px 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 header h1{font-size:17px;margin:0;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header .who{font-size:12px;color:#b8c2cc;white-space:nowrap}
 header button{white-space:nowrap;padding:4px 12px;font-size:13px;border-radius:999px;background:rgba(255,255,255,.06);color:#e8edf2;border:1px solid rgba(255,255,255,.2);cursor:pointer}
 header button:hover{background:rgba(255,255,255,.14)}
-nav{display:flex;gap:2px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:0 6px;position:sticky;top:0;z-index:5}
-nav button{border:0;background:none;padding:8px 12px;cursor:pointer;font-size:15px;color:var(--mute);border-bottom:3px solid transparent}
-nav button.on{color:var(--pri);border-bottom-color:var(--acc);font-weight:bold}
-main{padding:8px;max-width:1200px;margin:0 auto}
+main{padding:8px;max-width:900px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
-.sect{font-size:11px;letter-spacing:.08em;color:var(--mute);font-weight:600;margin:0 0 8px;text-transform:uppercase}
 .hint{font-size:12.5px;color:var(--mute);line-height:1.6}
 .b{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink)}
 .b:hover{background:#f3f5f8}
@@ -28,46 +23,30 @@ main{padding:8px;max-width:1200px;margin:0 auto}
 .b.pri:hover{background:#2b3a4a}
 .b.dim{color:var(--mute);border:0;background:none;padding:4px 7px}
 .b.dim:hover{color:var(--bad);background:var(--badbg)}
-input,select{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;max-width:100%}
-input:focus,select:focus{outline:0;border-color:var(--acc);box-shadow:0 0 0 3px rgba(242,107,29,.18)}
+input{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff;max-width:100%}
+input:focus{outline:0;border-color:var(--acc);box-shadow:0 0 0 3px rgba(242,107,29,.18)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.grow{flex:1 1 200px;min-width:0}
+.mt10{margin-top:10px}
+.hero{display:flex;align-items:baseline;gap:10px}
+.hero .big{font-size:38px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.hero .l{font-size:12.5px;color:var(--mute)}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:middle}
 th{font-size:12px;color:var(--mute);font-weight:600;white-space:nowrap;background:#f7f9fb}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 tr.tot td{font-weight:700;background:#f7f9fb;border-top:2px solid var(--line)}
-.tw{overflow-x:auto}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-bottom:8px}
-.tile{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:8px;padding:8px 10px}
-.tile .l{font-size:11.5px;color:var(--mute)}
-.tile .v{font-size:24px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.qty{width:88px;text-align:right}
 .meta{font-size:11.5px;color:var(--mute);white-space:nowrap}
 .err{background:var(--badbg);color:var(--bad);border:1px solid #f5c2c7;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px}
-.ok{background:var(--okbg);color:var(--ok);border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600}
 .boot{padding:40px;text-align:center;color:var(--mute)}
-.w100{width:100%}
-.qty{width:74px;text-align:right}
-.sb{justify-content:space-between}
-.mb8{margin-bottom:8px}
-.mt10{margin-top:10px}
-.pname{font-size:14.5px;font-weight:600;line-height:1.35;min-width:0}
-.login .err{margin:10px 0 0}
 .login{max-width:340px;margin:12vh auto;padding:0 16px}
 .login .card{padding:20px}
 .login h1{font-size:19px;margin:0 0 4px}
 .login input{width:100%;margin-top:8px;padding:8px 10px}
 .login button{width:100%;margin-top:12px;padding:9px}
-.tags{display:flex;flex-wrap:wrap;gap:5px}
-.tag{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:3px 5px 3px 11px;font-size:13px;background:#fff}
-.tag button{border:0;background:none;color:var(--mute);cursor:pointer;font-size:14px;line-height:1;padding:2px 5px;border-radius:999px}
-.tag button:hover{color:var(--bad);background:var(--badbg)}
-@media(max-width:700px){
-  .meta,th.hd,td.hd{display:none}
-  main{padding:6px}
-  th,td{padding:5px 6px}
-}
-@media print{header,nav,.noprint{display:none}}
+.login .err{margin:10px 0 0}
+@media(max-width:700px){.meta,th.hd,td.hd{display:none}main{padding:6px}th,td{padding:5px 6px}}
+@media print{header,.noprint{display:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -79,41 +58,32 @@ tr.tot td{font-weight:700;background:#f7f9fb;border-top:2px solid var(--line)}
 <div id="root"></div>
 <script>
 'use strict';
-/* ================= 連線設定 =================
-   共用資料庫：RT-Pmis-Supervision。publishable key 本來就是公開金鑰，
-   資料表都開了 RLS 且只允許已登入者存取，所以放在網頁裡是安全的。 */
+/* 共用資料庫：RT-Pmis-Supervision。publishable key 本來就是公開金鑰，
+   資料表開了 RLS 且只允許已登入者存取。 */
 const SB_URL = 'https://xbdchvmxgmypcyawavju.supabase.co';
 const SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban';
 const sb = supabase.createClient(SB_URL, SB_KEY);
 
 const html = htm.bind(React.createElement);
 const {useState, useEffect, useMemo, useCallback, useRef} = React;
-
 const fmt = n => Number(n || 0).toLocaleString();
 const pad = n => String(n).padStart(2, '0');
 const when = ts => { if (!ts) return ''; const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-const NO_CAT = '（未填用途）';
-const NO_SPEC = '（未填規格）';
-/* 一列屬於哪個工程：選既有工程用 project_id，自行輸入的用名稱 */
-const keyOf = r => r.project_id || 'name:' + r.project_name;
-const pkey = p => p.id || 'name:' + p.name;
 const zhSort = (a, b) => String(a).localeCompare(String(b), 'zh-Hant');
 
-/* ================= 登入 ================= */
 function Login() {
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const go = async e => {
-    e.preventDefault();
-    setBusy(true); setErr('');
+    e.preventDefault(); setBusy(true); setErr('');
     const {error} = await sb.auth.signInWithPassword({email: email.trim(), password: pw});
     if (error) setErr(error.message === 'Invalid login credentials' ? '帳號或密碼不正確' : error.message);
     setBusy(false);
   };
   return html`<div class="login"><form class="card" onSubmit=${go}>
-    <h1>資料夾需求統計</h1>
+    <h1>資料夾採購統計</h1>
     <div class="hint">請用 RT-PMIS 的帳號登入</div>
     <input type="email" placeholder="電子郵件" value=${email} onChange=${e => setEmail(e.target.value)} autoComplete="username" required/>
     <input type="password" placeholder="密碼" value=${pw} onChange=${e => setPw(e.target.value)} autoComplete="current-password" required/>
@@ -122,259 +92,129 @@ function Login() {
   </form></div>`;
 }
 
-/* ================= 填報：單一列 =================
-   本地先改、離開欄位才寫回資料庫，避免打字途中被別人的即時更新蓋掉。 */
-function Line({r, cats, specs, onSave, onDel}) {
-  const [d, setD] = useState(r);
+/* 一個工程一列，只填數量。本地先改、離開欄位才寫回，避免打字途中被同事的即時更新蓋掉。 */
+function Line({p, onSave}) {
+  const [v, setV] = useState(p.qty == null ? '' : String(p.qty));
   const editing = useRef(false);
-  useEffect(() => { if (!editing.current) setD(r); }, [r]);
-  const set = (k, v) => { editing.current = true; setD(x => ({...x, [k]: v})); };
+  useEffect(() => { if (!editing.current) setV(p.qty == null ? '' : String(p.qty)); }, [p.qty]);
   const commit = () => {
     editing.current = false;
-    const qty = Math.max(0, parseInt(d.qty, 10) || 0);
-    if (d.category === r.category && d.spec === r.spec && qty === r.qty && d.note === r.note) { setD(r); return; }
-    onSave(r.id, {category: d.category.trim(), spec: d.spec.trim(), qty, note: d.note.trim()});
+    const t = v.trim();
+    const qty = t === '' ? null : Math.max(0, parseInt(t, 10) || 0);
+    if (qty === p.qty) { setV(p.qty == null ? '' : String(p.qty)); return; }
+    onSave(p, qty);
   };
   return html`<tr>
-    <td><input list="cats" class="w100" value=${d.category} placeholder="用途" onChange=${e => set('category', e.target.value)} onBlur=${commit}/></td>
-    <td><input list="specs" class="w100" value=${d.spec} placeholder="規格" onChange=${e => set('spec', e.target.value)} onBlur=${commit}/></td>
-    <td class="n"><input type="number" min="0" class="qty" value=${d.qty} onChange=${e => set('qty', e.target.value)} onBlur=${commit}/></td>
-    <td class="hd"><input class="w100" value=${d.note} placeholder="備註" onChange=${e => set('note', e.target.value)} onBlur=${commit}/></td>
-    <td class="meta">${r.filled_by ? r.filled_by.split('@')[0] : ''}<br/>${when(r.updated_at)}</td>
-    <td><button class="b dim" title="刪除" onClick=${() => onDel(r.id)}>✕</button></td>
+    <td>${p.name}</td>
+    <td class="n"><input class="qty" type="number" min="0" placeholder="—" value=${v}
+      onChange=${e => { editing.current = true; setV(e.target.value); }}
+      onBlur=${commit} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }}/></td>
+    <td class="meta hd">${p.filled_by ? p.filled_by.split('@')[0] : ''}</td>
+    <td class="meta hd">${when(p.updated_at)}</td>
   </tr>`;
 }
 
-/* ================= 填報頁 ================= */
-function Fill({rows, projOpts, cats, specs, cur, setCur, onAdd, onSave, onDel}) {
-  const mine = rows.filter(r => keyOf(r) === cur).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const total = mine.reduce((s, r) => s + (+r.qty || 0), 0);
-  const proj = projOpts.find(p => pkey(p) === cur);
-  return html`<div>
-    <div class="card">
-      <div class="row">
-        <select class="grow" value=${cur} onChange=${e => setCur(e.target.value)}>
-          <option value="">— 選擇工程 —</option>
-          ${projOpts.map(p => html`<option key=${pkey(p)} value=${pkey(p)}>${p.name}</option>`)}
-        </select>
-        <button class="b" onClick=${() => { const n = prompt('工程名稱'); if (n && n.trim()) setCur('new:' + n.trim()); }}>＋ 其他工程</button>
-      </div>
-      <div class="hint mt10">用途與規格可以直接打字，也可以點欄位從清單挑；挑清單裡的名稱大家統計才會合在一起。改完離開欄位就自動存檔，同事那邊會即時看到。</div>
-    </div>
-    ${!proj ? html`<div class="card hint">請先選一個工程。</div>` : html`<div class="card">
-      <div class="row sb mb8">
-        <div class="pname">${proj.name}</div>
-        <div><span class="ok">小計 ${fmt(total)} 個</span></div>
-      </div>
-      <div class="tw"><table>
-        <thead><tr><th>用途</th><th>規格</th><th class="n">數量</th><th class="hd">備註</th><th class="meta">填報</th><th></th></tr></thead>
-        <tbody>
-          ${mine.map(r => html`<${Line} key=${r.id} r=${r} cats=${cats} specs=${specs} onSave=${onSave} onDel=${onDel}/>`)}
-          ${!mine.length && html`<tr><td colSpan="6" class="hint">還沒有資料，按下面「新增一列」開始填。</td></tr>`}
-        </tbody>
-      </table></div>
-      <button class="b pri mt10" onClick=${() => onAdd(proj)}>＋ 新增一列</button>
-    </div>`}
-  </div>`;
-}
-
-/* ================= 彙總頁 ================= */
-function Sum({rows, projOpts}) {
-  const s = useMemo(() => {
-    const byProj = new Map(), bySpec = new Map(), byCat = new Map(), people = new Set();
-    let total = 0;
-    rows.forEach(r => {
-      const q = +r.qty || 0, sp = r.spec || NO_SPEC, ct = r.category || NO_CAT, k = keyOf(r);
-      total += q;
-      if (!byProj.has(k)) byProj.set(k, {name: r.project_name, total: 0, spec: {}});
-      const p = byProj.get(k);
-      p.total += q; p.spec[sp] = (p.spec[sp] || 0) + q;
-      bySpec.set(sp, (bySpec.get(sp) || 0) + q);
-      byCat.set(ct, (byCat.get(ct) || 0) + q);
-      if (r.filled_by) people.add(r.filled_by);
-    });
-    const specCols = [...bySpec.keys()].sort(zhSort);
-    const projList = [...byProj.values()].sort((a, b) => b.total - a.total || zhSort(a.name, b.name));
-    return {
-      total, specCols, projList, people: people.size,
-      specList: specCols.map(k => [k, bySpec.get(k)]),
-      catList: [...byCat.entries()].sort((a, b) => b[1] - a[1] || zhSort(a[0], b[0])),
-    };
-  }, [rows]);
-
-  const xlsx = () => {
-    const wb = XLSX.utils.book_new();
-    const add = (name, aoa) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name);
-    add('明細', [['工程', '用途', '規格', '數量', '備註', '填報人', '更新時間'],
-      ...rows.map(r => [r.project_name, r.category, r.spec, +r.qty || 0, r.note, r.filled_by, when(r.updated_at)])]);
-    add('各工程小計', [['工程', ...s.specCols, '合計'],
-      ...s.projList.map(p => [p.name, ...s.specCols.map(c => p.spec[c] || 0), p.total]),
-      ['合計', ...s.specCols.map(c => s.specList.find(x => x[0] === c)[1]), s.total]]);
-    add('各規格小計', [['規格', '數量'], ...s.specList, ['合計', s.total]]);
-    add('各用途小計', [['用途', '數量'], ...s.catList, ['合計', s.total]]);
-    const d = new Date();
-    XLSX.writeFile(wb, `資料夾需求統計_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
-  };
-
-  if (!rows.length) return html`<div class="card hint">還沒有任何填報資料。</div>`;
-  return html`<div>
-    <div class="tiles">
-      <div class="tile"><div class="l">資料夾總數</div><div class="v">${fmt(s.total)}</div></div>
-      <div class="tile"><div class="l">工程數</div><div class="v">${s.projList.length}</div></div>
-      <div class="tile"><div class="l">明細筆數</div><div class="v">${rows.length}</div></div>
-      <div class="tile"><div class="l">填報人數</div><div class="v">${s.people}</div></div>
-    </div>
-    <div class="card noprint"><button class="b pri" onClick=${xlsx}>匯出 Excel（採購用）</button></div>
-
-    <div class="card"><div class="sect">各工程 × 規格</div><div class="tw"><table>
-      <thead><tr><th>工程</th>${s.specCols.map(c => html`<th key=${c} class="n">${c}</th>`)}<th class="n">合計</th></tr></thead>
-      <tbody>
-        ${s.projList.map(p => html`<tr key=${p.name}><td>${p.name}</td>
-          ${s.specCols.map(c => html`<td key=${c} class="n">${p.spec[c] ? fmt(p.spec[c]) : ''}</td>`)}
-          <td class="n"><b>${fmt(p.total)}</b></td></tr>`)}
-        <tr class="tot"><td>合計</td>${s.specList.map(([k, v]) => html`<td key=${k} class="n">${fmt(v)}</td>`)}<td class="n">${fmt(s.total)}</td></tr>
-      </tbody>
-    </table></div></div>
-
-    <div class="card"><div class="sect">各規格合計</div><div class="tw"><table>
-      <thead><tr><th>規格</th><th class="n">數量</th></tr></thead>
-      <tbody>${s.specList.map(([k, v]) => html`<tr key=${k}><td>${k}</td><td class="n">${fmt(v)}</td></tr>`)}
-        <tr class="tot"><td>合計</td><td class="n">${fmt(s.total)}</td></tr></tbody>
-    </table></div></div>
-
-    <div class="card"><div class="sect">各用途合計</div><div class="tw"><table>
-      <thead><tr><th>用途</th><th class="n">數量</th></tr></thead>
-      <tbody>${s.catList.map(([k, v]) => html`<tr key=${k}><td>${k}</td><td class="n">${fmt(v)}</td></tr>`)}
-        <tr class="tot"><td>合計</td><td class="n">${fmt(s.total)}</td></tr></tbody>
-    </table></div></div>
-  </div>`;
-}
-
-/* ================= 設定：用途／規格清單 ================= */
-function OptList({title, kind, list, onAdd, onDel}) {
-  const [v, setV] = useState('');
-  const go = e => { e.preventDefault(); onAdd(kind, v); setV(''); };
-  return html`<div class="card">
-    <div class="sect">${title}</div>
-    <div class="tags">${list.map(o => html`<span class="tag" key=${o.id}>${o.name}<button title="刪除" onClick=${() => onDel(o)}>✕</button></span>`)}</div>
-    <form class="row mt10" onSubmit=${go}>
-      <input class="grow" placeholder=${'新增' + title} value=${v} onChange=${e => setV(e.target.value)}/>
-      <button class="b">新增</button>
-    </form>
-  </div>`;
-}
-
-/* ================= 主畫面 ================= */
 function Main({session}) {
   const me = session.user.email || '';
-  const [tab, setTab] = useState('fill');
   const [projects, setProjects] = useState([]);
-  const [options, setOptions] = useState([]);
   const [rows, setRows] = useState([]);
-  const [extra, setExtra] = useState([]);   // 這次自行輸入、還沒有明細的工程
-  const [cur, setCur] = useState('');
+  const [extra, setExtra] = useState([]);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [p, o, r] = await Promise.all([
+    const [p, r] = await Promise.all([
       sb.from('projects').select('id,name').order('name'),
-      sb.from('folder_options').select('*').order('sort_order').order('name'),
-      sb.from('folder_requirements').select('*').order('created_at'),
+      sb.from('folder_requirements').select('*'),
     ]);
-    const e = p.error || o.error || r.error;
+    const e = p.error || r.error;
     if (e) { setErr(e.message); setLoading(false); return; }
-    setProjects(p.data); setOptions(o.data); setRows(r.data); setLoading(false);
+    setProjects(p.data); setRows(r.data); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  /* 即時同步：同事的新增／修改／刪除直接反映在畫面上 */
+  /* 同事改的數字即時出現 */
   useEffect(() => {
     const ch = sb.channel('folder-req')
-      .on('postgres_changes', {event: '*', schema: 'public', table: 'folder_requirements'}, p => {
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'folder_requirements'}, ev => {
         setRows(cur => {
-          if (p.eventType === 'DELETE') return cur.filter(x => x.id !== p.old.id);
-          const i = cur.findIndex(x => x.id === p.new.id);
-          if (i < 0) return [...cur, p.new];
-          const next = cur.slice(); next[i] = p.new; return next;
+          if (ev.eventType === 'DELETE') return cur.filter(x => x.id !== ev.old.id);
+          const i = cur.findIndex(x => x.id === ev.new.id);
+          if (i < 0) return [...cur, ev.new];
+          const next = cur.slice(); next[i] = ev.new; return next;
         });
       }).subscribe();
     return () => { sb.removeChannel(ch); };
   }, []);
 
-  const cats = useMemo(() => options.filter(o => o.kind === 'category'), [options]);
-  const specs = useMemo(() => options.filter(o => o.kind === 'spec'), [options]);
-
-  /* 工程清單＝資料庫既有工程 ＋ 明細裡出現過的自訂工程 ＋ 這次新輸入的 */
-  const projOpts = useMemo(() => {
-    const m = new Map();
-    projects.forEach(p => m.set(p.id, {id: p.id, name: p.name}));
-    rows.forEach(r => { const k = keyOf(r); if (!m.has(k)) m.set(k, {id: r.project_id, name: r.project_name}); });
-    extra.forEach(n => { const k = 'name:' + n; if (!m.has(k)) m.set(k, {id: null, name: n}); });
-    return [...m.values()].sort((a, b) => zhSort(a.name, b.name));
+  /* 工程清單＝資料庫既有工程 ＋ 已填過的自訂案名 ＋ 這次新輸入的 */
+  const list = useMemo(() => {
+    const byName = new Map(rows.map(r => [r.project_name, r]));
+    const names = new Map();
+    projects.forEach(p => names.set(p.name, p.id));
+    rows.forEach(r => { if (!names.has(r.project_name)) names.set(r.project_name, r.project_id || null); });
+    extra.forEach(n => { if (!names.has(n)) names.set(n, null); });
+    return [...names.entries()].map(([name, id]) => {
+      const r = byName.get(name);
+      return {name, id, qty: r ? r.qty : null, filled_by: r && r.filled_by, updated_at: r && r.updated_at};
+    }).sort((a, b) => zhSort(a.name, b.name));
   }, [projects, rows, extra]);
 
-  /* 「＋ 其他工程」先塞進 extra，再選起來 */
-  useEffect(() => {
-    if (!cur.startsWith('new:')) return;
-    const n = cur.slice(4);
-    setExtra(x => x.includes(n) ? x : [...x, n]);
-    setCur('name:' + n);
-  }, [cur]);
+  const total = list.reduce((s, p) => s + (p.qty || 0), 0);
+  const filled = list.filter(p => p.qty != null).length;
 
-  const add = async proj => {
-    const rec = {project_id: proj.id, project_name: proj.name, category: '', spec: '', qty: 1, note: '', filled_by: me};
-    const {data, error} = await sb.from('folder_requirements').insert(rec).select().single();
-    if (error) return setErr(error.message);
-    setRows(c => c.some(x => x.id === data.id) ? c : [...c, data]);
-  };
-  const save = async (id, patch) => {
-    const full = {...patch, filled_by: me};
-    setRows(c => c.map(x => x.id === id ? {...x, ...full} : x));
-    const {error} = await sb.from('folder_requirements').update(full).eq('id', id);
-    if (error) { setErr(error.message); load(); }
-  };
-  const del = async id => {
-    if (!confirm('刪除這一列？')) return;
-    setRows(c => c.filter(x => x.id !== id));
-    const {error} = await sb.from('folder_requirements').delete().eq('id', id);
-    if (error) { setErr(error.message); load(); }
-  };
-  const addOpt = async (kind, name) => {
-    name = String(name || '').trim();
-    if (!name) return;
-    const {data, error} = await sb.from('folder_options').insert({kind, name, sort_order: 900}).select().single();
-    if (error) return setErr(error.code === '23505' ? '這個名稱已經在清單裡了' : error.message);
-    setOptions(o => [...o, data]);
-  };
-  const delOpt = async o => {
-    if (!confirm(`從清單移除「${o.name}」？已經填好的資料不會被刪掉。`)) return;
-    setOptions(x => x.filter(y => y.id !== o.id));
-    const {error} = await sb.from('folder_options').delete().eq('id', o.id);
-    if (error) { setErr(error.message); load(); }
+  const save = async (p, qty) => {
+    if (qty == null) {
+      setRows(c => c.filter(x => x.project_name !== p.name));
+      const {error} = await sb.from('folder_requirements').delete().eq('project_name', p.name);
+      if (error) { setErr(error.message); load(); }
+      return;
+    }
+    const rec = {project_id: p.id, project_name: p.name, qty, filled_by: me, updated_at: new Date().toISOString()};
+    const {data, error} = await sb.from('folder_requirements')
+      .upsert(rec, {onConflict: 'project_name'}).select().single();
+    if (error) { setErr(error.message); load(); return; }
+    setRows(c => { const i = c.findIndex(x => x.project_name === p.name); if (i < 0) return [...c, data]; const n = c.slice(); n[i] = data; return n; });
   };
 
-  const T = [['fill', '填報'], ['sum', '彙總'], ['opt', '設定']];
+  const addProject = () => { const n = prompt('工程名稱'); if (n && n.trim()) setExtra(x => x.includes(n.trim()) ? x : [...x, n.trim()]); };
+
+  const xlsx = () => {
+    const wb = XLSX.utils.book_new();
+    const aoa = [['工程', '資料夾數量', '填報人', '更新時間'],
+      ...list.filter(p => p.qty != null).map(p => [p.name, p.qty, p.filled_by || '', when(p.updated_at)]),
+      ['合計', total, '', '']];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '資料夾採購統計');
+    const d = new Date();
+    XLSX.writeFile(wb, `資料夾採購統計_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
+  };
+
   return html`<div>
     <header>
-      <h1>資料夾需求統計</h1>
+      <h1>資料夾採購統計</h1>
       <span class="who">${me}</span>
       <button onClick=${load}>重新整理</button>
       <button onClick=${() => sb.auth.signOut()}>登出</button>
     </header>
-    <nav>${T.map(([k, t]) => html`<button key=${k} class=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${t}</button>`)}</nav>
-    <datalist id="cats">${cats.map(o => html`<option key=${o.id} value=${o.name}/>`)}</datalist>
-    <datalist id="specs">${specs.map(o => html`<option key=${o.id} value=${o.name}/>`)}</datalist>
     <main>
       ${err && html`<div class="err" onClick=${() => setErr('')}>${err}（點一下關閉）</div>`}
-      ${loading ? html`<div class="boot">載入中…</div>`
-        : tab === 'fill' ? html`<${Fill} rows=${rows} projOpts=${projOpts} cats=${cats} specs=${specs} cur=${cur} setCur=${setCur} onAdd=${add} onSave=${save} onDel=${del}/>`
-        : tab === 'sum' ? html`<${Sum} rows=${rows} projOpts=${projOpts}/>`
-        : html`<div>
-            <div class="card hint">這兩份清單是大家共用的下拉選項。從清單挑名稱，彙總才不會把同一種資料夾算成兩種。</div>
-            <${OptList} title="用途" kind="category" list=${cats} onAdd=${addOpt} onDel=${delOpt}/>
-            <${OptList} title="規格" kind="spec" list=${specs} onAdd=${addOpt} onDel=${delOpt}/>
-          </div>`}
+      ${loading ? html`<div class="boot">載入中…</div>` : html`<div>
+        <div class="card">
+          <div class="hero"><div class="big">${fmt(total)}</div><div class="l">個資料夾　${filled}／${list.length} 個工程已填</div></div>
+          <div class="row mt10 noprint">
+            <button class="b pri" onClick=${xlsx}>匯出 Excel</button>
+            <button class="b" onClick=${addProject}>＋ 其他工程</button>
+          </div>
+          <div class="hint mt10">每個工程填一個數量就好。填完離開欄位自動存檔，同事那邊即時看到；清空數字代表這個工程還沒填。</div>
+        </div>
+        <div class="card"><table>
+          <thead><tr><th>工程</th><th class="n">數量</th><th class="hd">填報人</th><th class="hd">更新</th></tr></thead>
+          <tbody>
+            ${list.map(p => html`<${Line} key=${p.name} p=${p} onSave=${save}/>`)}
+            <tr class="tot"><td>合計</td><td class="n">${fmt(total)}</td><td class="hd"></td><td class="hd"></td></tr>
+          </tbody>
+        </table></div>
+      </div>`}
     </main>
   </div>`;
 }
