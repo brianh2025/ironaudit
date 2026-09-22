@@ -35,6 +35,20 @@
 ## 資料保存
 資料存在瀏覽器（IndexedDB）。換電腦或同事共用：「專案設定／匯出」下載 JSON 備份放共用雲端硬碟，對方「還原／匯入備份」。
 
+## 資料夾需求統計（`folders.html`）
+另一支單一檔案網頁，給同事一起統計各專案要用幾個**實體資料夾**（放紙本的卷宗夾）。和 `index.html` 不同，資料存在共用的 Supabase（RT-Pmis-Supervision），大家看到同一份。
+
+| 分頁 | 內容 |
+|---|---|
+| 填報 | 選工程後逐列填「用途／規格／數量／備註」；用途與規格可從共用清單挑，也可以直接打字。離開欄位就存檔，同時記下填報人與時間 |
+| 彙總 | 資料夾總數、工程數、明細筆數、填報人數；工程 × 規格交叉表、各規格合計（採購用）、各用途合計；可匯出四分頁 Excel |
+| 設定 | 維護共用的「用途」與「規格」清單。從清單挑名稱，統計才不會把同一種資料夾算成兩種 |
+
+- **登入**：用 RT-PMIS 的 Supabase 帳號（email／密碼）。資料表都開了 RLS，只有登入者能讀寫。
+- **工程來源**：下拉帶出 `projects` 資料表的既有工程；按「＋ 其他工程」可以自行輸入尚未建檔的案名，不會寫進 `projects`。
+- **即時同步**：同事的新增／修改／刪除會自動出現在畫面上（Supabase Realtime）。若公司網路擋掉 WebSocket，按標題列的「重新整理」一樣拿得到最新資料。
+- **資料表**：`folder_requirements`（project_id, project_name, category, spec, qty, note, filled_by, created_by, created_at, updated_at）、`folder_options`（kind: category／spec, name, sort_order）。
+
 ## 日後併入 RT-PMIS
 程式內 `Store`（list / put / del）是唯一的存取層，換成 Supabase 呼叫即可；專案文件結構：
 `info`、`items[]`（code, seq, name, unit, qty, price, group, kind, inspect）、`schedule[]`（date, cum）、
