@@ -1798,6 +1798,7 @@ function FreqModal({p, update, onClose}) {
 }
 function PrintTab({p, update}) {
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(false);
+  const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
@@ -1811,17 +1812,19 @@ function PrintTab({p, update}) {
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單範本（${(p.formTemplates || []).filter(t => t.tables || t.page).length}）</h2>
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none'}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} 表單範本（${(p.formTemplates || []).filter(t => t.tables || t.page).length}）</h2>
         <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
           try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
           finally { setBusy(false); } }} /></label></div>
-      <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
       <div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NEW_FORM_GROUPS.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
         <button className="b p" onClick=${() => setFq(true)}>依頻率產生空白表單…</button></div>
+      ${tplOpen ? html`<div>
+      <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
       ${(p.formTemplates || []).filter(t => t.tables || t.page).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
         <button className="b" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button>
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
+      </div>` : (p.formTemplates || []).some(t => t.tables || t.page) ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${(p.formTemplates || []).filter(t => t.tables || t.page).map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
     </div>
     ${fq && html`<${FreqModal} p=${p} update=${update} onClose=${n => { setFq(false); if (n) alert(`已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
