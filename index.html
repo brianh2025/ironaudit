@@ -115,7 +115,7 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .tpl{width:100%;table-layout:fixed;border-collapse:collapse}.tpl td{border:1px solid #999;padding:2px 4px;font-size:12px;white-space:pre-wrap;word-break:break-all;vertical-align:middle;height:22px;cursor:pointer}
 .tpl.plain td{border:none}.tpl td.m{background:#e0f2fe}.tpl td.tsel{outline:2px solid #2563eb;outline-offset:-2px}.tplf{color:#2563eb;font-size:11px}
 @media print{.sheet table.tpl td{border:1px solid #000;padding:2px 4px;font-size:11pt;cursor:auto;height:auto}.sheet table.tpl.plain td{border:none}}
-.pdfsheet{position:relative;container-type:inline-size}.pdfsheet img{width:100%;display:block}.pf{position:absolute;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.15;color:#000}
+.pdfsheet{position:relative;container-type:inline-size}@media print{.sheet.pdfsheet{width:min(100%,calc(96vh*var(--r,.7)));margin:0 auto;break-inside:avoid}}.pdfsheet img{width:100%;display:block}.pf{position:absolute;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.15;color:#000}
 .pf.pfe{background:rgba(37,99,235,.18);color:#1d4ed8;cursor:pointer;outline:1px dashed #2563eb;min-height:1.3em;box-sizing:border-box}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
@@ -1701,11 +1701,11 @@ function sheetRows(p, k, r) {
 }
 const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
 function Sheet({p, e}) {
-  const I = p.info, r = e.r, tpl = ((p.formTemplates || []).filter(t => t.tables || t.page)).find(t => t.group === e.g) || (p.formTemplates || []).find(t => (t.tables || t.page) && t.group === e.g.split('－')[0]);
-  if (tpl?.page) { const vals = formVals(p, e.k, r);
-    return html`<div className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl)}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`; }
-  if (tpl) { const vals = formVals(p, e.k, r);
-    return html`<div className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; }
+  const I = p.info, r = e.r, all = (p.formTemplates || []).filter(t => t.tables || t.page), pages = all.filter(t => t.group === e.g), tpls = pages.length ? pages : all.filter(t => t.group === e.g.split('－')[0]);
+  if (tpls.length) { const vals = formVals(p, e.k, r); // 多頁範本：每頁各印一頁，依上傳順序
+    return html`<${React.Fragment}>${tpls.map(tpl => tpl.page
+      ? html`<div key=${tpl.id} className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl), '--r': tpl.page.w / tpl.page.h}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`
+      : html`<div key=${tpl.id} className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`)}</${React.Fragment}>`; }
   return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
     <table><tbody>
       <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
@@ -1835,7 +1835,8 @@ function PrintTab({p, update, only}) {
     </div>
     ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG.filter(([g]) => g !== '查核及團體督導紀錄')} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
-    ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
+    ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const old = (d.formTemplates || []).filter(x => x.tables || x.page), gs = new Set(list.map(t => t.group)); // 編輯單一頁：只換掉那一頁；新上傳：同類別的舊範本整組換成新檔的所有頁（多頁範本每頁都保留，依頁序列印）
+      d.formTemplates = ed.id ? old.map(x => x.id === ed.id ? list[0] : x) : [...old.filter(x => !gs.has(x.group)), ...list]; }); setEd(null); }} />`}
     <div className="card noprint">
       <div className="row" style=${{justifyContent: 'space-between'}}><h2>${only ? only[0].replace(/紀錄表|表單/, '') : '抽查表單'}列印（${all.length}）</h2>
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
