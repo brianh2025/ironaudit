@@ -1129,8 +1129,8 @@ async function exportLinkedExcel(p) {
   downloadBlob(new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), `${p.info.name || '專案'}_整合連動版_${todayISO().replace(/-/g, '')}.xlsx`);
 }
 
-async function exportAuditExcel(p, A) {
-  const wb = new ExcelJS.Workbook(), s = wb.addWorksheet('每週稽核');
+function auditSheet(wb, p, A, name) {
+  const s = wb.addWorksheet(name);
   s.addRow([`${p.info.name}　每週查驗稽核（${roc(A.monday)}～${roc(A.end)}）`]); s.getCell('A1').font = {...FONT, size: 14, bold: true};
   s.addRow([]); s.addRow(['代碼', '工項', '單位', '本週施工日', '本週數量', '查驗表單號', '未查驗日', '稽核結果']);
   A.rows.forEach(r => s.addRow([r.it.code, r.it.name, r.it.unit, r.work.map(roc).join('、'), r.qty, r.nos.join('、'), r.missDays.map(roc).join('、'), {ok: '已查驗', part: '部分未查驗', none: '未查驗'}[r.status]]));
@@ -1145,7 +1145,24 @@ async function exportAuditExcel(p, A) {
   s.addRow([]); s.addRow(['本週表單數',...Object.entries(A.forms).map(([k, v]) => `${k} ${v} 件`)]);
   [8, 46, 6, 30, 10, 24, 24, 12].forEach((w, i) => s.getColumn(i + 1).width = w);
   s.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; }));
+}
+async function exportAuditExcel(p, A) {
+  const wb = new ExcelJS.Workbook(); auditSheet(wb, p, A, '每週稽核');
   downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_週稽核_${A.monday}.xlsx`);
+}
+/* 匯出全部週次：從第一筆施工日誌所在週到最後一筆日誌所在週，第一個分頁是各週彙總，之後每週一個分頁（內容同單週匯出） */
+async function exportAuditAll(p) {
+  const ds = Object.keys(p.logs).sort(); if (!ds.length) return alert('還沒有施工日誌，沒有可匯出的週次');
+  const weeks = []; for (let m = mondayOf(ds[0]); m <= mondayOf(ds[ds.length - 1]); m = addDays(m, 7)) weeks.push(auditWeek(p, m));
+  const wb = new ExcelJS.Workbook(), s = wb.addWorksheet('各週彙總');
+  s.addRow([`${p.info.name}　每週查驗稽核彙總（${roc(weeks[0].monday)}～${roc(weeks[weeks.length - 1].end)}，共 ${weeks.length} 週）`]); s.getCell('A1').font = {...FONT, size: 14, bold: true}; s.addRow([]);
+  s.addRow(['週次起', '週次迄', '需查驗工項', '已查驗', '部分未查驗', '未查驗', '試驗報告未回填', '進場材料未查驗', '記事載明查驗未建單', '有數量未載明施工']);
+  const cnt = (A, k) => A.rows.filter(r => r.status === k).length;
+  weeks.forEach(A => s.addRow([roc(A.monday), roc(A.end), A.rows.length, cnt(A, 'ok'), cnt(A, 'part'), cnt(A, 'none'), A.pendingTests.length, A.noEntry.length, A.claims.length, A.noWork.length]));
+  [14, 14, 11, 9, 11, 9, 14, 14, 18, 16].forEach((w, i) => s.getColumn(i + 1).width = w);
+  s.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; }));
+  weeks.forEach(A => auditSheet(wb, p, A, roc(A.monday)));
+  downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_週稽核_全部_${todayISO().replace(/-/g, '')}.xlsx`);
 }
 /* ================= 共用元件 ================= */
 function Field({f, rec, set, p}) {
@@ -2069,7 +2086,8 @@ function AuditTab({p, C, quick}) {
         <input type="date" value=${mon} onChange=${e => e.target.value && setMon(mondayOf(e.target.value))} />
         <button className="b" onClick=${() => setMon(addDays(mon, 7))}>下週 ▶</button>
         <b>${roc(A.monday)}（一）～ ${roc(A.end)}（日）</b></div>
-      <button className="b" onClick=${() => exportAuditExcel(p, A)}>匯出稽核表 Excel</button></div>
+      <div className="row"><button className="b" onClick=${() => exportAuditExcel(p, A)}>匯出本週稽核表 Excel</button>
+        <button className="b p" title="從第一筆施工日誌所在週到最後一週，每週一個分頁，另附各週彙總" onClick=${() => exportAuditAll(p).catch(e => alert('匯出失敗：' + e.message))}>匯出全部週次</button></div></div>
       <div className="kpis" style=${{marginTop: '10px'}}>
         <div className="kpi"><div className="l">本週施工之需查驗工項</div><div className="v">${A.rows.length}</div></div>
         <div className="kpi"><div className="l">已查驗</div><div className="v ok" style=${{background: 'none'}}>${cnt('ok')}</div></div>
