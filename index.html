@@ -1806,7 +1806,7 @@ function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
-  const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
+  const [sel, setSel] = useState(() => new Set()), [shut, setShut] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
       .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
@@ -1816,6 +1816,9 @@ function PrintTab({p, update, only}) {
     const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
     return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
+  const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `民國 ${+k.slice(0, 4) - 1911} 年 ${+k.slice(5)} 月` : '未填日期', mk = (g, k) => g + '|' + k;
+  const allMonths = groups.flatMap(({g, list}) => [...new Set(list.map(e => ym(e.r.date)))].map(k => mk(g, k)));
+  const togShut = keys => setShut(s => { const n = new Set(s); const close = keys.some(k => !n.has(k)); keys.forEach(k => close ? n.add(k) : n.delete(k)); return n; });
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
   const mark = (list, on) => { if (!list.length) return; if (!on && !confirm(`取消 ${list.length} 張表單的勾稽？取消後即可再次列印。`)) return;
     update(d => { for (const e of list) { const r = d[e.k].find(x => x.id === e.r.id); if (r) { r.checked = on; r.checkedAt = on ? todayISO() : ''; } } }); if (on) setSel(s => { const n = new Set(s); list.forEach(e => n.delete(e.r.id)); return n; }); };
@@ -1845,6 +1848,7 @@ function PrintTab({p, update, only}) {
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
           <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
           <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
+          <button className="b" onClick=${() => togShut(allMonths)} title="依月份收合或展開所有清單">${allMonths.length && allMonths.every(k => shut.has(k)) ? '全部展開' : '全部收合'}</button>
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
@@ -1853,10 +1857,14 @@ function PrintTab({p, update, only}) {
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
           <h3><label><input type="checkbox" disabled=${!ok2.length} checked=${!!ok2.length && on === ok2.length} ref=${el => el && (el.indeterminate = on > 0 && on < ok2.length)} onChange=${ev => tog(ok2.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${ok2.length}${ok2.length < list.length ? `，已勾稽 ${list.length - ok2.length}` : ''}）</label></h3>
           <div className="tw"><table><thead><tr><th style=${{width: '1%'}}>列印</th><th style=${{width: '1%'}}>勾稽</th><th>日期</th><th>表單號</th><th>內容</th></tr></thead><tbody>
-            ${list.map(e => html`<tr key=${e.r.id} style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
+            ${list.flatMap((e, i) => { const k = ym(e.r.date), first = i === 0 || ym(list[i - 1].r.date) !== k, key = mk(g, k), closed = shut.has(key), out = [];
+              if (first) { const ms = list.filter(x => ym(x.r.date) === k), pk = ms.filter(x => sel.has(x.r.id) && !x.r.checked).length;
+                out.push(html`<tr key=${'m' + key} style=${{cursor: 'pointer', background: 'var(--bg)'}} onClick=${() => togShut([key])}><td colSpan="5"><b>${closed ? '▸' : '▾'} ${ymLabel(k)}</b>（${ms.length} 張${pk ? `，已選 ${pk}` : ''}${ms.some(x => x.r.checked) ? `，已勾稽 ${ms.filter(x => x.r.checked).length}` : ''}）</td></tr>`); }
+              if (!closed) out.push(html`<tr key=${e.r.id} style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
               <td><input type="checkbox" disabled=${!!e.r.checked} title=${e.r.checked ? '已勾稽，不能列印' : ''} checked=${!e.r.checked && sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
               <td><input type="checkbox" title="勾稽（核對完成後不能再列印）" checked=${!!e.r.checked} onClick=${ev => ev.stopPropagation()} onChange=${ev => mark([e], ev.target.checked)} /></td>
-              <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td></tr>`)}
+              <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td></tr>`);
+              return out; })}
           </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
     </div>
     <div className="psheets">${picked.map(e => html`<${Sheet} key=${e.r.id} p=${p} e=${e} />`)}</div></div>`;
