@@ -737,7 +737,7 @@ function classifyLine(raw, date) {
   const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
-  if (/專任工程人員.*(督察|督導)|技師.*(督導|督察)/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
+  if (/技師.*(督導|督察)/.test(t) && !/廠商|營造|承攬|承包|專任工程人員/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}}; // 只收監造技師督導；廠商（營造廠）的技師督察、專任工程人員督導是營造廠自己的作業，不是監造的技師督導紀錄
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
   if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
@@ -1727,8 +1727,78 @@ function Sheet({p, e}) {
     </tbody></table>
     <div className="sg">${SIGNS[e.k].map(s => html`<div key=${s}>${s}：</div>`)}</div></div>`;
 }
+/* 新增表單：選類別 → 填日期與內容（可預填）→ 自動編號 → 儲存並列印（技師督導、查核、職安衛、環保、交維、防汛） */
+const NEW_FORM_GROUPS = [['技師督導紀錄表', 'supervisions', '技師督導'], ['查核及團體督導紀錄', 'supervisions', '查核'], ['職安衛表單', 'forms', '職安衛'], ['環保表單', 'forms', '環保'], ['交維表單', 'forms', '交維'], ['防汛表單', 'forms', '防汛']];
+function NewFormModal({p, update, group, onClose, onSaved}) {
+  const [, k, kind] = NEW_FORM_GROUPS.find(([g]) => g === group), def = p.formDefaults?.[group] || {};
+  const [f, setF] = useState(() => ({date: todayISO(), kind, person: def.person || '', score: '', content: def.content || '', defects: 0, fixDue: '', note: def.note || '', title: def.title || group.replace('表單', '') + '檢查表', result: ''}));
+  const [remember, setRemember] = useState(true), set = (key, v) => setF(x => ({...x, [key]: v}));
+  const draft = () => k === 'supervisions' ? {id: uid(), date: f.date, kind: f.kind, person: f.person, items: [], content: f.content, score: f.score, defects: +f.defects || 0, fixDue: f.fixDue, fixDone: '', note: f.note}
+    : {id: uid(), date: f.date, cat: kind, title: f.title, result: f.result, note: f.note};
+  const preview = nextNo(p, p[k], formPrefix(p, draft(), k)), [no, setNo] = useState(null), shownNo = no ?? preview;
+  const save = print => { const r = {...draft(), no: shownNo};
+    update(d => { d[k].push(r); if (remember) { d.formDefaults = {...(d.formDefaults || {}), [group]: k === 'supervisions' ? {person: f.person, content: f.content, note: f.note} : {title: f.title, note: f.note}}; } });
+    onSaved(r.id, print); };
+  const log = p.logs[f.date], summary = String(log?.summary || '').trim();
+  return html`<${Modal} title=${`新增表單：${group}`} onClose=${onClose}>
+    <div className="grid">
+      <label className="f">日期<input type="date" value=${f.date} onChange=${e => { set('date', e.target.value); setNo(null); }} /></label>
+      <label className="f">表單編號（自動編號，可修改）<input value=${shownNo} onChange=${e => setNo(e.target.value)} /></label>
+      ${group === '查核及團體督導紀錄' && html`<label className="f">類別<select value=${f.kind} onChange=${e => set('kind', e.target.value)}><option>查核</option><option>團體督導</option></select></label>`}
+      ${k === 'supervisions' ? html`
+        <label className="f">${group === '技師督導紀錄表' ? '督導技師' : '查核單位／委員'}<input value=${f.person} onChange=${e => set('person', e.target.value)} /></label>
+        ${group !== '技師督導紀錄表' && html`<label className="f">分數／等級<input value=${f.score} onChange=${e => set('score', e.target.value)} /></label>`}
+        <label className="f wide">${group === '技師督導紀錄表' ? '督導內容' : '查核意見摘要'}（可預填，列印前可修改）<textarea rows="5" value=${f.content} onChange=${e => set('content', e.target.value)} /></label>
+        <label className="f">缺失件數<input type="number" min="0" value=${f.defects} onChange=${e => set('defects', e.target.value)} /></label>
+        <label className="f">改善期限<input type="date" value=${f.fixDue} onChange=${e => set('fixDue', e.target.value)} /></label>`
+      : html`
+        <label className="f wide">表單名稱<input value=${f.title} onChange=${e => set('title', e.target.value)} /></label>
+        <label className="f">檢查結果<select value=${f.result} onChange=${e => set('result', e.target.value)}><option value="">（空白）</option><option>合格</option><option>不合格</option></select></label>`}
+      <label className="f wide">${k === 'supervisions' ? '備註' : '缺失／備註'}<textarea rows="2" value=${f.note} onChange=${e => set('note', e.target.value)} /></label></div>
+    <div className="row" style=${{marginTop: '8px'}}>
+      ${k === 'supervisions' && html`<button className="b" disabled=${!summary} title=${summary ? '' : '當天沒有施工日誌的施工概況'} onClick=${() => set('content', (f.content ? f.content + '\n' : '') + summary)}>帶入當日施工概況</button>`}
+      <label><input type="checkbox" checked=${remember} onChange=${e => setRemember(e.target.checked)} /> 記住此內容，下次新增時預填</label></div>
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b" onClick=${() => save(false)}>儲存</button><button className="b p" onClick=${() => save(true)}>儲存並列印</button></div></${Modal}>`;
+}
+/* 依頻率產生空白表單：技師督導、防汛每月 1 次；職安衛、交維每週 1 次（可調整），從開工日排到完工日（或今天），已有紀錄的期間不重複產生 */
+const FREQ_DEFAULT = {'技師督導紀錄表': ['month', 1], '防汛表單': ['month', 1], '職安衛表單': ['week', 1], '交維表單': ['week', 1]};
+function freqPeriods(startISO, endISO, unit, n) {
+  const out = []; if (!startISO || !endISO || endISO < startISO) return out; n = Math.max(1, +n || 1);
+  if (unit === 'week') { let from = addDays(startISO, -((fromISO(startISO).getDay() + 6) % 7)); // 以週一為週首（與每週稽核一致）
+    while (from <= endISO) { const to = addDays(from, 7 * n - 1); out.push({from, to, date: from < startISO ? startISO : from}); from = addDays(to, 1); } }
+  else { let [y, m] = startISO.split('-').map(Number), from = `${y}-${pad(m)}-01`;
+    while (from <= endISO) { const e = new Date(y, m - 1 + n, 0), to = toISO(e); out.push({from, to, date: from < startISO ? startISO : from}); m += n; y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1; from = `${y}-${pad(m)}-01`; } }
+  return out;
+}
+const freqEnd = (p, upto) => upto === 'today' ? todayISO() : dayInfo(p, p.info.startDate || todayISO()).end;
+const freqRecs = (p, g) => { const [, k, f] = [...PRINT_KINDS, ...[]].find(([x]) => x === g) || []; return k ? p[k].filter(f) : []; };
+function freqPlan(p, g, unit, n, upto) { const ps = freqPeriods(p.info.startDate, freqEnd(p, upto), unit, n), have = freqRecs(p, g);
+  const todo = ps.filter(q => !have.some(r => r.date >= q.from && r.date <= q.to)); return {total: ps.length, todo}; }
+function FreqModal({p, update, onClose}) {
+  const saved = p.formFreq || {}, [upto, setUpto] = useState('end');
+  const [cfg, setCfg] = useState(() => Object.fromEntries(NEW_FORM_GROUPS.map(([g]) => [g, saved[g] || (FREQ_DEFAULT[g] ? {on: true, unit: FREQ_DEFAULT[g][0], n: FREQ_DEFAULT[g][1]} : {on: false, unit: 'month', n: 1})])));
+  const set = (g, k, v) => setCfg(c => ({...c, [g]: {...c[g], [k]: v}}));
+  const plans = Object.fromEntries(NEW_FORM_GROUPS.map(([g]) => [g, freqPlan(p, g, cfg[g].unit, cfg[g].n, upto)])), sum = NEW_FORM_GROUPS.reduce((a, [g]) => a + (cfg[g].on ? plans[g].todo.length : 0), 0);
+  const noStart = !p.info.startDate;
+  const run = () => { update(d => { d.formFreq = cfg;
+    for (const [g, k, kind] of NEW_FORM_GROUPS) { if (!cfg[g].on) continue; const def = d.formDefaults?.[g] || {};
+      for (const q of freqPlan(d, g, cfg[g].unit, cfg[g].n, upto).todo) {
+        const r = k === 'supervisions' ? {id: uid(), date: q.date, kind, person: def.person || '', items: [], content: def.content || '', score: '', defects: 0, fixDue: '', fixDone: '', note: def.note || '', auto: true}
+          : {id: uid(), date: q.date, cat: kind, title: def.title || kind + '檢查表', result: '', note: def.note || '', auto: true};
+        r.no = nextNo(d, d[k], formPrefix(d, r, k)); d[k].push(r); } } }); onClose(sum); };
+  return html`<${Modal} title="依頻率產生空白表單" onClose=${() => onClose(0)}>
+    <div className="mute">從開工日起，依各表單的頻率，為每個期間（週＝週一至週日，月＝日曆月）各產生一張空白表單並自動編號（日期為該期間起日，之後可修改）；該期間已有同類表單者不重複產生。技師督導的督導技師／內容會帶入上次記住的預填內容。</div>
+    ${noStart && html`<div className="msg bad">請先在「設定」填寫開工日期與契約工期。</div>`}
+    <div className="row" style=${{margin: '8px 0'}}><label>產生到 <select value=${upto} onChange=${e => setUpto(e.target.value)}><option value="end">完工日（${p.info.startDate ? roc(freqEnd(p, 'end')) : '—'}）</option><option value="today">今天（${roc(todayISO())}）</option></select></label></div>
+    <div className="tw"><table><thead><tr><th></th><th>表單</th><th>頻率</th><th className="n">期間數</th><th className="n">已涵蓋</th><th className="n">將新增</th></tr></thead><tbody>
+      ${NEW_FORM_GROUPS.map(([g]) => html`<tr key=${g}><td><input type="checkbox" checked=${cfg[g].on} onChange=${e => set(g, 'on', e.target.checked)} /></td><td>${g}</td>
+        <td className="nw">每 <input type="number" min="1" style=${{width: '56px'}} value=${cfg[g].n} onChange=${e => set(g, 'n', e.target.value)} /> <select value=${cfg[g].unit} onChange=${e => set(g, 'unit', e.target.value)}><option value="week">週</option><option value="month">月</option></select> 1 次</td>
+        <td className="n">${plans[g].total}</td><td className="n">${plans[g].total - plans[g].todo.length}</td><td className="n"><b>${cfg[g].on ? plans[g].todo.length : 0}</b></td></tr>`)}</tbody></table></div>
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${noStart || !sum} onClick=${run}>產生 ${sum} 張空白表單</button></div></${Modal}>`;
+}
 function PrintTab({p, update}) {
-  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false);
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(false);
+  const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
@@ -1742,16 +1812,22 @@ function PrintTab({p, update}) {
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單範本（${(p.formTemplates || []).filter(t => t.tables || t.page).length}）</h2>
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none'}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} 表單範本（${(p.formTemplates || []).filter(t => t.tables || t.page).length}）</h2>
         <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
           try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
           finally { setBusy(false); } }} /></label></div>
+      <div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NEW_FORM_GROUPS.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
+        <button className="b p" onClick=${() => setFq(true)}>依頻率產生空白表單…</button></div>
+      ${tplOpen ? html`<div>
       <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
       ${(p.formTemplates || []).filter(t => t.tables || t.page).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
         <button className="b" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button>
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
+      </div>` : (p.formTemplates || []).some(t => t.tables || t.page) ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${(p.formTemplates || []).filter(t => t.tables || t.page).map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
     </div>
+    ${fq && html`<${FreqModal} p=${p} update=${update} onClose=${n => { setFq(false); if (n) alert(`已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
+    ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
     <div className="card noprint">
       <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單列印（${all.length}）</h2>
