@@ -1151,15 +1151,17 @@ async function exportAuditExcel(p, A) {
   downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_週稽核_${A.monday}.xlsx`);
 }
 /* 匯出全部：不分週次，依工項列出整個專案「有施工但查驗日期前後（容許天數內）都沒有查驗紀錄」的日子，並依日期順序預編表單編號
-   （預編＝接在現有編號之後依序排，實際新增時請依日期順序建立才會一致） */
+   （預編＝先補該類別現有編號的空號、用完才接在最大號之後；不改動任何現有編號。實際新增查驗單時，系統自動編號是接在最大號之後，補空號請在新增視窗手動輸入預編號碼） */
 function missingInspections(p) {
   const tol = +p.settings.tolerance || 0, dates = Object.keys(p.logs).sort(), out = [];
   for (const it of inspItemsNeeded(p)) {
     const work = dates.filter(d => (p.logs[d]?.qty?.[it.code] || 0) > 0); if (!work.length) continue;
     const ins = p.inspections.filter(r => (r.items || []).includes(it.code)), miss = work.filter(d => !ins.some(r => r.date && Math.abs(dayDiff(d, r.date)) <= tol));
     out.push({it, work: work.length, miss: miss.map(d => ({date: d, qty: p.logs[d].qty[it.code]}))}); }
-  const virtual = [], flat = out.flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
-  for (const {o, m} of flat) { const draft = {date: m.date, type: '施工查驗', items: [o.it.code], content: o.it.name}; m.no = nextNo(p, [...p.inspections, ...virtual], formPrefix(p, draft, 'inspections')); virtual.push({...draft, no: m.no}); }
+  const used = new Map(), usedSet = pre => { if (!used.has(pre)) { const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$'), st = new Set(); p.inspections.forEach(r => { const k = String(r.no || '').match(re); if (k) st.add(+k[1]); }); used.set(pre, st); } return used.get(pre); };
+  const freeNo = pre => { const st = usedSet(pre); let n = 1; while (st.has(n)) n++; st.add(n); return `${pre}-${pad(n, 3)}`; }; // 先補現有編號的空號，用完才接在最大號之後；現有編號不動
+  const flat = out.flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
+  for (const {o, m} of flat) { const draft = {date: m.date, type: '施工查驗', items: [o.it.code], content: o.it.name}; m.no = freeNo(formPrefix(p, draft, 'inspections')); }
   return out;
 }
 async function exportAuditAll(p) {
