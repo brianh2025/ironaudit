@@ -1818,7 +1818,7 @@ function PrintTab({p, update, only}) {
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none'}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} ${only ? only[0] : '表單'}範本（${tpls.length}）</h2>
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none'}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} ${only ? only[0] : '抽查表單'}範本（${tpls.length}）</h2>
         <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
           try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
@@ -1837,7 +1837,7 @@ function PrintTab({p, update, only}) {
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2>${only ? only[0].replace(/紀錄表|表單/, '') : '表單'}列印（${all.length}）</h2>
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2>${only ? only[0].replace(/紀錄表|表單/, '') : '抽查表單'}列印（${all.length}）</h2>
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
           <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
           <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
@@ -2241,8 +2241,8 @@ function FolderTab() {
 }
 
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'gtech', 'gcheck', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['gtech', '技師督導'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['gcheck', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['查驗', ['insp', 'tests', 'print']], ['督導', ['gtech', 'gcheck']], ['安環', ['gsec', 'genv', 'gflood', 'gtraf']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['print', '抽查表單'], ['gtech', '技師督導'], ['gcheck', '查核／團體督導'], ['gsec', '職安衛'], ['genv', '環保'], ['gflood', '防汛'], ['gtraf', '交維'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
