@@ -114,6 +114,8 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .tpl{width:100%;table-layout:fixed;border-collapse:collapse}.tpl td{border:1px solid #999;padding:2px 4px;font-size:12px;white-space:pre-wrap;word-break:break-all;vertical-align:middle;height:22px;cursor:pointer}
 .tpl.plain td{border:none}.tpl td.m{background:#e0f2fe}.tpl td.tsel{outline:2px solid #2563eb;outline-offset:-2px}.tplf{color:#2563eb;font-size:11px}
 @media print{.sheet table.tpl td{border:1px solid #000;padding:2px 4px;font-size:11pt;cursor:auto;height:auto}.sheet table.tpl.plain td{border:none}}
+.pdfsheet{position:relative;container-type:inline-size}.pdfsheet img{width:100%;display:block}.pf{position:absolute;white-space:pre-wrap;line-height:1.1;color:#000}
+.pf.pfe{background:rgba(37,99,235,.18);color:#1d4ed8;cursor:pointer;outline:1px solid #2563eb}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -869,13 +871,18 @@ function formPrefix(p, r, listKey) {
   if (listKey === 'supervisions') return base(r.kind === '技師督導' ? '技師督導' : '查核');
   const type = r.type || '施工查驗', txt = [r.content, r.testName, r.location, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ');
   if (type === '材料查驗') return base(type) + (/送審/.test(txt) ? 'Y' : 'Z');
-  const hit = SITE_CODE.find(([re]) => re.test(txt));
-  return base(type) + (hit ? hit[1] : '');
+  return base(type) + siteLetter(p, r);
 }
+/* 施工查驗的工程類別代碼（A 測量、D 鋼筋、E 模板、F 混凝土…），依內容／工項判斷 */
+const siteLetter = (p, r) => SITE_CODE.find(([re]) => re.test([r.content, r.testName, r.location, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ')))?.[1] || '';
+const SITE_NAME = {A: '測量', B: '開挖', C: '回填', D: '鋼筋', E: '模板', F: '混凝土', G: '臨時擋土設施', H: '預力混凝土基樁', I: '臨時擋抽移排水', J: '瀝青混凝土鋪面', K: 'CLSM', L: '植筋', M: '混凝土塊', N: '坡面工'};
+/* 範本類別名稱：施工抽查紀錄表可再分「－鋼筋」「－模板」等工程類別，沒有個別範本時沿用「施工抽查紀錄表」 */
+const SITE_KEYS = [['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
+const kindOf = g => PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x + '－'))?.[1];
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
   let ch = false; p.settings.prefix = p.settings.prefix || {};
-  if (p.formTemplates?.some(t => !t.tables)) { p.formTemplates = p.formTemplates.filter(t => t.tables); ch = true; }
+  if (p.formTemplates?.some(t => !t.tables && !t.page)) { p.formTemplates = p.formTemplates.filter(t => t.tables || t.page); ch = true; }
   for (const k in DEFAULT_PREFIX) { const v = p.settings.prefix[k]; if (v === undefined || OLD_PREFIX[k].includes(v)) { p.settings.prefix[k] = DEFAULT_PREFIX[k]; ch = true; } }
   const old = /^(施查|材查|查核|安|環|交|技督|汛|N|E[1-5](-[1-5X])?)-\d+$/;
   for (const k of ['inspections', 'supervisions', 'forms']) {
@@ -1427,7 +1434,8 @@ function FormTab(props) {
 /* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
 const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
-const formGroupOf = t => FORM_GROUPS.find(([re]) => re.test(t))?.[1] || '';
+const formGroupOf = t => { const g = FORM_GROUPS.find(([re]) => re.test(t))?.[1] || ''; if (g !== '施工抽查紀錄表') return g; const k = SITE_KEYS.find(([, kw]) => t.includes(kw)); return k ? `${g}－${k[0]}` : g; };
+const GROUP_OPTIONS = () => PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]);
 const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
 const FORM_FIELDS = {
   inspections: ['查驗類別', '查驗工項', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
@@ -1436,6 +1444,7 @@ const FORM_FIELDS = {
 const FORM_ALIAS = {工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
   表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
   查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
+const formLabels = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
 function formVals(p, k, r) {
   const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''};
   if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
@@ -1447,7 +1456,7 @@ function formVals(p, k, r) {
 /* 依儲存格文字（欄位名稱）自動建議：標籤右側的空白格，否則其下方的空白格 */
 function suggestMap(tables, fields) {
   const map = {}, used = new Set();
-  const labelOf = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
+  const labelOf = formLabels;
   tables.forEach((t, ti) => t.rows.forEach((row, ri) => row.forEach((c, ci) => {
     const n = norm(c.t); if (!n) return; const f = fields.find(f => !Object.values(map).includes(f) && labelOf(f).includes(n)); if (!f) return;
     const right = row[ci + 1], below = t.rows[ri + (c.rs || 1)]?.find(x => x.c <= c.c && c.c < x.c + x.cs);
@@ -1487,21 +1496,39 @@ function docTable(el) {
   return {widths: Array(nc || 1).fill(100), heights: [], rows};
 }
 /* 檔案 → 候選範本（Excel 每個工作表一份；Word 整份文件一份） */
+/* PDF 文字型：依標籤文字（欄位名稱）建議填入位置＝標籤右側 */
+function suggestPdf(lines, base, fields) {
+  const placed = [], used = new Set(), hs = [];
+  lines.forEach(l => l.c.forEach(c => { const f = fields.find(f => !used.has(f) && formLabels(f).includes(norm(c.t))); if (!f) return; used.add(f); hs.push(c.h);
+    placed.push({f, x: Math.min(0.95, (c.x1 + 6) / base.w), y: Math.max(0, (base.h - c.y - c.h) / base.h)}); }));
+  const med = hs.sort((a, b) => a - b)[hs.length >> 1];
+  return {fields: placed, size: med ? Math.min(2.4, Math.max(1.2, Math.round(med / base.w * 1000) / 10)) : 1.6};
+}
+/* 檔案 → 候選範本（Excel 每個工作表、Word 整份文件、PDF 每頁各一份） */
 async function parseTemplateFile(file) {
-  const cands = [];
-  if (/\.docx$/i.test(file.name)) {
+  const cands = [], bare = file.name.replace(/\.[^.]+$/, '');
+  if (/\.pdf$/i.test(file.name)) {
+    const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+    for (let pn = 1; pn <= Math.min(doc.numPages, 10); pn++) {
+      const page = await doc.getPage(pn), base = page.getViewport({scale: 1}), vp = page.getViewport({scale: 1400 / base.width});
+      const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+      await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
+      cands.push({kind: 'pdf', name: doc.numPages > 1 ? `${bare} 第${pn}頁` : bare, page: {img: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height}, fields: [], size: 1.6,
+        lines: page.rotate % 360 === 0 ? await pdfPageLines(page) : [], base: {w: base.width, h: base.height}});
+    }
+  } else if (/\.docx$/i.test(file.name)) {
     const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html'), tables = [];
     for (const el of dom.body.children) {
       if (el.tagName === 'TABLE') tables.push(docTable(el));
       else { const t = el.textContent.trim(); if (t) tables.push({plain: true, widths: [100], heights: [], rows: [[{c: 0, t, cs: 1, rs: 1}]]}); } }
     const title = tables.find(t => t.plain)?.rows[0][0].t || '';
-    if (tables.some(t => !t.plain)) cands.push({name: title && title.length <= 40 ? title : file.name.replace(/\.docx$/i, ''), tables});
+    if (tables.some(t => !t.plain)) cands.push({kind: 'grid', name: title && title.length <= 40 ? title : bare, tables});
   } else {
     const wb = await readWB(file);
-    for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({name: sn, tables: [t]}); }
+    for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({kind: 'grid', name: sn, tables: [t]}); }
   }
-  return cands.map(c => { const group = formGroupOf(file.name + c.name), k = PRINT_KINDS.find(([g]) => g === group)?.[1];
-    return {...c, group, map: group ? suggestMap(c.tables, [...FORM_BASE, ...FORM_FIELDS[k]]) : {}}; });
+  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, ...rest} = c;
+    return {...rest, id: uid(), file: file.name, group, ...(c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}})}; });
 }
 /* 範本表格：editor 模式顯示對應標籤；列印模式（vals）填入資料 */
 function TplTable({t, ti, map, vals, sel, onPick}) {
@@ -1510,25 +1537,45 @@ function TplTable({t, ti, map, vals, sel, onPick}) {
     ${t.rows.map((r, ri) => html`<tr key=${ri} style=${t.heights[ri] ? {height: t.heights[ri] + 'px'} : null}>${r.map((c, ci) => { const key = `${ti}:${ri}:${ci}`, f = map[key];
       return html`<td key=${ci} colSpan=${c.cs} rowSpan=${c.rs} className=${(f && !vals ? 'm ' : '') + (sel === key ? 'tsel' : '')} onClick=${onPick ? () => onPick(key) : undefined}>${vals ? (f ? vals[f] ?? '' : c.t) : c.t}${!vals && f ? html`<span className="tplf">{${f}}</span>` : ''}</td>`; })}</tr>`)}</tbody></table>`;
 }
+const rotateImg = async ({img, w, h}) => { const im = new Image(); im.src = img; await im.decode(); const cv = document.createElement('canvas'); cv.width = h; cv.height = w; const g = cv.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(im, 0, 0); return {img: cv.toDataURL('image/jpeg', 0.82), w: h, h: w}; };
+function PdfFields({c, fields, patch, edit}) {
+  const [cur, setCur] = useState(''), half = c.size / 100 * c.page.w / c.page.h / 2;
+  return html`<div>
+    <div className="row" style=${{margin: '6px 0'}}>
+      <label>要放置的欄位 <select value=${cur} onChange=${e => setCur(e.target.value)}><option value="">（請選擇）</option>${fields.map(f => html`<option key=${f} value=${f}>${c.fields.some(x => x.f === f) ? '✓ ' : ''}${f}</option>`)}</select></label>
+      <label>字級 <input type="number" step="0.1" min="0.8" max="4" style=${{width: '70px'}} value=${c.size} onChange=${e => patch(x => ({...x, size: +e.target.value || 1.6}))} /></label>
+      <button className="b" onClick=${async () => { const page = await rotateImg(c.page); patch(x => ({...x, page, fields: []})); }}>旋轉 90°（會清除已放置欄位）</button>
+      <button className="b" onClick=${() => patch(x => ({...x, fields: []}))}>清除全部</button></div>
+    <div className="mute">選好欄位後，在下方頁面上點一下放置位置（文字會以該點為中央左側起排；同一欄位再點一次＝移動位置）；點藍色標籤可移除。已放置 ${c.fields.length} 個。</div>
+    <div style=${{maxHeight: '60vh', overflow: 'auto', background: '#eee', marginTop: '6px'}}>
+      <div style=${{position: 'relative', containerType: 'inline-size', cursor: cur ? 'crosshair' : 'default'}} onClick=${e => { if (!cur) return; const r = e.currentTarget.getBoundingClientRect();
+          const x = (e.clientX - r.left) / r.width, y = Math.max(0, (e.clientY - r.top) / r.height - half); patch(c0 => ({...c0, fields: [...c0.fields.filter(q => q.f !== cur), {f: cur, x, y}]})); }}>
+        <img src=${c.page.img} style=${{width: '100%', display: 'block'}} draggable="false" />
+        ${c.fields.map(q => html`<div key=${q.f} title="點擊移除" className="pf pfe" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', fontSize: c.size + 'cqw'}}
+          onClick=${e => { e.stopPropagation(); patch(c0 => ({...c0, fields: c0.fields.filter(z => z.f !== q.f)})); }}>{${q.f}}</div>`)}</div></div></div>`;
+}
 function TplEditor({init, onSave, onClose}) {
-  const [cands, setCands] = useState(init.cands), [ci, setCi] = useState(0), [group, setGroup] = useState(init.group || cands[0]?.group || ''), [sel, setSel] = useState(null);
-  const cand = cands[ci], k = PRINT_KINDS.find(([g]) => g === group)?.[1], fields = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : FORM_BASE;
-  const patch = fn => setCands(cands.map((c, i) => i === ci ? fn(c) : c));
+  const [cands, setCands] = useState(init.cands), [ci, setCi] = useState(0), [sel, setSel] = useState(null);
+  const cand = cands[ci], k = kindOf(cand.group), fields = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : FORM_BASE;
+  const patch = fn => setCands(cs => cs.map((c, i) => i === ci ? fn(c) : c));
   const setField = (key, f) => patch(c => ({...c, map: Object.fromEntries(Object.entries({...c.map, [key]: f}).filter(([, v]) => v))}));
   const [st, sr, sc] = sel ? sel.split(':').map(Number) : [];
-  return html`<${Modal} title=${init.id ? '編輯表單範本對應' : '表單範本對應'} onClose=${onClose}>
-    <div className="mute">在表格中點選要填入資料的儲存格，再選擇對應的系統欄位（藍色＝已對應）。已依欄位名稱自動建議，請檢查並修正。</div>
+  const ready = cands.filter(c => c.group), pdf = cand.kind === 'pdf';
+  const regroup = g => { const kk = kindOf(g), fl = kk ? [...FORM_BASE, ...FORM_FIELDS[kk]] : [];
+    patch(c => ({...c, group: g, ...(!pdf && kk && !Object.keys(c.map || {}).length ? {map: suggestMap(c.tables, fl)} : {})})); };
+  return html`<${Modal} title=${init.id ? '編輯表單範本' : `表單範本對應（共 ${cands.length} 份）`} onClose=${onClose}>
+    <div className="mute">${pdf ? 'PDF 範本：選好欄位後在頁面上點選要填入的位置。' : '在表格中點選要填入資料的儲存格，再選擇對應的系統欄位（藍色＝已對應）。'}已依欄位名稱自動建議，請檢查並修正；未指定類別的範本不會儲存。</div>
     <div className="row" style=${{margin: '8px 0'}}>
-      <label>所屬類別 <select value=${group} onChange=${e => { const g = e.target.value, kk = PRINT_KINDS.find(([x]) => x === g)?.[1]; setGroup(g); if (kk && !Object.keys(cand.map).length) patch(c => ({...c, map: suggestMap(c.tables, [...FORM_BASE, ...FORM_FIELDS[kk]])})); }}>
-        <option value="">（請選擇）</option>${PRINT_KINDS.map(([g]) => html`<option key=${g}>${g}</option>`)}</select></label>
-      ${cands.length > 1 && html`<label>工作表 <select value=${ci} onChange=${e => { setCi(+e.target.value); setSel(null); }}>${cands.map((c, i) => html`<option key=${i} value=${i}>${c.name}</option>`)}</select></label>`}
-      <button className="b" disabled=${!k} onClick=${() => patch(c => ({...c, map: suggestMap(c.tables, fields)}))}>重新自動建議</button>
-      <button className="b" onClick=${() => patch(c => ({...c, map: {}}))}>清除對應</button></div>
-    ${sel && html`<div className="msg warn row">已選儲存格：「${cand.tables[st].rows[sr][sc].t || '（空白）'}」 對應欄位：
-      <select value=${cand.map[sel] || ''} onChange=${e => setField(sel, e.target.value)}><option value="">（不對應）</option>${fields.map(f => html`<option key=${f}>${f}</option>`)}</select></div>`}
-    <div style=${{maxHeight: '55vh', overflow: 'auto', background: '#fff'}}>${cand.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${cand.map} sel=${sel} onPick=${setSel} />`)}</div>
-    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${!group}
-      onClick=${() => onSave({id: init.id || uid(), group, name: cand.name, file: init.file, tables: cand.tables, map: cand.map})}>儲存範本</button></div></${Modal}>`;
+      ${cands.length > 1 && html`<label>範本 <select value=${ci} onChange=${e => { setCi(+e.target.value); setSel(null); }}>${cands.map((c, i) => html`<option key=${c.id} value=${i}>${i + 1}. ${c.name}（${c.group || '未指定'}）</option>`)}</select></label>`}
+      <label>所屬類別 <select value=${cand.group} onChange=${e => regroup(e.target.value)}><option value="">（請選擇）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></label>
+      ${!pdf && html`<button className="b" disabled=${!k} onClick=${() => patch(c => ({...c, map: suggestMap(c.tables, fields)}))}>重新自動建議</button>
+        <button className="b" onClick=${() => patch(c => ({...c, map: {}}))}>清除對應</button>`}</div>
+    ${pdf ? html`<${PdfFields} key=${cand.id} c=${cand} fields=${fields} patch=${patch} />` : html`
+      ${sel && cand.tables[st]?.rows[sr]?.[sc] && html`<div className="msg warn row">已選儲存格：「${cand.tables[st].rows[sr][sc].t || '（空白）'}」 對應欄位：
+        <select value=${cand.map[sel] || ''} onChange=${e => setField(sel, e.target.value)}><option value="">（不對應）</option>${fields.map(f => html`<option key=${f}>${f}</option>`)}</select></div>`}
+      <div style=${{maxHeight: '55vh', overflow: 'auto', background: '#fff'}}>${cand.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${cand.map} sel=${sel} onPick=${setSel} />`)}</div>`}
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${!ready.length}
+      onClick=${() => onSave(ready)}>儲存範本（${ready.length} 份）</button></div></${Modal}>`;
 }
 
 /* ================= 表單列印：依表單類別列出專案所有查驗／督導／安環表單，勾選後逐張列印 ================= */
@@ -1550,7 +1597,9 @@ function sheetRows(p, k, r) {
 }
 const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
 function Sheet({p, e}) {
-  const I = p.info, r = e.r, tpl = (p.formTemplates || []).find(t => t.tables && t.group === e.g);
+  const I = p.info, r = e.r, tpl = ((p.formTemplates || []).filter(t => t.tables || t.page)).find(t => t.group === e.g) || (p.formTemplates || []).find(t => (t.tables || t.page) && t.group === e.g.split('－')[0]);
+  if (tpl?.page) { const vals = formVals(p, e.k, r);
+    return html`<div className="sheet pdfsheet"><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`; }
   if (tpl) { const vals = formVals(p, e.k, r);
     return html`<div className="sheet">${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; }
   return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
@@ -1566,24 +1615,29 @@ function Sheet({p, e}) {
 function PrintTab({p, update}) {
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false);
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
-  const groups = PRINT_KINDS.map(([g, k, f]) => ({g, list: p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
-    .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
-    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || '')).map(r => ({g, k, r}))})).filter(x => x.list.length);
+  const groups = PRINT_KINDS.flatMap(([g, k, f]) => {
+    const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
+      .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
+    if (g !== '施工抽查紀錄表') return list.length ? [{g, list: list.map(r => ({g, k, r}))}] : [];
+    const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
+    return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
   const all = groups.flatMap(x => x.list), picked = all.filter(e => sel.has(e.r.id));
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單範本（${(p.formTemplates || []).filter(t => t.tables).length}）</h2>
-        <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden accept=".xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
-          try { const cands = await parseTemplateFile(f); if (!cands.length) alert('檔案中找不到可用的表格（支援 Excel、Word；PDF 無法對應欄位）'); else setEd({cands, file: f.name}); }
-          catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label></div>
-      <div className="mute">上傳實際使用的空白表單（Excel 或 Word），在表格上點選儲存格、指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；沒有對應的儲存格維持範本原樣。每個類別保留一份範本。</div>
-      ${(p.formTemplates || []).filter(t => t.tables).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（來源：${t.file}，已對應 ${Object.keys(t.map).length} 欄）
-        <button className="b" onClick=${() => setEd({id: t.id, group: t.group, file: t.file, cands: [{name: t.name, tables: t.tables, map: t.map}]})}>編輯對應</button>
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單範本（${(p.formTemplates || []).filter(t => t.tables || t.page).length}）</h2>
+        <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
+          try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
+            if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
+          finally { setBusy(false); } }} /></label></div>
+      <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
+      ${(p.formTemplates || []).filter(t => t.tables || t.page).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
+        <button className="b" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button>
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
     </div>
-    ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${t => { update(d => { d.formTemplates = [...(d.formTemplates || []).filter(x => x.tables && x.group !== t.group && x.id !== t.id), t]; }); setEd(null); }} />`}
+    ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
     <div className="card noprint">
       <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單列印（${all.length}）</h2>
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
