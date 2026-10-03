@@ -140,7 +140,8 @@ const dayDiff = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 864e5);
 const todayISO = () => toISO(new Date());
 const WK = '日一二三四五六';
 const wkday = s => WK[fromISO(s).getDay()];
-const roc = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+y - 1911}/${m}/${d}`; };
+const roc = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+y - 1911}年${+m}月${+d}日`; };
+const rocMD = s => { if (!s) return ''; const [, m, d] = s.split('-'); return `${+m}月${+d}日`; };
 const mondayOf = s => { const d = fromISO(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return toISO(d); };
 const num = v => { if (v == null || v === '') return NaN; if (typeof v === 'number') return v; const t = String(v).replace(/[,，\s%]/g, ''); return t === '' ? NaN : Number(t); };
 const isNum = v => Number.isFinite(num(v));
@@ -644,12 +645,15 @@ async function parsePdfSchedule(file, startDate) {
 }
 /* 廠商活頁簿：從「日資料庫」二～五項記事欄與「輸入1」（取樣試驗／重要事項）的文字行，依關鍵字辨識填報 */
 /* 位置：樁號（0k+500-0k+700）＋結構部位（擋浪牆基礎大底、坡面工基礎擋土牆…）＋單雙號；部位取樁號之後、施工項目字樣之前 */
-const STA_RE = /\d+\s*[kK]\s*\+\s*\d+(?:\s*[-~～－–至到]\s*\d+\s*[kK]\s*\+\s*\d+)?/;
+const STA_RE = /(?:\d+\s*[kK]|[kK]\s*\d+)\s*\+\s*\d+(?:\s*[-~至到]\s*(?:\d+\s*[kK]|[kK]\s*\d+)\s*\+\s*\d+)?/; // 1K+450、K1+450、1K+450~1K+500
+const STA_PLAIN = /[（(][^）)]*?(\d+\s*\+\s*\d{2,3}(?:\s*[-~至到]\s*\d+\s*\+\s*\d{2,3})?)/; // 括弧內沒有 K 的里程，例如 (0+450~0+500)
+const normSta = t => String(t).replace(/＋/g, '+').replace(/[～〜]/g, '~').replace(/[－–—]/g, '-').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
 const GENERIC_RE = /告示牌|職安|安衛|安全衛生|救生|警示|拒馬|護欄|交通錐|滅火|照明|廁所|工務所|工地標誌|縮時攝影|交維|交通維持|環保|環境/;
 function parseLocation(t) {
-  t = String(t); const m = t.match(STA_RE); if (!m) return GENERIC_RE.test(t) ? '全工區' : ''; // 通泛項目（告示牌、職安設備、救生設備…）沒有樁號，位置為全工區
-  const rest = t.slice(m.index + m[0].length).replace(/^[\s、，,:：]+/, ''), cut = rest.search(/模板|鋼筋|預力|混凝土|開挖|回填|放樣|測量|澆置|查驗|取樣|試體|尺寸|進場|廠驗|打設|組立|綁紮|伸縮縫|止水|自主檢查|塊石|拋石|[（(]/);
-  const part = (cut < 0 ? rest : rest.slice(0, cut)).replace(/[\s、，,]+$/, ''), side = (t.match(/[（(](單號|雙號)[）)]/) || [])[1];
+  t = normSta(t); const m = t.match(STA_RE) || (q => q && {index: q.index + q[0].indexOf(q[1]), 0: q[1]})(t.match(STA_PLAIN));
+  if (!m) return GENERIC_RE.test(t) ? '全工區' : ''; // 通泛項目（告示牌、職安設備、救生設備…）沒有樁號，位置為全工區
+  const rest = t.slice(m.index + m[0].length).replace(/^[\s、，,:：]+/, ''), cut = rest.search(/模板|鋼筋|預力|混凝土|開挖|回填|放樣|測量|澆置|查驗|取樣|試體|尺寸|進場|廠驗|打設|組立|綁紮|伸縮縫|止水|自主檢查|塊石|拋石|[（()）]/);
+  const part = (cut < 0 ? rest : rest.slice(0, cut)).replace(/單號|雙號/g, '').replace(/[\s、，,]+$/, ''), side = (t.match(/[（(]?(單號|雙號)[）)]?/) || [])[1];
   return [m[0].replace(/\s+/g, ''), part, side].filter(Boolean).join(' ');
 }
 const MAT_PRI = ['基樁', '鋼板樁', '異型塊', '鋼筋', '瀝青', '塊石', '拋石', '回填', '混凝土'];
@@ -703,7 +707,26 @@ function parseVendorRecords(wb, items, logs) {
   const out = {inspections: [], supervisions: [], forms: [], flags: []}, seen = new Set(), tests = []; // flags：記事欄載明查驗、但施工概況未載明該項工作（不建查驗，改列稽核）
   const mk = matKey;
   const cap = Object.keys(logs || {}).sort().pop() || todayISO(); // 廠商表已預填未來日期的例行文字，只收到最後一筆日誌日期
-  const add = (raw, date) => { const c = classifyLine(raw, date); if (c) put(c, date); };
+  // 查驗欄位的一行若寫「○○材料取樣／施工查驗：A及B混凝土澆置(里程)」，依工項拆成各自的施工查驗，取樣另成一張材料查驗
+  const conc = items.filter(x => x.kind === 'normal' && /混凝土/.test(x.name) && /預拌/.test(x.name) && !/模板|鋼筋|瀝青|基樁|異型塊|預鑄|坡面工|試體|CLSM|低強度|試驗|檢驗/.test(x.name));
+  const WORK_VERB = /組立|綁紮|澆置|澆築|澆灌|打設|開挖|回填|拆模|鋪設|吊放|施作|組裝|安裝|填築|整平/;
+  const splitWork = t => { const o = []; let cur = '', depth = 0; for (const ch of t) { if (/[（(]/.test(ch)) depth++; else if (/[）)]/.test(ch)) depth = Math.max(0, depth - 1); if (!depth && /[及與和、，,；;]/.test(ch)) { o.push(cur); cur = ''; } else cur += ch; } o.push(cur); return o.map(x => x.trim()).filter(Boolean); };
+  const stationOf = x => { const l = parseLocation(x); return /\d\+\d/.test(l) ? l : ''; };
+  const expandLine = c => {
+    if (c.list !== 'inspections' || c.r.testNeed) return null;
+    const m = c.r.content.match(/^(.{0,12}?)(材料取樣|材料查驗|施工查驗|取樣|查驗|抽查)[：:]\s*(.+)$/); if (!m) return null;
+    const [, mat0, kind, body] = m, locAll = stationOf(body), sampling = /取樣|材料/.test(kind);
+    const segs = splitWork(body).filter(x => WORK_VERB.test(x)).map(seg0 => ({seg0, code: SITE_CODE.find(([re]) => re.test(seg0))?.[1]})).filter(x => SITE_NAME[x.code]);
+    if (!segs.length || (!sampling && segs.length < 2)) return null;
+    const out = [], withLoc = x => x + (!stationOf(x) && locAll ? `(${locAll})` : ''), base = {date: c.r.date, result: c.r.result || '', testNeed: false, keepItems: true};
+    const concIts = seg => /異型塊/.test(seg) ? [] : conc.filter(x => x.name.includes((/PC|襯底|打底/.test(seg) ? '140' : '210') + 'kgf')).map(x => x.code);
+    for (const {seg0, code} of segs) { const nm = SITE_NAME[code], seg = withLoc(seg0), q = code === 'F' ? {codes: concIts(seg0), ambig: []} : inferItems2(items, seg0);
+      out.push({mat: nm, r: {...base, type: '施工查驗', items: q.codes, itemNote: q.ambig.length ? q.ambig.map(a => `${a.k}未載明規格：${a.names.map(n => n.slice(0, 22)).join('／')}`).join('；') : undefined, content: `${nm}施工查驗：${seg}`}}); }
+    if (sampling) { const ms = segs.find(x => mat0 && mat0.includes(SITE_NAME[x.code])) || segs[0], nm = mat0 || SITE_NAME[ms.code];
+      out.push({mat: nm, r: {...base, type: '材料查驗', items: ms.code === 'F' ? concIts(ms.seg0) : [], content: `${nm}${kind}：${withLoc(ms.seg0)}`}}); }
+    return out;
+  };
+  const add = (raw, date) => { const c = classifyLine(raw, date); if (!c) return; const ex = expandLine(c); if (ex) ex.forEach(e => put({list: 'inspections', r: e.r}, date, e.mat)); else put(c, date); };
   const put = (c, date, mat) => {
     if (date > cap) return;
     const r = c.r, key = c.list + date + norm(r.content || r.title); if (seen.has(key)) return; seen.add(key);
@@ -714,7 +737,7 @@ function parseVendorRecords(wb, items, logs) {
     if (c.list === 'inspections' && r.type === '施工查驗' && !mat && r.result !== '不合格') { const cats = QTY_CHECK.filter(([, re]) => re.test(r.content)), lg = logs?.[date]; // 不合格的查驗一律保留
       if (cats.length && lg && !cats.some(([, , tx]) => tx.test(lg.summary || ''))) { out.flags.push({id: uid(), date, cat: cats.map(x => x[0]).join('、'), text: r.content}); return; } }
     if (c.list === 'inspections') { if (r.type === '材料查驗' && r.testNeed) { tests.push({date, r}); return; } // 會驗：稍後記到該批材料進場日的進場查驗
-      const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && ((x.mat || mk(x.content)) === k || (mat && /澆置|澆築/.test(x.content))) && (!x.location || !r.location || x.location === r.location)); // 位置不同＝不同張查驗，不合併
+      const k = mat || mk(r.content), o = k && out.inspections.find(x => x.date === date && x.type === r.type && ((x.mat || mk(x.content) || (/模板/.test(x.content) ? '模板' : '')) === k || (mat === '混凝土' && /澆置|澆築/.test(x.content))) && (!x.location || !r.location || x.location === r.location)); // 位置不同＝不同張查驗，不合併
       if (o) { if (!o.content.includes(r.content)) o.content += '；' + r.content; o.result = o.result || r.result; o.location = o.location || r.location; o.itemNote = o.itemNote || r.itemNote; if (keep && !o.items.length) o.items = r.items; return; }
       if (mat) r.mat = mat; }
     out[c.list].push({id: uid(), ...r});
@@ -730,13 +753,7 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
-  // 例外：混凝土澆置一定有混凝土施工查驗與材料取樣（其餘施工項目，有寫或有計數量都不代表有查驗）。工項只掛混凝土，寫 PC／襯底／打底者為 140kgf，其餘 210kgf
-  const conc = items.filter(x => x.kind === 'normal' && /混凝土/.test(x.name) && /預拌/.test(x.name) && !/模板|鋼筋|瀝青|基樁|異型塊|預鑄|坡面工|試體|CLSM|低強度|試驗|檢驗/.test(x.name));
-  for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) {
-    const t = raw.replace(/^\s*\d+[.、．]\s*/, '').trim(); if (!/澆置|澆築|澆灌/.test(t) || !/混凝土/.test(t) || /瀝青/.test(t)) continue;
-    const g = /PC|襯底|打底/.test(t) ? '140' : '210', its = /異型塊/.test(t) ? [] : conc.filter(x => x.name.includes(g + 'kgf')).map(x => x.code);
-    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
-  }
+  // 查驗只依「監造查驗欄位」（記事／取樣試驗／重要事項等）的文字建立；施工概況寫了施工不代表有查驗，因此不由施工項目推出查驗
   out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
     const k = mk(t.r.content), kg = (t.r.content.match(/(\d+)\s*kgf/i) || [])[1], cand = out.inspections.filter(x => x.type === '材料查驗' && x.date <= t.date && (!k || mk(x.content) === k)).sort((a, b) => b.date.localeCompare(a.date)),
@@ -865,7 +882,12 @@ function auditWeek(p, monday) {
 const SITE_CODE = [[/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
   [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工(?!基礎|擋土牆|堤趾|路側)/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
 /* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
+/* 文件管理編碼表（監造計畫的文管編號）：依表單類別（施工抽查再分工程類別）查編號，有就優先採用 */
+const docGroup = (p, r, k) => { if (k === 'forms') return `${r.cat}表單`; if (k === 'supervisions') return r.kind === '技師督導' ? '技師督導紀錄表' : '查核及團體督導紀錄';
+  if ((r.type || '施工查驗') === '材料查驗') return '材料設備品質抽驗紀錄表'; const n = SITE_NAME[siteLetter(p, r)]; return n ? `施工抽查紀錄表－${n}` : '施工抽查紀錄表'; };
+const docCode = (p, r, k) => { const L = p.docCodes || [], g = docGroup(p, r, k); return (L.find(x => x.group === g) || L.find(x => x.group === g.split('－')[0]))?.code || ''; };
 function formPrefix(p, r, listKey) {
+  const dc = docCode(p, r, listKey); if (dc) return dc;
   const P = p.settings.prefix || {}, base = k => P[k] || DEFAULT_PREFIX[k] || k;
   if (listKey === 'forms') return base(r.cat);
   if (listKey === 'supervisions') return base(r.kind === '技師督導' ? '技師督導' : '查核');
@@ -1658,6 +1680,162 @@ function PrintTab({p, update}) {
 }
 const shortText = s => s.length > 80 ? s.slice(0, 80) + '…' : s;
 
+/* ================= 材料檢驗標準：上傳監造計畫的「材料品質檢驗標準表」（項次／工程項目＝試驗名稱／抽查頻率／管理標準），依標準判定材料查驗要做哪些試驗 ================= */
+const STD_MATS = ['混凝土', '鋼筋', '回填', '瀝青', '基樁', 'CLSM', '塊石', '拋石', '異型塊', '鋼板樁', '止水帶'];
+const stdMatOf = t => /CLSM|低強度/i.test(t) ? 'CLSM' : /基樁/.test(t) ? '基樁' : /鋼板樁/.test(t) ? '鋼板樁' : /異型塊/.test(t) ? '異型塊' : /瀝青/.test(t) ? '瀝青' : /鋼筋/.test(t) ? '鋼筋' : /止水帶/.test(t) ? '止水帶' : /夯實|密度|土方|回填/.test(t) ? '回填' : /混凝土/.test(t) ? '混凝土' : '';
+const recMat = r => { const t = [r.content, r.testName].join(' '); return /CLSM|低強度/i.test(t) ? 'CLSM' : matKey(t) || ''; };
+/* 讀頁面向量框線：回傳 {h: 水平線 [{y, x0, x1}], v: 垂直線 [{x, y0, y1}]}（PDF 座標，y 向上），供表格欄列切分 */
+async function pdfRuleLines(page, OPS) {
+  const ol = await page.getOperatorList(), mul = (m, c) => [m[0] * c[0] + m[1] * c[2], m[0] * c[1] + m[1] * c[3], m[2] * c[0] + m[3] * c[2], m[2] * c[1] + m[3] * c[3], m[4] * c[0] + m[5] * c[2] + c[4], m[4] * c[1] + m[5] * c[3] + c[5]];
+  let ctm = [1, 0, 0, 1, 0, 0]; const stack = [], h = [], v = [];
+  const poly = pts => { if (pts.length < 2) return; const P = pts.map(([x, y]) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]]), xs = P.map(q => q[0]), ys = P.map(q => q[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if (x1 - x0 <= 2.5 && y1 - y0 >= 15) v.push({x: (x0 + x1) / 2, y0, y1}); else if (y1 - y0 <= 2.5 && x1 - x0 >= 15) h.push({y: (y0 + y1) / 2, x0, x1}); };
+  ol.fnArray.forEach((f, i) => {
+    if (f === OPS.save) stack.push(ctm.slice()); else if (f === OPS.restore) ctm = stack.pop() || ctm; else if (f === OPS.transform) ctm = mul(ol.argsArray[i], ctm);
+    else if (f === OPS.constructPath) { const [ops, args] = ol.argsArray[i]; let a = 0, cur = [];
+      for (const o of ops) { if (o === OPS.rectangle) { const [x, y, w, hh] = args.slice(a, a + 4); a += 4; poly([[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]]); }
+        else if (o === OPS.moveTo) { poly(cur); cur = [[args[a], args[a + 1]]]; a += 2; } else if (o === OPS.lineTo) { cur.push([args[a], args[a + 1]]); a += 2; }
+        else if (o === OPS.curveTo) a += 6; else if (o === OPS.curveTo2 || o === OPS.curveTo3) a += 4; }
+      poly(cur); } });
+  return {h, v};
+}
+const uniqSorted = (a, tol) => [...a].sort((x, y) => x - y).reduce((o, x) => (o.length && x - o[o.length - 1] <= tol ? o : o.concat(x)), []);
+/* 表格切分：以框線決定欄與列；每列＝一個試驗項目（項次｜工程項目＝試驗名稱｜抽查頻率｜管理標準） */
+async function parseStandardPdf(file) {
+  const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise, rows = []; let noText = 0, found = false;
+  for (let pn = 1; pn <= doc.numPages; pn++) {
+    const page = await doc.getPage(pn), lines = await pdfPageLines(page); if (!lines.length) { noText++; continue; }
+    const hl = lines.find(l => /頻率/.test(l.text) && /項目|名稱|材料/.test(l.text)); if (!hl) continue; found = true;
+    const {h, v} = await pdfRuleLines(page, lib.OPS);
+    // 表格範圍：含表頭文字的垂直線
+    const vs = v.filter(l => l.y0 <= hl.y + 6 && l.y1 >= hl.y - 6), xs = uniqSorted(vs.map(l => l.x), 3); if (xs.length < 4) throw new Error('找不到表格框線（需有「項次／工程項目／抽查頻率／管理標準」四欄的格線）');
+    const tx0 = xs[0], tx1 = xs.at(-1), hg = []; // 同一高度的框線常被切成每欄一段：先併成一條，再要求涵蓋表寬 80% 以上
+    h.forEach(l => { const g = hg.find(q => Math.abs(q.y - l.y) <= 3); g ? g.segs.push([Math.max(tx0, l.x0), Math.min(tx1, l.x1)]) : hg.push({y: l.y, segs: [[Math.max(tx0, l.x0), Math.min(tx1, l.x1)]]}); });
+    const covered = g => { let tot = 0, end = -1e9; g.segs.filter(q => q[1] > q[0]).sort((a, b) => a[0] - b[0]).forEach(([a, b]) => { tot += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }); return tot; };
+    const hs = hg.filter(g => covered(g) >= (tx1 - tx0) * 0.8).map(g => g.y);
+    const ys = uniqSorted(hs, 3).reverse(), hi = ys.findIndex((y, i) => y > hl.y && ys[i + 1] < hl.y); if (hi < 0) throw new Error('找不到表頭下方的列框線');
+    const rowIv = []; for (let i = hi + 1; i + 1 < ys.length; i++) if (ys[i] - ys[i + 1] > 6) rowIv.push([ys[i], ys[i + 1]]);
+    const colOf = x => { for (let c = 0; c + 1 < xs.length; c++) if (x >= xs[c] && x < xs[c + 1]) return c; return -1; };
+    const cells = rowIv.map(() => [[], [], [], []]);
+    for (const l of lines) for (const c of l.c) { const ri = rowIv.findIndex(([a, b]) => l.y < a && l.y >= b - 2), ci = colOf(c.xc); if (ri >= 0 && ci >= 0 && ci < 4) cells[ri][ci].push({y: l.y, x: c.x0, t: c.t}); }
+    const text = a => a.sort((p, q) => q.y - p.y || p.x - q.x).reduce((s, c) => s + (/^\d+[.、]/.test(c.t) && s ? '\n' : '') + c.t, '');
+    cells.forEach(r => { const no = text(r[0]), test = text(r[1]), freq = text(r[2]), std = text(r[3]);
+      if (/^\d{1,3}$/.test(no)) rows.push({id: uid(), no, test, freq, std, mat: stdMatOf(test)});
+      else if (rows.length && (test || freq || std)) { const q = rows.at(-1); q.test += test; q.freq += (q.freq && freq ? '\n' : '') + freq; q.std += std; q.mat = q.mat || stdMatOf(q.test); } });
+  }
+  if (noText === doc.numPages) throw new Error('這份 PDF 是掃描影像，沒有文字層，無法讀取');
+  if (!found || !rows.length) throw new Error('找不到檢驗標準表（需有含「工程項目／試驗」與「抽查頻率」的表頭）');
+  return rows;
+}
+/* 依標準判定：材料查驗（尚未標需試驗）與標準列相符者 */
+function stdMatches(p) {
+  const rows = (p.testStandard?.rows || []).filter(r => r.mat && r.test);
+  return p.inspections.filter(r => r.type === '材料查驗' && !r.testNeed).map(r => ({r, hits: rows.filter(x => x.mat === recMat(r))})).filter(x => x.hits.length);
+}
+function StdApply({p, update, onClose}) {
+  const list = stdMatches(p), [off, setOff] = useState(() => new Set()), [skip, setSkip] = useState(() => new Set());
+  const tog = (set, setter, k) => setter(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const picked = list.filter(x => !skip.has(x.r.id) && x.hits.some(h => !off.has(x.r.id + h.id)));
+  return html`<${Modal} title="依材料檢驗標準判定試驗" onClose=${onClose}>
+    <div className="mute">列出尚未標「需試驗」、且材料與標準相符的材料查驗。取消勾選＝不套用該筆或該項試驗。套用後會標為需試驗、帶入試驗項目與取樣日期，之後在「試驗回填」填報告編號。</div>
+    ${list.length ? html`<div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th></th><th>日期</th><th>表單號</th><th>內容</th><th>標準要求的試驗（抽查頻率）</th></tr></thead><tbody>
+      ${list.map(({r, hits}) => html`<tr key=${r.id}><td><input type="checkbox" checked=${!skip.has(r.id)} onChange=${() => tog(skip, setSkip, r.id)} /></td><td className="nw">${roc(r.date)}</td><td className="nw">${r.no}</td><td>${shortText(r.content || '')}</td>
+        <td>${hits.map(h => html`<div key=${h.id}><label><input type="checkbox" checked=${!off.has(r.id + h.id)} disabled=${skip.has(r.id)} onChange=${() => tog(off, setOff, r.id + h.id)} /> ${h.test}<span className="mute">（${h.freq.replace(/\n/g, ' ')}）</span></label></div>`)}</td></tr>`)}</tbody></table></div>`
+      : html`<div className="empty">沒有需要套用的材料查驗（可能都已標需試驗，或材料與標準不相符）</div>`}
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${!picked.length} onClick=${() => { update(d => { for (const x of picked) { const r = d.inspections.find(q => q.id === x.r.id);
+        r.testNeed = true; r.testName = x.hits.filter(h => !off.has(x.r.id + h.id)).map(h => h.test).join('、'); r.sampleDate = r.sampleDate || r.date; } }); onClose(); }}>套用（${picked.length} 筆）</button></div></${Modal}>`;
+}
+function StdCard({p, update}) {
+  const [busy, setBusy] = useState(false), [ap, setAp] = useState(false), S = p.testStandard, rows = S?.rows || [];
+  const setRow = (id, k, v) => update(d => { d.testStandard.rows.find(x => x.id === id)[k] = v; });
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>材料檢驗標準（${rows.length}）${S?.file ? html` <span className="mute">來源：${S.file}</span>` : ''}</h2>
+      <div className="row"><label className="b">${busy ? '讀取中…' : '上傳檢驗標準 PDF'}<input type="file" hidden accept=".pdf" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+          if (rows.length && !confirm('將取代目前的檢驗標準，確定嗎？')) return; setBusy(true);
+          try { const rs = await parseStandardPdf(f); update(d => { d.testStandard = {file: f.name, rows: rs}; }); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+        <button className="b p" disabled=${!rows.length} onClick=${() => setAp(true)}>依標準判定試驗</button></div></div>
+    <div className="mute">上傳監造計畫中的「材料品質檢驗標準表」（文字型 PDF）。要不要試驗、試驗哪些項目，依此標準判定；「適用材料」決定哪些材料查驗會對到該列（留空＝不自動對應）。解析結果請核對並修正。</div>
+    ${rows.length ? html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>項次</th><th>試驗項目</th><th>抽查頻率</th><th>管理標準</th><th>適用材料</th><th></th></tr></thead><tbody>
+      ${rows.map(r => html`<tr key=${r.id}><td className="nw">${r.no}</td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.test} onBlur=${e => setRow(r.id, 'test', e.target.value.trim())} /></td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.freq} onBlur=${e => setRow(r.id, 'freq', e.target.value.trim())} /></td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.std} onBlur=${e => setRow(r.id, 'std', e.target.value.trim())} /></td>
+        <td><select value=${r.mat || ''} onChange=${e => setRow(r.id, 'mat', e.target.value)}><option value="">（不對應）</option>${STD_MATS.map(m => html`<option key=${m}>${m}</option>`)}</select></td>
+        <td><button className="b" onClick=${() => update(d => { d.testStandard.rows = d.testStandard.rows.filter(x => x.id !== r.id); })}>刪除</button></td></tr>`)}</tbody></table></div>` : ''}
+    ${ap && html`<${StdApply} p=${p} update=${update} onClose=${() => setAp(false)} />`}</div>`;
+}
+
+/* ================= 文件管理編碼表：上傳監造計畫的文管編號表（PDF／Excel／Word），對應到表單類別，新表單號以文管編號為前綴 ================= */
+function pdfGrid(lines, h, v) {
+  const vs = v.filter(l => l.y1 - l.y0 >= 20), xs = uniqSorted(vs.map(l => l.x), 3); if (xs.length < 3) return null;
+  const top = Math.max(...vs.map(l => l.y1)), bot = Math.min(...vs.map(l => l.y0)), tx0 = xs[0], tx1 = xs.at(-1), hg = [];
+  h.forEach(l => { const g = hg.find(q => Math.abs(q.y - l.y) <= 3); g ? g.segs.push([Math.max(tx0, l.x0), Math.min(tx1, l.x1)]) : hg.push({y: l.y, segs: [[Math.max(tx0, l.x0), Math.min(tx1, l.x1)]]}); });
+  const covered = g => { let tot = 0, end = -1e9; g.segs.filter(q => q[1] > q[0]).sort((a, b) => a[0] - b[0]).forEach(([a, b]) => { tot += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }); return tot; };
+  const ys = uniqSorted(hg.filter(g => covered(g) >= (tx1 - tx0) * 0.6 && g.y <= top + 3 && g.y >= bot - 3).map(g => g.y), 3).reverse(); if (ys.length < 2) return null;
+  const rowIv = []; for (let i = 0; i + 1 < ys.length; i++) if (ys[i] - ys[i + 1] > 6) rowIv.push([ys[i], ys[i + 1]]);
+  const colOf = x => { for (let c = 0; c + 1 < xs.length; c++) if (x >= xs[c] && x < xs[c + 1]) return c; return -1; };
+  const cells = rowIv.map(() => xs.slice(1).map(() => []));
+  for (const l of lines) for (const c of l.c) { const ri = rowIv.findIndex(([a, b]) => l.y < a && l.y >= b - 2), ci = colOf(c.xc); if (ri >= 0 && ci >= 0) cells[ri][ci].push({y: l.y, x: c.x0, t: c.t}); }
+  return cells.map(r => r.map(a => a.sort((p, q) => q.y - p.y || p.x - q.x).map(c => c.t).join('')));
+}
+/* 檔案 → 表格列（每列一個字串陣列）。PDF 優先用框線切欄列，沒有框線時以每行的文字片段當儲存格 */
+async function tableRowsFromFile(file) {
+  const rows = [];
+  if (/\.pdf$/i.test(file.name)) {
+    const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise; let noText = 0;
+    for (let pn = 1; pn <= doc.numPages; pn++) { const page = await doc.getPage(pn), lines = await pdfPageLines(page); if (!lines.length) { noText++; continue; }
+      const {h, v} = await pdfRuleLines(page, lib.OPS), g = pdfGrid(lines, h, v); (g || lines.map(l => l.c.map(c => c.t))).forEach(r => rows.push(r.map(x => x.trim()))); }
+    if (noText === doc.numPages) throw new Error('這份 PDF 是掃描影像，沒有文字層，無法讀取');
+  } else if (/\.docx$/i.test(file.name)) {
+    const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html');
+    dom.querySelectorAll('table').forEach(t => docTable(t).rows.forEach(r => { const a = []; r.forEach(c => { while (a.length < c.c) a.push(''); a[c.c] = c.t; }); rows.push(a); }));
+  } else {
+    const wb = await readWB(file);
+    for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; aoa(wb.Sheets[sn]).forEach(r => rows.push(r.map(v => v == null ? '' : String(v).trim()))); }
+  }
+  return rows.filter(r => r.some(Boolean));
+}
+const DOC_CODE_RE = /編號|編碼|代碼|代號|文管/, DOC_NAME_RE = /名稱|表單|表名|紀錄表|文件/;
+const docColGuess = rows => { const n = Math.max(...rows.slice(0, 40).map(r => r.length), 1); let nc = -1, cc = -1;
+  for (const r of rows.slice(0, 8)) r.forEach((t, i) => { if (nc < 0 && DOC_NAME_RE.test(t) && t.length <= 10) nc = i; if (cc < 0 && DOC_CODE_RE.test(t) && t.length <= 10) cc = i; });
+  if (nc < 0 || cc < 0 || nc === cc) { nc = 1; cc = 0; } return [Math.min(nc, n - 1), Math.min(cc, n - 1)]; };
+const buildDocEntries = (rows, nc, cc) => rows.map(r => ({name: (r[nc] || '').replace(/\s+/g, ''), code: (r[cc] || '').replace(/\s+/g, '')})).filter(e => e.name.length >= 3 && e.code && !(DOC_NAME_RE.test(e.name) && e.name.length <= 6) && !DOC_CODE_RE.test(e.code))
+  .map(e => ({id: uid(), ...e, group: formGroupOf(e.name)}));
+function DocCodeEditor({init, onSave, onClose}) {
+  const rows = init.rows, [cols, setCols] = useState(() => rows ? docColGuess(rows) : [0, 1]), [ents, setEnts] = useState(() => init.entries || buildDocEntries(rows, ...docColGuess(rows)));
+  const nCol = rows ? Math.max(...rows.slice(0, 60).map(r => r.length), 1) : 0, sample = i => rows.slice(0, 8).map(r => r[i]).filter(Boolean).slice(0, 3).join('／').slice(0, 24);
+  const setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e));
+  const regen = (nc, cc) => { setCols([nc, cc]); setEnts(buildDocEntries(rows, nc, cc)); };
+  return html`<${Modal} title="文件管理編碼表" onClose=${onClose}>
+    ${rows && html`<div className="mute">請指定「表單名稱」與「文管編號」各是哪一欄，再核對下方結果並指定所屬類別（類別為空者不會使用）。</div>
+      <div className="row" style=${{margin: '8px 0'}}>
+        <label>表單名稱欄 <select value=${cols[0]} onChange=${e => regen(+e.target.value, cols[1])}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label>
+        <label>文管編號欄 <select value=${cols[1]} onChange=${e => regen(cols[0], +e.target.value)}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label></div>`}
+    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th>表單名稱</th><th>文管編號</th><th>所屬類別（本系統表單）</th><th></th></tr></thead><tbody>
+      ${ents.map(e => html`<tr key=${e.id}><td><input style=${{width: '100%'}} value=${e.name} onChange=${ev => setE(e.id, 'name', ev.target.value)} /></td>
+        <td><input value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
+        <td><select value=${e.group} onChange=${ev => setE(e.id, 'group', ev.target.value)}><option value="">（不使用）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></td>
+        <td><button className="b" onClick=${() => setEnts(es => es.filter(x => x.id !== e.id))}>刪除</button></td></tr>`)}</tbody></table></div>
+    ${!ents.length && html`<div className="empty">沒有辨識到「名稱＋編號」的列，請調整上方欄位</div>`}
+    <div className="row" style=${{justifyContent: 'space-between', marginTop: '12px'}}><button className="b" onClick=${() => setEnts(es => [...es, {id: uid(), name: '', code: '', group: ''}])}>＋ 新增一列</button>
+      <button className="b p" onClick=${() => onSave(ents.filter(e => e.group && e.code))}>儲存（${ents.filter(e => e.group && e.code).length} 筆）</button></div></${Modal}>`;
+}
+function renumberAll(d) { for (const k of ['inspections', 'supervisions', 'forms']) { const list = d[k], sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
+  sorted.forEach(r => { r.no = ''; }); for (const r of sorted) r.no = nextNo(d, list, formPrefix(d, r, k)); } }
+function DocCodeCard({p, update}) {
+  const [busy, setBusy] = useState(false), [ed, setEd] = useState(null), L = p.docCodes || [];
+  const total = p.inspections.length + p.supervisions.length + p.forms.length;
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>文件管理編碼表（${L.length}）${p.docCodesFile ? html` <span className="mute">來源：${p.docCodesFile}</span>` : ''}</h2>
+      <div className="row"><label className="b">${busy ? '讀取中…' : '上傳文管編碼表'}<input type="file" hidden accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
+          try { const rows = await tableRowsFromFile(f); if (!rows.length) alert('檔案中找不到表格內容'); else setEd({rows, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+        ${L.length > 0 && html`<button className="b" onClick=${() => setEd({entries: L.map(x => ({...x})), file: p.docCodesFile})}>編輯</button>`}</div></div>
+    <div className="mute">依監造計畫的文件管理編碼表，設定各種表單的文管編號（施工抽查可依工程類別各設一個）。設定後新產生的表單號為「文管編號－流水號」；沒有設定的類別仍使用上方的表單號前綴。</div>
+    ${L.length > 0 && html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>類別</th><th>表單名稱</th><th>文管編號</th></tr></thead><tbody>${L.map(x => html`<tr key=${x.id}><td>${x.group}</td><td>${x.name}</td><td className="nw">${x.code}</td></tr>`)}</tbody></table></div>
+      <div className="row" style=${{marginTop: '8px'}}><button className="b d" disabled=${!total} onClick=${() => { if (confirm(`依文管編碼表重新編號既有的 ${total} 張查驗／督導／表單？\n表單號會依日期順序重編，已列印或送出的表單號會改變，建議先下載 JSON 備份。`)) update(d => renumberAll(d)); }}>依編碼表重新編號既有表單（${total}）</button>
+        <button className="b" onClick=${() => { if (confirm('移除文管編碼表？既有表單號不會改變。')) update(d => { d.docCodes = []; d.docCodesFile = ''; }); }}>移除編碼表</button></div>`}
+    ${ed && html`<${DocCodeEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { d.docCodes = list; d.docCodesFile = ed.file || ''; }); setEd(null); }} />`}</div>`;
+}
+
 /* ================= 試驗報告回填 ================= */
 function TestTab({p, update}) {
   const [all, setAll] = useState(false);
@@ -1669,10 +1847,10 @@ function TestTab({p, update}) {
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
     ['結果', r => html`<select value=${r.testResult || ''} onChange=${e => set(r.id, 'testResult', e.target.value)}><option value="">—</option><option>合格</option><option>不合格</option></select>`, true]];
-  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
+  return html`<div><${StdCard} p=${p} update=${update} /><div className="card" style=${{marginTop: '8px'}}><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
     <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已回填</label></div>
     <div className="mute" style=${{marginBottom: '6px'}}>取樣超過 ${due} 天仍未回填者標紅（天數可於專案設定調整）。</div>
-    ${list.length ? html`<${CTable} cols=${cols} rows=${list} />` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div>`;
+    ${list.length ? html`<${CTable} cols=${cols} rows=${list} />` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div></div>`;
 }
 
 /* ================= 每週稽核 ================= */
@@ -1695,8 +1873,8 @@ function AuditTab({p, C, quick}) {
       <div className="mute" style=${{marginTop: '6px'}}>判定方式：施工日誌某日有完成數量的「需查驗」工項，須在該日前後 ${p.settings.tolerance} 天內有勾選該工項的查驗紀錄（容許天數可於專案設定調整）。</div></div>
     <div className="card"><h2>工項查驗比對</h2>
       ${A.rows.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工項</th><th>本週施工日</th><th className="n">本週數量</th><th>查驗表單號</th><th>稽核結果</th><th>未查驗日</th><th className="noprint"></th></tr></thead><tbody>
-        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => roc(d).slice(4)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
-          <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => roc(d).slice(4)).join('、')}</td>
+        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => rocMD(d)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
+          <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => rocMD(d)).join('、')}</td>
           <td className="noprint">${r.status !== 'ok' && html`<button className="b s" onClick=${() => quick({items: [r.it.code], date: r.missDays[0], type: '施工查驗'})}>補填查驗</button>`}</td></tr>`)}
       </tbody></table></div>` : html`<div className="empty">本週施工日誌無需查驗工項的完成數量</div>`}</div>
     <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(360px,1fr))'}}>
@@ -1732,6 +1910,7 @@ function SettingsTab({p, update, onDelete, onRestore}) {
       ${Object.keys(DEFAULT_PREFIX).map(k => html`<label key=${k} className="f">表單號前綴：${k}<input value=${p.settings.prefix[k] || ''} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`)}
       ${[['labor', '出工工別（以、分隔）'], ['machines', '機具名稱（以、分隔）']].map(([k, t]) => html`<label key=${k} className="f wide">${t}<input defaultValue=${p.settings[k].join('、')} onBlur=${e => { const v = e.target.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean); update(d => { d.settings[k] = v; }); }} /></label>`)}
     </div></div>
+    <${DocCodeCard} p=${p} update=${update} />
     <div className="card"><h2>清除匯入資料</h2><div className="mute" style=${{marginBottom: '8px'}}>清除契約項目、預定進度、施工日誌與所有查驗／督導／表單填報，保留專案本身、工程資料與設定，之後可重新匯入。</div>
       <button className="b d" onClick=${() => { if (confirm(`確定清除「${p.info.name}」的所有匯入資料與填報？專案本身、工程資料與設定會保留。\n手動填報的內容（如試驗報告編號）也會一併清除，建議先下載 JSON 備份。`)) { update(d => clearProjectData(d)); alert('已清除，可重新匯入。'); } }}>清除資料（保留專案）…</button></div>
     <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
