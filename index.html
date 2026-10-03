@@ -84,6 +84,7 @@ button.s{padding:2px 8px;font-size:12px}
 table{border-collapse:separate;border-spacing:0;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
 th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 tbody tr:hover td{background:#f8fafc}
+tr.vm td{vertical-align:middle}
 th{background:#f4f6f9;position:sticky;top:0;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
 td.n,th.n{text-align:right;white-space:nowrap}
 tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
@@ -1843,7 +1844,7 @@ function PrintTab({p, update, only}) {
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
-      <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已**勾稽**的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
+      <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已勾稽的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
       ${groups.length ? groups.map(({g, list}) => { const ok2 = list.filter(e => !e.r.checked), on = ok2.filter(e => sel.has(e.r.id)).length;
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
           <h3><label><input type="checkbox" disabled=${!ok2.length} checked=${!!ok2.length && on === ok2.length} ref=${el => el && (el.indeterminate = on > 0 && on < ok2.length)} onChange=${ev => tog(ok2.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${ok2.length}${ok2.length < list.length ? `，已勾稽 ${list.length - ok2.length}` : ''}）</label></h3>
@@ -1852,10 +1853,10 @@ function PrintTab({p, update, only}) {
               const sum = ms => `（${ms.length} 張${ms.some(x => sel.has(x.r.id) && !x.r.checked) ? `，已選 ${ms.filter(x => sel.has(x.r.id) && !x.r.checked).length}` : ''}${ms.some(x => x.r.checked) ? `，已勾稽 ${ms.filter(x => x.r.checked).length}` : ''}）`;
               if (!prev || yr(prev.r.date) !== y) out.push(html`<tr key=${'y' + yKey} style=${{cursor: 'pointer', background: 'var(--line)'}} onClick=${() => togShut([yKey])}><td colSpan="6"><b>${yShut ? '▸' : '▾'} ${yrLabel(y)}</b>${sum(list.filter(x => yr(x.r.date) === y))}</td></tr>`);
               if (!yShut && (!prev || ym(prev.r.date) !== k)) out.push(html`<tr key=${'m' + mKey} style=${{cursor: 'pointer', background: 'var(--bg)'}} onClick=${() => togShut([mKey])}><td colSpan="6" style=${{paddingLeft: '24px'}}><b>${mShut ? '▸' : '▾'} ${ymLabel(k)}</b>${sum(list.filter(x => ym(x.r.date) === k))}</td></tr>`);
-              if (!yShut && !mShut) out.push(html`<tr key=${e.r.id} style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
+              if (!yShut && !mShut) out.push(html`<tr key=${e.r.id} className="vm" style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
                 <td><input type="checkbox" disabled=${!!e.r.checked} title=${e.r.checked ? '已勾稽，不能列印' : '列印'} checked=${!e.r.checked && sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
                 <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td>
-                <td style=${{paddingLeft: '28px'}}><button className="b" style=${{whiteSpace: 'nowrap'}} onClick=${ev => { ev.stopPropagation(); mark([e], !e.r.checked); }}>${e.r.checked ? '取消勾稽' : '勾稽'}</button></td></tr>`);
+                <td style=${{paddingLeft: '28px'}}><button className="b s" style=${{whiteSpace: 'nowrap'}} onClick=${ev => { ev.stopPropagation(); mark([e], !e.r.checked); }}>${e.r.checked ? '取消勾稽' : '勾稽'}</button></td></tr>`);
               return out; })}
           </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
     </div>
