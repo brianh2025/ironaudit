@@ -1472,11 +1472,6 @@ function LogTab({p, C, update}) {
 }
 /* ================= 查驗／督導／查核／表單 ================= */
 const TESTS = ['混凝土抗壓強度試驗', '混凝土坍度試驗', '混凝土氯離子含量檢測', '鋼筋拉伸試驗', '鋼筋化學成分分析', '工地密度試驗', '級配粒料篩分析', '瀝青混凝土鑽心（厚度／壓實度）', 'CLSM 抗壓強度試驗', '其他'];
-const FORM_TITLES = {
-  職安衛: ['施工前安全檢查表', '危害告知紀錄', '工具箱會議紀錄', '自動檢查紀錄', '職安衛教育訓練紀錄', '職安衛巡檢紀錄'],
-  環保: ['環境保護檢查表', '空氣污染防制檢查表', '營建工地逕流廢水污染削減檢查表', '廢棄物清運紀錄', '噪音振動檢查表'],
-  交維: ['交通維持設施檢查表', '交維巡查紀錄', '交通維持計畫執行檢查表'],
-  防汛: ['防汛整備檢查表', '汛期工地自主檢查表', '防汛演練紀錄', '颱風豪雨應變紀錄', '防汛物資清點表']};
 const resTag = v => v === '合格' || v === '符合' || v === '已改善' ? html`<span className="tag ok">${v}</span>` : v === '不合格' || v === '缺失待改善' ? html`<span className="tag bad">${v}</span>` : v ? html`<span className="tag warn">${v}</span>` : '';
 
 function InspectionTab(props) {
@@ -1499,14 +1494,6 @@ function InspectionTab(props) {
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
-function TechTab(props) {
-  const fields = [{k: 'date', label: '督導日期', type: 'date'}, {k: 'no', label: '表單號'}, {k: 'person', label: '督導技師'},
-    {k: 'items', label: '督導工項', type: 'items'}, {k: 'content', label: '督導內容', type: 'textarea'},
-    {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['督導技師', r => r.person], ['工項', r => shortList(itemNames(props.p, r.items))], ['缺失', r => r.defects || 0],
-    ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className="tag bad">未完成</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="supervisions" title="技師督導" filter=${r => r.kind === '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: '技師督導', items: []}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
-}
 function AuditRecTab(props) {
   const K = ['工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'];
   const fields = [{k: 'date', label: '日期', type: 'date'}, {k: 'kind', label: '類別', type: 'select', options: K}, {k: 'no', label: '表單號'}, {k: 'person', label: '查核單位／委員'},
@@ -1516,14 +1503,6 @@ function AuditRecTab(props) {
     ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className=${'tag ' + (r.fixDue && r.fixDue < todayISO() ? 'bad' : 'warn')}>期限 ${roc(r.fixDue) || '未定'}</span>`) : '']];
   return html`<${RecordTab} ...${props} listKey="supervisions" title="查核及團體督導" filter=${r => r.kind !== '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: K[0]}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
 }
-function FormTab(props) {
-  const fields = [{k: 'cat', label: '類別', type: 'select', options: ['職安衛', '環保', '交維', '防汛']}, {k: 'date', label: '日期', type: 'date'}, {k: 'no', label: '表單號'},
-    {k: 'title', label: '表單名稱', list: r => FORM_TITLES[r.cat] || []}, {k: 'result', label: '檢查結果', type: 'select', options: ['', '符合', '缺失待改善', '已改善']},
-    {k: 'note', label: '缺失／備註', type: 'textarea'}];
-  const cols = [['日期', r => roc(r.date)], ['類別', r => r.cat], ['表單號', r => r.no], ['表單名稱', r => r.title], ['結果', r => resTag(r.result)], ['備註', r => r.note]];
-  return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => formPrefix(props.p, r, 'forms')} />`;
-}
-
 /* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
 const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
@@ -1822,7 +1801,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
     <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${noStart || !(sum || nDel)} onClick=${run}>${regen ? `重新產生（刪除 ${nDel}、新增 ${sum}）` : `產生 ${sum} 張空白表單`}</button></div></${Modal}>`;
 }
 /* 這四類各有獨立頁面（範本、自動產生、列印）；其餘類別留在「表單列印」 */
-const SPLIT_GROUPS = ['技師督導紀錄表', '職安衛表單', '交維表單', '防汛表單'];
+const SPLIT_GROUPS = ['技師督導紀錄表', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
@@ -2260,8 +2239,8 @@ function FolderTab() {
 }
 
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'gtech', 'check', 'forms', 'gsec', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['gtech', '技師督導表單'], ['gsec', '職安衛表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'gtech', 'check', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['gtech', '技師督導'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['check', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -2385,11 +2364,10 @@ function App() {
         ${tab === 'log' && html`<${LogTab} ...${props} />`}
         ${tab === 'insp' && html`<${InspectionTab} ...${props} preset=${preset} clearPreset=${() => setPreset(null)} />`}
         ${tab === 'tests' && html`<${TestTab} ...${props} />`}
-        ${tab === 'tech' && html`<${TechTab} ...${props} />`}
         ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
-        ${tab === 'forms' && html`<${FormTab} ...${props} />`}
         ${tab === 'gtech' && html`<${PrintTab} ...${props} only=${['技師督導紀錄表']} />`}
         ${tab === 'gsec' && html`<${PrintTab} ...${props} only=${['職安衛表單']} />`}
+        ${tab === 'genv' && html`<${PrintTab} ...${props} only=${['環保表單']} />`}
         ${tab === 'gtraf' && html`<${PrintTab} ...${props} only=${['交維表單']} />`}
         ${tab === 'gflood' && html`<${PrintTab} ...${props} only=${['防汛表單']} />`}
         ${tab === 'print' && html`<${PrintTab} ...${props} />`}
