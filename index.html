@@ -1816,7 +1816,7 @@ function PrintTab({p, update, only}) {
     const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
     return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
-  const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(0, 4) - 1911} 年 ${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
+  const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
   const allMonths = groups.flatMap(({g, list}) => [...new Set(list.flatMap(e => [yr(e.r.date), ym(e.r.date)]))].map(k => mk(g, k)));
   const togShut = keys => setShut(s => { const n = new Set(s); const close = keys.some(k => !n.has(k)); keys.forEach(k => close ? n.add(k) : n.delete(k)); return n; });
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
