@@ -1658,6 +1658,91 @@ function PrintTab({p, update}) {
 }
 const shortText = s => s.length > 80 ? s.slice(0, 80) + '…' : s;
 
+/* ================= 材料檢驗標準：上傳監造計畫的「材料品質檢驗標準表」（項次／工程項目＝試驗名稱／抽查頻率／管理標準），依標準判定材料查驗要做哪些試驗 ================= */
+const STD_MATS = ['混凝土', '鋼筋', '回填', '瀝青', '基樁', 'CLSM', '塊石', '拋石', '異型塊', '鋼板樁', '止水帶'];
+const stdMatOf = t => /CLSM|低強度/i.test(t) ? 'CLSM' : /基樁/.test(t) ? '基樁' : /鋼板樁/.test(t) ? '鋼板樁' : /異型塊/.test(t) ? '異型塊' : /瀝青/.test(t) ? '瀝青' : /鋼筋/.test(t) ? '鋼筋' : /止水帶/.test(t) ? '止水帶' : /夯實|密度|土方|回填/.test(t) ? '回填' : /混凝土/.test(t) ? '混凝土' : '';
+const recMat = r => { const t = [r.content, r.testName].join(' '); return /CLSM|低強度/i.test(t) ? 'CLSM' : matKey(t) || ''; };
+/* 讀頁面向量框線：回傳 {h: 水平線 [{y, x0, x1}], v: 垂直線 [{x, y0, y1}]}（PDF 座標，y 向上），供表格欄列切分 */
+async function pdfRuleLines(page, OPS) {
+  const ol = await page.getOperatorList(), mul = (m, c) => [m[0] * c[0] + m[1] * c[2], m[0] * c[1] + m[1] * c[3], m[2] * c[0] + m[3] * c[2], m[2] * c[1] + m[3] * c[3], m[4] * c[0] + m[5] * c[2] + c[4], m[4] * c[1] + m[5] * c[3] + c[5]];
+  let ctm = [1, 0, 0, 1, 0, 0]; const stack = [], h = [], v = [];
+  const poly = pts => { if (pts.length < 2) return; const P = pts.map(([x, y]) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]]), xs = P.map(q => q[0]), ys = P.map(q => q[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    if (x1 - x0 <= 2.5 && y1 - y0 >= 15) v.push({x: (x0 + x1) / 2, y0, y1}); else if (y1 - y0 <= 2.5 && x1 - x0 >= 15) h.push({y: (y0 + y1) / 2, x0, x1}); };
+  ol.fnArray.forEach((f, i) => {
+    if (f === OPS.save) stack.push(ctm.slice()); else if (f === OPS.restore) ctm = stack.pop() || ctm; else if (f === OPS.transform) ctm = mul(ol.argsArray[i], ctm);
+    else if (f === OPS.constructPath) { const [ops, args] = ol.argsArray[i]; let a = 0, cur = [];
+      for (const o of ops) { if (o === OPS.rectangle) { const [x, y, w, hh] = args.slice(a, a + 4); a += 4; poly([[x, y], [x + w, y], [x + w, y + hh], [x, y + hh]]); }
+        else if (o === OPS.moveTo) { poly(cur); cur = [[args[a], args[a + 1]]]; a += 2; } else if (o === OPS.lineTo) { cur.push([args[a], args[a + 1]]); a += 2; }
+        else if (o === OPS.curveTo) a += 6; else if (o === OPS.curveTo2 || o === OPS.curveTo3) a += 4; }
+      poly(cur); } });
+  return {h, v};
+}
+const uniqSorted = (a, tol) => [...a].sort((x, y) => x - y).reduce((o, x) => (o.length && x - o[o.length - 1] <= tol ? o : o.concat(x)), []);
+/* 表格切分：以框線決定欄與列；每列＝一個試驗項目（項次｜工程項目＝試驗名稱｜抽查頻率｜管理標準） */
+async function parseStandardPdf(file) {
+  const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise, rows = []; let noText = 0, found = false;
+  for (let pn = 1; pn <= doc.numPages; pn++) {
+    const page = await doc.getPage(pn), lines = await pdfPageLines(page); if (!lines.length) { noText++; continue; }
+    const hl = lines.find(l => /頻率/.test(l.text) && /項目|名稱|材料/.test(l.text)); if (!hl) continue; found = true;
+    const {h, v} = await pdfRuleLines(page, lib.OPS);
+    // 表格範圍：含表頭文字的垂直線
+    const vs = v.filter(l => l.y0 <= hl.y + 6 && l.y1 >= hl.y - 6), xs = uniqSorted(vs.map(l => l.x), 3); if (xs.length < 4) throw new Error('找不到表格框線（需有「項次／工程項目／抽查頻率／管理標準」四欄的格線）');
+    const tx0 = xs[0], tx1 = xs.at(-1), hg = []; // 同一高度的框線常被切成每欄一段：先併成一條，再要求涵蓋表寬 80% 以上
+    h.forEach(l => { const g = hg.find(q => Math.abs(q.y - l.y) <= 3); g ? g.segs.push([Math.max(tx0, l.x0), Math.min(tx1, l.x1)]) : hg.push({y: l.y, segs: [[Math.max(tx0, l.x0), Math.min(tx1, l.x1)]]}); });
+    const covered = g => { let tot = 0, end = -1e9; g.segs.filter(q => q[1] > q[0]).sort((a, b) => a[0] - b[0]).forEach(([a, b]) => { tot += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }); return tot; };
+    const hs = hg.filter(g => covered(g) >= (tx1 - tx0) * 0.8).map(g => g.y);
+    const ys = uniqSorted(hs, 3).reverse(), hi = ys.findIndex((y, i) => y > hl.y && ys[i + 1] < hl.y); if (hi < 0) throw new Error('找不到表頭下方的列框線');
+    const rowIv = []; for (let i = hi + 1; i + 1 < ys.length; i++) if (ys[i] - ys[i + 1] > 6) rowIv.push([ys[i], ys[i + 1]]);
+    const colOf = x => { for (let c = 0; c + 1 < xs.length; c++) if (x >= xs[c] && x < xs[c + 1]) return c; return -1; };
+    const cells = rowIv.map(() => [[], [], [], []]);
+    for (const l of lines) for (const c of l.c) { const ri = rowIv.findIndex(([a, b]) => l.y < a && l.y >= b - 2), ci = colOf(c.xc); if (ri >= 0 && ci >= 0 && ci < 4) cells[ri][ci].push({y: l.y, x: c.x0, t: c.t}); }
+    const text = a => a.sort((p, q) => q.y - p.y || p.x - q.x).reduce((s, c) => s + (/^\d+[.、]/.test(c.t) && s ? '\n' : '') + c.t, '');
+    cells.forEach(r => { const no = text(r[0]), test = text(r[1]), freq = text(r[2]), std = text(r[3]);
+      if (/^\d{1,3}$/.test(no)) rows.push({id: uid(), no, test, freq, std, mat: stdMatOf(test)});
+      else if (rows.length && (test || freq || std)) { const q = rows.at(-1); q.test += test; q.freq += (q.freq && freq ? '\n' : '') + freq; q.std += std; q.mat = q.mat || stdMatOf(q.test); } });
+  }
+  if (noText === doc.numPages) throw new Error('這份 PDF 是掃描影像，沒有文字層，無法讀取');
+  if (!found || !rows.length) throw new Error('找不到檢驗標準表（需有含「工程項目／試驗」與「抽查頻率」的表頭）');
+  return rows;
+}
+/* 依標準判定：材料查驗（尚未標需試驗）與標準列相符者 */
+function stdMatches(p) {
+  const rows = (p.testStandard?.rows || []).filter(r => r.mat && r.test);
+  return p.inspections.filter(r => r.type === '材料查驗' && !r.testNeed).map(r => ({r, hits: rows.filter(x => x.mat === recMat(r))})).filter(x => x.hits.length);
+}
+function StdApply({p, update, onClose}) {
+  const list = stdMatches(p), [off, setOff] = useState(() => new Set()), [skip, setSkip] = useState(() => new Set());
+  const tog = (set, setter, k) => setter(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const picked = list.filter(x => !skip.has(x.r.id) && x.hits.some(h => !off.has(x.r.id + h.id)));
+  return html`<${Modal} title="依材料檢驗標準判定試驗" onClose=${onClose}>
+    <div className="mute">列出尚未標「需試驗」、且材料與標準相符的材料查驗。取消勾選＝不套用該筆或該項試驗。套用後會標為需試驗、帶入試驗項目與取樣日期，之後在「試驗回填」填報告編號。</div>
+    ${list.length ? html`<div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th></th><th>日期</th><th>表單號</th><th>內容</th><th>標準要求的試驗（抽查頻率）</th></tr></thead><tbody>
+      ${list.map(({r, hits}) => html`<tr key=${r.id}><td><input type="checkbox" checked=${!skip.has(r.id)} onChange=${() => tog(skip, setSkip, r.id)} /></td><td className="nw">${roc(r.date)}</td><td className="nw">${r.no}</td><td>${shortText(r.content || '')}</td>
+        <td>${hits.map(h => html`<div key=${h.id}><label><input type="checkbox" checked=${!off.has(r.id + h.id)} disabled=${skip.has(r.id)} onChange=${() => tog(off, setOff, r.id + h.id)} /> ${h.test}<span className="mute">（${h.freq.replace(/\n/g, ' ')}）</span></label></div>`)}</td></tr>`)}</tbody></table></div>`
+      : html`<div className="empty">沒有需要套用的材料查驗（可能都已標需試驗，或材料與標準不相符）</div>`}
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${!picked.length} onClick=${() => { update(d => { for (const x of picked) { const r = d.inspections.find(q => q.id === x.r.id);
+        r.testNeed = true; r.testName = x.hits.filter(h => !off.has(x.r.id + h.id)).map(h => h.test).join('、'); r.sampleDate = r.sampleDate || r.date; } }); onClose(); }}>套用（${picked.length} 筆）</button></div></${Modal}>`;
+}
+function StdCard({p, update}) {
+  const [busy, setBusy] = useState(false), [ap, setAp] = useState(false), S = p.testStandard, rows = S?.rows || [];
+  const setRow = (id, k, v) => update(d => { d.testStandard.rows.find(x => x.id === id)[k] = v; });
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>材料檢驗標準（${rows.length}）${S?.file ? html` <span className="mute">來源：${S.file}</span>` : ''}</h2>
+      <div className="row"><label className="b">${busy ? '讀取中…' : '上傳檢驗標準 PDF'}<input type="file" hidden accept=".pdf" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+          if (rows.length && !confirm('將取代目前的檢驗標準，確定嗎？')) return; setBusy(true);
+          try { const rs = await parseStandardPdf(f); update(d => { d.testStandard = {file: f.name, rows: rs}; }); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+        <button className="b p" disabled=${!rows.length} onClick=${() => setAp(true)}>依標準判定試驗</button></div></div>
+    <div className="mute">上傳監造計畫中的「材料品質檢驗標準表」（文字型 PDF）。要不要試驗、試驗哪些項目，依此標準判定；「適用材料」決定哪些材料查驗會對到該列（留空＝不自動對應）。解析結果請核對並修正。</div>
+    ${rows.length ? html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>項次</th><th>試驗項目</th><th>抽查頻率</th><th>管理標準</th><th>適用材料</th><th></th></tr></thead><tbody>
+      ${rows.map(r => html`<tr key=${r.id}><td className="nw">${r.no}</td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.test} onBlur=${e => setRow(r.id, 'test', e.target.value.trim())} /></td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.freq} onBlur=${e => setRow(r.id, 'freq', e.target.value.trim())} /></td>
+        <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.std} onBlur=${e => setRow(r.id, 'std', e.target.value.trim())} /></td>
+        <td><select value=${r.mat || ''} onChange=${e => setRow(r.id, 'mat', e.target.value)}><option value="">（不對應）</option>${STD_MATS.map(m => html`<option key=${m}>${m}</option>`)}</select></td>
+        <td><button className="b" onClick=${() => update(d => { d.testStandard.rows = d.testStandard.rows.filter(x => x.id !== r.id); })}>刪除</button></td></tr>`)}</tbody></table></div>` : ''}
+    ${ap && html`<${StdApply} p=${p} update=${update} onClose=${() => setAp(false)} />`}</div>`;
+}
+
 /* ================= 試驗報告回填 ================= */
 function TestTab({p, update}) {
   const [all, setAll] = useState(false);
@@ -1669,10 +1754,10 @@ function TestTab({p, update}) {
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
     ['結果', r => html`<select value=${r.testResult || ''} onChange=${e => set(r.id, 'testResult', e.target.value)}><option value="">—</option><option>合格</option><option>不合格</option></select>`, true]];
-  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
+  return html`<div><${StdCard} p=${p} update=${update} /><div className="card" style=${{marginTop: '8px'}}><div className="row" style=${{justifyContent: 'space-between'}}><h2>試驗報告編號回填（${list.length}）</h2>
     <label><input type="checkbox" checked=${all} onChange=${e => setAll(e.target.checked)} /> 含已回填</label></div>
     <div className="mute" style=${{marginBottom: '6px'}}>取樣超過 ${due} 天仍未回填者標紅（天數可於專案設定調整）。</div>
-    ${list.length ? html`<${CTable} cols=${cols} rows=${list} />` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div>`;
+    ${list.length ? html`<${CTable} cols=${cols} rows=${list} />` : html`<div className="empty">沒有待回填的試驗報告</div>`}</div></div>`;
 }
 
 /* ================= 每週稽核 ================= */
