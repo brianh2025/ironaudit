@@ -2104,145 +2104,9 @@ function SettingsTab({p, update, onDelete, onRestore}) {
     <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
 }
 
-/* ================= 資料夾採購統計 =================
-   和其他分頁不同，這一頁不分專案：統計每個工程要買幾個實體資料夾（放紙本的卷宗夾）。
-   資料存在 RT-PMIS 的共用 Supabase，不需登入，同事打開就看到同一份，填完即時同步。
-   Supabase 元件在第一次進入這個分頁時才下載，需連網。 */
-const SB_URL = 'https://xbdchvmxgmypcyawavju.supabase.co';
-const SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban';  // publishable key 本來就是公開金鑰；RLS 只放行 folder_requirements 與 projects 的 id、name 兩欄
-let sbPromise;
-const loadSb = () => sbPromise || (sbPromise = new Promise((res, rej) => {
-  if (window.supabase) return res(window.supabase.createClient(SB_URL, SB_KEY));
-  const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js';
-  s.onload = () => res(window.supabase.createClient(SB_URL, SB_KEY));
-  s.onerror = () => rej(new Error('無法載入 Supabase 元件（需連網）'));
-  document.head.appendChild(s);
-}));
-const fbWhen = ts => { if (!ts) return ''; const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-
-/* 一個工程一格數字。本地先改、離開欄位才寫回，避免打字途中被同事的即時更新蓋掉。 */
-function FolderLine({row, onSave}) {
-  const [v, setV] = useState(row.qty == null ? '' : String(row.qty));
-  const editing = useRef(false);
-  useEffect(() => { if (!editing.current) setV(row.qty == null ? '' : String(row.qty)); }, [row.qty]);
-  const commit = () => {
-    editing.current = false;
-    const t = v.trim(), qty = t === '' ? null : Math.max(0, parseInt(t, 10) || 0);
-    if (qty === row.qty) { setV(row.qty == null ? '' : String(row.qty)); return; }
-    onSave(row, qty);
-  };
-  return html`<tr>
-    <td>${row.name}</td>
-    <td className="n"><input type="number" min="0" placeholder="—" value=${v} style=${{width: '86px', textAlign: 'right'}}
-      onChange=${e => { editing.current = true; setV(e.target.value); }}
-      onBlur=${commit} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} /></td>
-    <td className="nw">${fbWhen(row.updated_at)}</td>
-  </tr>`;
-}
-
-function FolderList({sb}) {
-  const [projects, setProjects] = useState([]), [rows, setRows] = useState([]), [extra, setExtra] = useState([]);
-  const [err, setErr] = useState(''), [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    const [p, r] = await Promise.all([
-      sb.from('projects').select('id,name').order('name'),
-      sb.from('folder_requirements').select('*'),
-    ]);
-    const e = p.error || r.error;
-    if (e) { setErr(e.message); setLoading(false); return; }
-    setProjects(p.data); setRows(r.data); setLoading(false);
-  }, [sb]);
-  useEffect(() => { load(); }, [load]);
-
-  /* 同事改的數字即時出現；公司網路擋掉 WebSocket 時按「重新整理」也拿得到 */
-  useEffect(() => {
-    const ch = sb.channel('folder-req').on('postgres_changes', {event: '*', schema: 'public', table: 'folder_requirements'}, ev => {
-      setRows(cur => {
-        if (ev.eventType === 'DELETE') return cur.filter(x => x.id !== ev.old.id);
-        const i = cur.findIndex(x => x.id === ev.new.id);
-        if (i < 0) return [...cur, ev.new];
-        const next = cur.slice(); next[i] = ev.new; return next;
-      });
-    }).subscribe();
-    return () => { sb.removeChannel(ch); };
-  }, [sb]);
-
-  /* 工程清單＝共用資料庫的既有工程 ＋ 已填過的自訂案名 ＋ 這次新輸入的 */
-  const list = useMemo(() => {
-    const byName = new Map(rows.map(r => [r.project_name, r]));
-    const names = new Map();
-    projects.forEach(x => names.set(x.name, x.id));
-    rows.forEach(r => { if (!names.has(r.project_name)) names.set(r.project_name, r.project_id || null); });
-    extra.forEach(n => { if (!names.has(n)) names.set(n, null); });
-    return [...names.entries()].map(([name, id]) => {
-      const r = byName.get(name);
-      return {name, id, qty: r ? r.qty : null, updated_at: r && r.updated_at};
-    }).sort((a, b) => seqCmp(a.name, b.name));
-  }, [projects, rows, extra]);
-
-  const total = list.reduce((s, x) => s + (x.qty || 0), 0);
-  const filled = list.filter(x => x.qty != null).length;
-
-  const save = async (row, qty) => {
-    if (qty == null) {
-      setRows(c => c.filter(x => x.project_name !== row.name));
-      const {error} = await sb.from('folder_requirements').delete().eq('project_name', row.name);
-      if (error) { setErr(error.message); load(); }
-      return;
-    }
-    const rec = {project_id: row.id, project_name: row.name, qty, updated_at: new Date().toISOString()};
-    const {data, error} = await sb.from('folder_requirements').upsert(rec, {onConflict: 'project_name'}).select().single();
-    if (error) { setErr(error.message); load(); return; }
-    setRows(c => { const i = c.findIndex(x => x.project_name === row.name); if (i < 0) return [...c, data]; const n = c.slice(); n[i] = data; return n; });
-  };
-
-  const addProject = () => { const n = prompt('工程名稱'); if (n && n.trim()) setExtra(x => x.includes(n.trim()) ? x : [...x, n.trim()]); };
-
-  const exportXlsx = () => {
-    const wb = XLSX.utils.book_new();
-    const aoa = [['工程', '資料夾數量', '更新時間'],
-      ...list.filter(x => x.qty != null).map(x => [x.name, x.qty, fbWhen(x.updated_at)]),
-      ['合計', total, '']];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '資料夾採購統計');
-    const d = new Date();
-    XLSX.writeFile(wb, `資料夾採購統計_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.xlsx`);
-  };
-
-  if (loading) return html`<div className="card empty">載入中…</div>`;
-  return html`<div>
-    <div className="card">
-      <div className="hero">
-        <div><div className="big">${total.toLocaleString()}</div><div className="sub">個資料夾　${filled}／${list.length} 個工程已填</div></div>
-        <div className="row noprint"><button className="b" onClick=${exportXlsx}>匯出 Excel</button>
-        <button className="b" onClick=${addProject}>＋ 其他工程</button>
-        <button className="b" onClick=${load}>重新整理</button></div>
-      </div>
-      <p style=${{fontSize: '12.5px', color: 'var(--mute)', margin: 0}}>每個工程填一個數量就好，不分種類與用途。離開欄位自動存檔，同事那邊即時看到；清空數字代表這個工程還沒填。</p>
-      ${err && html`<p style=${{color: 'var(--bad)', fontSize: '12.5px', margin: '8px 0 0', cursor: 'pointer'}} onClick=${() => setErr('')}>${err}（點一下關閉）</p>`}
-    </div>
-    <div className="tw"><table>
-      <thead><tr><th>工程</th><th className="n">數量</th><th>更新</th></tr></thead>
-      <tbody>
-        ${list.map(x => html`<${FolderLine} key=${x.name} row=${x} onSave=${save} />`)}
-        <tr className="g"><td>合計</td><td className="n">${total.toLocaleString()}</td><td></td></tr>
-      </tbody>
-    </table></div>
-  </div>`;
-}
-
-function FolderTab() {
-  const [sb, setSb] = useState(null), [err, setErr] = useState('');
-  useEffect(() => { loadSb().then(setSb).catch(e => setErr(e.message)); }, []);
-  if (err) return html`<div className="card empty">${err}</div>`;
-  if (!sb) return html`<div className="card empty">載入中…</div>`;
-  return html`<${FolderList} sb=${sb} />`;
-}
-
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['查驗', ['insp', 'tests', 'print']], ['督導', ['gtech', 'gcheck']], ['安環', ['gsec', 'genv', 'gflood', 'gtraf']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['print', '抽查表單'], ['gtech', '技師督導'], ['gcheck', '查核／團體督導'], ['gsec', '職安衛'], ['genv', '環保'], ['gflood', '防汛'], ['gtraf', '交維'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['查驗', ['insp', 'tests', 'print']], ['督導', ['gtech', 'gcheck']], ['安環', ['gsec', 'genv', 'gflood', 'gtraf']], ['稽核', ['audit']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['print', '抽查表單'], ['gtech', '技師督導'], ['gcheck', '查核／團體督導'], ['gsec', '職安衛'], ['genv', '環保'], ['gflood', '防汛'], ['gtraf', '交維'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -2374,7 +2238,6 @@ function App() {
         ${tab === 'gflood' && html`<${PrintTab} ...${props} only=${['防汛表單']} />`}
         ${tab === 'print' && html`<${PrintTab} ...${props} />`}
         ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} />`}
-        ${tab === 'folder' && html`<${FolderTab} />`}
         ${tab === 'set' && html`<${SettingsTab} ...${props} onDelete=${del} onRestore=${restore} />`}
       </main>`
     : html`<main><div className="card empty"><h2>歡迎使用 Ironaudit 智慧監造報表</h2><p>建立專案後，於「資料匯入」匯入契約詳細價目表、預定進度表與廠商施工日誌。</p>
