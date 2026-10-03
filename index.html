@@ -668,7 +668,7 @@ function classifyLine(raw, date) {
   if (/勘查|會勘|討論|開會|會議/.test(t) && !/合格|不合格|未通過/.test(t)) return null; // 現場勘查、討論、會議只是提到查驗，不是查驗紀錄
   const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
-  if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 取樣就是要試驗：待取得報告後回填編號
+  if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
   if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
   if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
@@ -735,7 +735,7 @@ function parseVendorRecords(wb, items, logs) {
   for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) {
     const t = raw.replace(/^\s*\d+[.、．]\s*/, '').trim(); if (!/澆置|澆築|澆灌/.test(t) || !/混凝土/.test(t) || /瀝青/.test(t)) continue;
     const g = /PC|襯底|打底/.test(t) ? '140' : '210', its = /異型塊/.test(t) ? [] : conc.filter(x => x.name.includes(g + 'kgf')).map(x => x.code);
-    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${t}`, result: '', testNeed: type === '材料查驗', ...(type === '材料查驗' ? {testName: '混凝土抗壓強度試驗', sampleDate: d} : {})}}, d, '混凝土');
+    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
   }
   out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
@@ -882,9 +882,6 @@ const kindOf = g => PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x 
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
   let ch = false; p.settings.prefix = p.settings.prefix || {};
-  if (!p.sampleNeedsTest) { // 舊版把「僅取樣」的材料查驗標為不需試驗；取樣就要試驗，一次性補標
-    p.inspections.forEach(r => { if (r.type === '材料查驗' && !r.testNeed && /取樣|試體/.test(r.content || '')) { r.testNeed = true; r.sampleDate = r.sampleDate || r.date; } });
-    p.sampleNeedsTest = true; ch = true; }
   if (p.formTemplates?.some(t => !t.tables && !t.page)) { p.formTemplates = p.formTemplates.filter(t => t.tables || t.page); ch = true; }
   for (const k in DEFAULT_PREFIX) { const v = p.settings.prefix[k]; if (v === undefined || OLD_PREFIX[k].includes(v)) { p.settings.prefix[k] = DEFAULT_PREFIX[k]; ch = true; } }
   const old = /^(施查|材查|查核|安|環|交|技督|汛|N|E[1-5](-[1-5X])?)-\d+$/;
