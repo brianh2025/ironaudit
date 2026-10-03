@@ -644,12 +644,15 @@ async function parsePdfSchedule(file, startDate) {
 }
 /* 廠商活頁簿：從「日資料庫」二～五項記事欄與「輸入1」（取樣試驗／重要事項）的文字行，依關鍵字辨識填報 */
 /* 位置：樁號（0k+500-0k+700）＋結構部位（擋浪牆基礎大底、坡面工基礎擋土牆…）＋單雙號；部位取樁號之後、施工項目字樣之前 */
-const STA_RE = /\d+\s*[kK]\s*\+\s*\d+(?:\s*[-~～－–至到]\s*\d+\s*[kK]\s*\+\s*\d+)?/;
+const STA_RE = /(?:\d+\s*[kK]|[kK]\s*\d+)\s*\+\s*\d+(?:\s*[-~至到]\s*(?:\d+\s*[kK]|[kK]\s*\d+)\s*\+\s*\d+)?/; // 1K+450、K1+450、1K+450~1K+500
+const STA_PLAIN = /[（(][^）)]*?(\d+\s*\+\s*\d{2,3}(?:\s*[-~至到]\s*\d+\s*\+\s*\d{2,3})?)/; // 括弧內沒有 K 的里程，例如 (0+450~0+500)
+const normSta = t => String(t).replace(/＋/g, '+').replace(/[～〜]/g, '~').replace(/[－–—]/g, '-').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
 const GENERIC_RE = /告示牌|職安|安衛|安全衛生|救生|警示|拒馬|護欄|交通錐|滅火|照明|廁所|工務所|工地標誌|縮時攝影|交維|交通維持|環保|環境/;
 function parseLocation(t) {
-  t = String(t); const m = t.match(STA_RE); if (!m) return GENERIC_RE.test(t) ? '全工區' : ''; // 通泛項目（告示牌、職安設備、救生設備…）沒有樁號，位置為全工區
-  const rest = t.slice(m.index + m[0].length).replace(/^[\s、，,:：]+/, ''), cut = rest.search(/模板|鋼筋|預力|混凝土|開挖|回填|放樣|測量|澆置|查驗|取樣|試體|尺寸|進場|廠驗|打設|組立|綁紮|伸縮縫|止水|自主檢查|塊石|拋石|[（(]/);
-  const part = (cut < 0 ? rest : rest.slice(0, cut)).replace(/[\s、，,]+$/, ''), side = (t.match(/[（(](單號|雙號)[）)]/) || [])[1];
+  t = normSta(t); const m = t.match(STA_RE) || (q => q && {index: q.index + q[0].indexOf(q[1]), 0: q[1]})(t.match(STA_PLAIN));
+  if (!m) return GENERIC_RE.test(t) ? '全工區' : ''; // 通泛項目（告示牌、職安設備、救生設備…）沒有樁號，位置為全工區
+  const rest = t.slice(m.index + m[0].length).replace(/^[\s、，,:：]+/, ''), cut = rest.search(/模板|鋼筋|預力|混凝土|開挖|回填|放樣|測量|澆置|查驗|取樣|試體|尺寸|進場|廠驗|打設|組立|綁紮|伸縮縫|止水|自主檢查|塊石|拋石|[（()）]/);
+  const part = (cut < 0 ? rest : rest.slice(0, cut)).replace(/單號|雙號/g, '').replace(/[\s、，,]+$/, ''), side = (t.match(/[（(]?(單號|雙號)[）)]?/) || [])[1];
   return [m[0].replace(/\s+/g, ''), part, side].filter(Boolean).join(' ');
 }
 const MAT_PRI = ['基樁', '鋼板樁', '異型塊', '鋼筋', '瀝青', '塊石', '拋石', '回填', '混凝土'];
