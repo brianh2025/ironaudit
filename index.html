@@ -1494,14 +1494,6 @@ function InspectionTab(props) {
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
-function TechTab(props) {
-  const fields = [{k: 'date', label: '督導日期', type: 'date'}, {k: 'no', label: '表單號'}, {k: 'person', label: '督導技師'},
-    {k: 'items', label: '督導工項', type: 'items'}, {k: 'content', label: '督導內容', type: 'textarea'},
-    {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
-  const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['督導技師', r => r.person], ['工項', r => shortList(itemNames(props.p, r.items))], ['缺失', r => r.defects || 0],
-    ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className="tag bad">未完成</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="supervisions" title="技師督導" filter=${r => r.kind === '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: '技師督導', items: []}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
-}
 function AuditRecTab(props) {
   const K = ['工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'];
   const fields = [{k: 'date', label: '日期', type: 'date'}, {k: 'kind', label: '類別', type: 'select', options: K}, {k: 'no', label: '表單號'}, {k: 'person', label: '查核單位／委員'},
@@ -2247,8 +2239,8 @@ function FolderTab() {
 }
 
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'gtech', 'check', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['gtech', '技師督導表單'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['check', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'gtech', 'check', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['gtech', '技師督導'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['check', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -2372,7 +2364,6 @@ function App() {
         ${tab === 'log' && html`<${LogTab} ...${props} />`}
         ${tab === 'insp' && html`<${InspectionTab} ...${props} preset=${preset} clearPreset=${() => setPreset(null)} />`}
         ${tab === 'tests' && html`<${TestTab} ...${props} />`}
-        ${tab === 'tech' && html`<${TechTab} ...${props} />`}
         ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
         ${tab === 'gtech' && html`<${PrintTab} ...${props} only=${['技師督導紀錄表']} />`}
         ${tab === 'gsec' && html`<${PrintTab} ...${props} only=${['職安衛表單']} />`}
