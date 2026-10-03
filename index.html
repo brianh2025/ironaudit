@@ -733,14 +733,24 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
-  // 例外：混凝土澆置一定有混凝土施工查驗與材料取樣（其餘施工項目，有寫或有計數量都不代表有查驗）。工項只掛混凝土，寫 PC／襯底／打底者為 140kgf，其餘 210kgf
+  // 例外：混凝土澆置一定有混凝土施工查驗與材料取樣。澆置行若同時寫了其他工項（模板組立、鋼筋綁紮…），依「及／與／和／、／，」逐項拆開，每個工項各一張施工查驗（工項只掛該項）；
+  // 其餘沒有澆置的施工項目，有寫或有計數量都不代表有查驗。寫 PC／襯底／打底者混凝土工項為 140kgf，其餘 210kgf
   const conc = items.filter(x => x.kind === 'normal' && /混凝土/.test(x.name) && /預拌/.test(x.name) && !/模板|鋼筋|瀝青|基樁|異型塊|預鑄|坡面工|試體|CLSM|低強度|試驗|檢驗/.test(x.name));
+  const splitWork = t => { const o = []; let cur = '', depth = 0; for (const ch of t) { if (/[（(]/.test(ch)) depth++; else if (/[）)]/.test(ch)) depth = Math.max(0, depth - 1); if (!depth && /[及與和、，,；;]/.test(ch)) { o.push(cur); cur = ''; } else cur += ch; } o.push(cur); return o.map(x => x.trim()).filter(Boolean); };
+  const stationOf = x => { const l = parseLocation(x); return /\d\+\d/.test(l) ? l : ''; };
+  const pourRecs = (d, seg, g) => { const its = /異型塊/.test(seg) ? [] : conc.filter(x => x.name.includes(g + 'kgf')).map(x => x.code);
+    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${seg}`, result: '', testNeed: false}}, d, '混凝土'); };
   for (const d of Object.keys(logs || {}).sort()) for (const raw of String(logs[d].summary || '').split(/\n/)) {
     const t = raw.replace(/^\s*\d+[.、．]\s*/, '').trim(); if (!/澆置|澆築|澆灌/.test(t) || !/混凝土/.test(t) || /瀝青/.test(t)) continue;
-    const g = /PC|襯底|打底/.test(t) ? '140' : '210', its = /異型塊/.test(t) ? [] : conc.filter(x => x.name.includes(g + 'kgf')).map(x => x.code);
-    for (const [type, nm] of [['施工查驗', '混凝土施工查驗'], ['材料查驗', '混凝土材料取樣']]) put({list: 'inspections', r: {date: d, type, items: [...its], keepItems: true, content: `${nm}：${t}`, result: '', testNeed: false}}, d, '混凝土');
-    if (/模板/.test(t)) { const q = inferItems2(items, '模板'); // 澆置行同時寫了模板組立：另有一張模板施工查驗（工項只掛模板）
-      put({list: 'inspections', r: {date: d, type: '施工查驗', items: q.codes, keepItems: true, itemNote: q.ambig.length ? q.ambig.map(a => `${a.k}未載明規格：${a.names.map(nm => nm.slice(0, 22)).join('／')}`).join('；') : undefined, content: `模板施工查驗：${t}`, result: '', testNeed: false}}, d, '模板'); }
+    const locAll = stationOf(t); let hasPour = false;
+    for (const seg0 of splitWork(t)) {
+      const code = SITE_CODE.find(([re]) => re.test(seg0))?.[1], nm = SITE_NAME[code]; if (!nm) continue;
+      const seg = seg0 + (!stationOf(seg0) && locAll ? `(${locAll})` : '');
+      if (code === 'F') { hasPour = true; pourRecs(d, seg, /PC|襯底|打底/.test(seg) ? '140' : '210'); continue; }
+      const q = inferItems2(items, seg0);
+      put({list: 'inspections', r: {date: d, type: '施工查驗', items: q.codes, keepItems: true, itemNote: q.ambig.length ? q.ambig.map(a => `${a.k}未載明規格：${a.names.map(n => n.slice(0, 22)).join('／')}`).join('；') : undefined, content: `${nm}施工查驗：${seg}`, result: '', testNeed: false}}, d, nm);
+    }
+    if (!hasPour) pourRecs(d, t, /PC|襯底|打底/.test(t) ? '140' : '210');
   }
   out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
