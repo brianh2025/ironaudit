@@ -105,7 +105,12 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .split>*{min-width:0;max-width:100%}
 .xrow td{background:#f8fafc}.xrow div{padding:2px 0}
 @media(max-width:760px){td,th{overflow-wrap:anywhere}.tw table{font-size:12.5px}}
-@media print{header,nav,.noprint{display:none}}
+@media print{header,nav,.subnav,.noprint{display:none}}
+.psheets{display:none}
+@media print{body{background:#fff}.psheets{display:block}main{padding:0;max-width:none}.sheet{break-after:page;font-size:12pt;color:#000}.sheet:last-child{break-after:auto}
+.sheet .st{text-align:center;font-size:18pt;font-weight:bold;margin:0 0 10px}.sheet table{width:100%;border-collapse:collapse}
+.sheet th,.sheet td{border:1px solid #000;padding:6px 8px;text-align:left;vertical-align:top}.sheet th{width:18%;background:#f2f2f2;white-space:nowrap;font-size:12pt;color:#000;font-weight:bold;text-transform:none;letter-spacing:0}
+.sheet td.pre{white-space:pre-wrap;height:2.2em}.sheet .sg{display:flex;justify-content:space-between;gap:12px;margin-top:28px}.sheet .sg div{flex:1;border-bottom:1px solid #000;padding-bottom:28px}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -1415,6 +1420,65 @@ function FormTab(props) {
   return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => formPrefix(props.p, r, 'forms')} />`;
 }
 
+/* ================= 表單列印：依表單類別列出專案所有查驗／督導／安環表單，勾選後逐張列印 ================= */
+const PRINT_KINDS = [
+  ['施工抽查紀錄表', 'inspections', r => (r.type || '施工查驗') === '施工查驗'],
+  ['材料設備品質抽驗紀錄表', 'inspections', r => r.type === '材料查驗'],
+  ['技師督導紀錄表', 'supervisions', r => r.kind === '技師督導'],
+  ['查核及團體督導紀錄', 'supervisions', r => r.kind !== '技師督導'],
+  ...['職安衛', '環保', '交維', '防汛'].map(c => [`${c}表單`, 'forms', r => r.cat === c])];
+const sheetTitle = (g, r) => g === '查核及團體督導紀錄' ? `${r.kind || '查核'}紀錄` : r.cat ? r.title || `${r.cat}檢查表` : g;
+function sheetRows(p, k, r) {
+  const its = itemNames(p, r.items).join('、');
+  if (k === 'inspections') return [['查驗類別', r.type || '施工查驗'], ['查驗工項', its], ['位置／里程', r.location], ['查驗項目及內容', r.content], ['查驗結果', r.result],
+    ...(r.defect || r.fixDone ? [['缺失內容／改善要求', r.defect], ['缺失改善完成日', roc(r.fixDone)]] : []),
+    ...(r.testNeed ? [['試驗項目', r.testName], ['取樣／會驗日期', roc(r.sampleDate)], ['試驗報告編號', r.reportNo], ['報告日期', roc(r.reportDate)], ['試驗結果', r.testResult]] : [])];
+  if (k === 'supervisions') return [[r.kind === '技師督導' ? '督導技師' : '查核單位／委員', r.person], ...(its ? [['督導工項', its]] : []), ...(r.score ? [['分數／等級', r.score]] : []),
+    [r.kind === '技師督導' ? '督導內容' : '查核意見摘要', r.content], ['缺失件數', r.defects || 0], ['改善期限', roc(r.fixDue)], ['改善完成日', roc(r.fixDone)], ['備註', r.note]];
+  return [['類別', r.cat], ['檢查結果', r.result], ['缺失／備註', r.note]];
+}
+const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
+function Sheet({p, e}) {
+  const I = p.info, r = e.r;
+  return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
+    <table><tbody>
+      <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
+      <tr><th>契約編號</th><td>${I.contractNo}</td><th>表單編號</th><td>${r.no}</td></tr>
+      <tr><th>主辦機關</th><td>${I.owner}</td><th>日期</th><td>${r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''}</td></tr>
+      <tr><th>監造單位</th><td>${I.supervisor}</td><th>承攬廠商</th><td>${I.contractor}</td></tr>
+      ${sheetRows(p, e.k, r).map(([l, v]) => html`<tr key=${l}><th>${l}</th><td colSpan="3" className="pre">${v}</td></tr>`)}
+    </tbody></table>
+    <div className="sg">${SIGNS[e.k].map(s => html`<div key=${s}>${s}：</div>`)}</div></div>`;
+}
+function PrintTab({p}) {
+  const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
+  const groups = PRINT_KINDS.map(([g, k, f]) => ({g, list: p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
+    .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || '')).map(r => ({g, k, r}))})).filter(x => x.list.length);
+  const all = groups.flatMap(x => x.list), picked = all.filter(e => sel.has(e.r.id));
+  const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
+  const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
+  return html`<div>
+    <div className="card noprint">
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單列印（${all.length}）</h2>
+        <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
+          <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
+          <button className="b" onClick=${() => tog(all.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
+          <button className="b p" disabled=${!picked.length} onClick=${() => window.print()}>列印已選（${picked.length}）</button></div></div>
+      <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。</div>
+      ${groups.length ? groups.map(({g, list}) => { const on = list.filter(e => sel.has(e.r.id)).length;
+        return html`<div key=${g} style=${{marginBottom: '10px'}}>
+          <h3><label><input type="checkbox" checked=${on === list.length} ref=${el => el && (el.indeterminate = on > 0 && on < list.length)} onChange=${ev => tog(list.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${list.length}）</label></h3>
+          <div className="tw"><table><thead><tr><th style=${{width: '1%'}}></th><th>日期</th><th>表單號</th><th>內容</th></tr></thead><tbody>
+            ${list.map(e => html`<tr key=${e.r.id} style=${{cursor: 'pointer'}} onClick=${() => tog([e.r.id], !sel.has(e.r.id))}>
+              <td><input type="checkbox" checked=${sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
+              <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}</td><td>${shortText(desc(e))}</td></tr>`)}
+          </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
+    </div>
+    <div className="psheets">${picked.map(e => html`<${Sheet} key=${e.r.id} p=${p} e=${e} />`)}</div></div>`;
+}
+const shortText = s => s.length > 80 ? s.slice(0, 80) + '…' : s;
+
 /* ================= 試驗報告回填 ================= */
 function TestTab({p, update}) {
   const [all, setAll] = useState(false);
@@ -1631,8 +1695,8 @@ function FolderTab() {
 }
 
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'check', 'forms']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'tech', 'check', 'forms', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['tech', '技師督導'], ['check', '查核／團體督導'], ['forms', '職安衛／環保／交維／防汛'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -1758,6 +1822,7 @@ function App() {
         ${tab === 'tech' && html`<${TechTab} ...${props} />`}
         ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
         ${tab === 'forms' && html`<${FormTab} ...${props} />`}
+        ${tab === 'print' && html`<${PrintTab} ...${props} />`}
         ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} />`}
         ${tab === 'folder' && html`<${FolderTab} />`}
         ${tab === 'set' && html`<${SettingsTab} ...${props} onDelete=${del} onRestore=${restore} />`}
