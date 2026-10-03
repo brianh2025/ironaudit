@@ -1797,8 +1797,8 @@ function untouched(p, g, r) { if (!r.auto || r.checked) return false; if (r.auto
   return same(r.person, def.person) && same(r.content, def.content) && same(r.note, def.note) && same(r.title, def.title || (r.cat || '') + '檢查表') && !r.result && !r.score && !r.defects && !r.fixDue; }
 function freqPlan(p, g, unit, n, upto, regen) { const ps = freqPeriods(p.info.startDate, freqEnd(p, upto), unit, n), all = freqRecs(p, g), del = regen ? all.filter(r => untouched(p, g, r)) : [], have = all.filter(r => !del.includes(r));
   const todo = ps.filter(q => !have.some(r => r.date >= q.from && r.date <= q.to)); return {total: ps.length, todo, del, kept: ps.length - todo.length}; }
-function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS}) {
-  const saved = p.formFreq || {}, [upto, setUpto] = useState('end'), [regen, setRegen] = useState(false);
+function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = false}) {
+  const saved = p.formFreq || {}, [upto, setUpto] = useState('end'), [regen, setRegen] = useState(regen0);
   const [cfg, setCfg] = useState(() => Object.fromEntries(GL.map(([g]) => [g, saved[g] || (FREQ_DEFAULT[g] ? {on: true, unit: FREQ_DEFAULT[g][0], n: FREQ_DEFAULT[g][1]} : {on: false, unit: 'month', n: 1})])));
   const set = (g, k, v) => setCfg(c => ({...c, [g]: {...c[g], [k]: v}}));
   const plans = Object.fromEntries(GL.map(([g]) => [g, freqPlan(p, g, cfg[g].unit, cfg[g].n, upto, regen)])), sum = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].todo.length : 0), 0), nDel = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].del.length : 0), 0);
@@ -1825,7 +1825,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS}) {
 const SPLIT_GROUPS = ['技師督導紀錄表', '職安衛表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
-  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(false), [stat, setStat] = useState('all');
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
@@ -1849,7 +1849,8 @@ function PrintTab({p, update, only}) {
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
           finally { setBusy(false); } }} /></label></div>
       <div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
-        <button className="b p" onClick=${() => setFq(true)}>依頻率產生空白表單…</button></div>
+        <button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
+        <button className="b" title="開工日、工期、展延或頻率改了之後，刪除未修改的自動產生表單並依新條件補齊" onClick=${() => setFq('regen')}>重新產生…</button></div>
       ${tplOpen ? html`<div>
       <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
       ${tpls.map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
@@ -1857,7 +1858,7 @@ function PrintTab({p, update, only}) {
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
       </div>` : tpls.length ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${tpls.map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
     </div>
-    ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG} onClose=${(n, del) => { setFq(false); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
+    ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
     <div className="card noprint">
