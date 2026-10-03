@@ -737,7 +737,7 @@ function classifyLine(raw, date) {
   const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
-  if (/專任工程人員.*(督察|督導)|技師.*(督導|督察)/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
+  if (/技師.*(督導|督察)/.test(t) && !/廠商|營造|承攬|承包|專任工程人員/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}}; // 只收監造技師督導；廠商（營造廠）的技師督察、專任工程人員督導是營造廠自己的作業，不是監造的技師督導紀錄
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
   if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
