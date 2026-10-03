@@ -1601,6 +1601,20 @@ function docTable(el) {
   return {widths: Array(nc || 1).fill(100), heights: [], rows};
 }
 /* 檔案 → 候選範本（Excel 每個工作表一份；Word 整份文件一份） */
+/* 掃描／影像範本：從頁面影像找右側最近的直線（儲存格右框線），讓欄位寬度貼齊儲存格 */
+const imageCanvas = async img => { const im = new Image(); im.src = img; await im.decode(); const cv = document.createElement('canvas'); cv.width = im.naturalWidth; cv.height = im.naturalHeight; cv.getContext('2d').drawImage(im, 0, 0); return cv; };
+function rasterWall(cv, xPx, ycPx) {
+  const W = cv.width, y0 = Math.max(0, Math.round(ycPx) - 18), h = Math.min(cv.height - y0, 37); if (h < 10) return null;
+  const d = cv.getContext('2d').getImageData(0, y0, W, h).data, B = 3; // 掃描有輕微傾斜、細線縮放後會變淡：每列在左右 3 像素內有偏暗的點即算該列連續
+  const dark = (r, x) => { const i = (r * W + x) * 4; return d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 175; };
+  for (let x = Math.max(B, Math.round(xPx)); x < W - B - 1; x++) { let hit = 0;
+    for (let r = 0; r < h; r++) { for (let k = -B; k <= B; k++) if (dark(r, x + k)) { hit++; break; } }
+    if (hit >= h * 0.92) return x - B; }
+  return null;
+}
+/* 欄位（x、y 為頁面比例）的寬度：到右側儲存格框線；找不到框線回傳 null */
+const fieldWallW = (cv, f, size, page) => { const W = cv.width, H = cv.height, yc = (f.y + size / 100 * page.w / page.h / 2) * H, xs = f.x * W, wall = rasterWall(cv, xs + 10, yc);
+  return wall ? Math.max(0.04, (wall - xs - 6) / W) : null; };
 /* PDF 文字型：依標籤文字（欄位名稱）建議填入位置＝標籤右側 */
 function suggestPdf(lines, base, fields, vrules = []) {
   const placed = [], used = new Set(), hs = [];
@@ -1622,7 +1636,7 @@ async function parseTemplateFile(file) {
       const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
       await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
       cands.push({kind: 'pdf', name: doc.numPages > 1 ? `${bare} 第${pn}頁` : bare, page: {img: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height}, fields: [], size: 1.6,
-        lines: page.rotate % 360 === 0 ? await pdfPageLines(page) : [], base: {w: base.width, h: base.height}, vrules: page.rotate % 360 === 0 ? (await pdfRuleLines(page, lib.OPS)).v : []});
+        lines: page.rotate % 360 === 0 ? await pdfPageLines(page) : [], base: {w: base.width, h: base.height}, vrules: page.rotate % 360 === 0 ? (await pdfRuleLines(page, lib.OPS)).v : [], canvas: cv});
     }
   } else if (/\.docx$/i.test(file.name)) {
     const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html'), tables = [];
@@ -1635,8 +1649,10 @@ async function parseTemplateFile(file) {
     const wb = await readWB(file);
     for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({kind: 'grid', name: sn, tables: [t]}); }
   }
-  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, vrules, ...rest} = c;
-    return {...rest, id: uid(), file: file.name, group, ...(c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl, vrules) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}})}; });
+  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, vrules, canvas, ...rest} = c;
+    const sug = c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl, vrules) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}};
+    if (canvas && sug.fields) sug.fields = sug.fields.map(f => { if (f.w) return f; const w = fieldWallW(canvas, f, sug.size || 1.6, rest.page); return w ? {...f, w} : f; }); // 沒有向量框線時改由影像找儲存格右框線
+    return {...rest, id: uid(), file: file.name, group, ...sug}; });
 }
 /* 範本表格：editor 模式顯示對應標籤；列印模式（vals）填入資料 */
 function TplTable({t, ti, map, vals, sel, onPick}) {
@@ -1647,18 +1663,20 @@ function TplTable({t, ti, map, vals, sel, onPick}) {
 }
 const rotateImg = async ({img, w, h}) => { const im = new Image(); im.src = img; await im.decode(); const cv = document.createElement('canvas'); cv.width = h; cv.height = w; const g = cv.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(im, 0, 0); return {img: cv.toDataURL('image/jpeg', 0.82), w: h, h: w}; };
 function PdfFields({c, fields, patch}) {
-  const [cur, setCur] = useState(''), [drag, setDrag] = useState(null), half = c.size / 100 * c.page.w / c.page.h / 2;
+  const [cur, setCur] = useState(''), [drag, setDrag] = useState(null), [cv, setCv] = useState(null), half = c.size / 100 * c.page.w / c.page.h / 2;
+  useEffect(() => { let on = true; imageCanvas(c.page.img).then(x => on && setCv(x)); return () => { on = false; }; }, [c.page.img]);
   const pos = e => { const r = e.currentTarget.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
   const finish = () => { if (!drag) return; const {x0, y0, x1, y1} = drag; setDrag(null); const moved = Math.abs(x1 - x0) >= 0.01;
-    const x = Math.min(x0, x1), y = moved ? Math.min(y0, y1) : Math.max(0, y0 - half), w = moved ? Math.abs(x1 - x0) : Math.max(0.08, 0.96 - x0);
+    const x = Math.min(x0, x1), y = moved ? Math.min(y0, y1) : Math.max(0, y0 - half), w = moved ? Math.abs(x1 - x0) : ((cv && fieldWallW(cv, {x, y}, c.size, c.page)) || Math.max(0.08, 0.96 - x0)); // 單點：寬度到右側儲存格框線
     patch(c0 => ({...c0, fields: [...c0.fields.filter(q => q.f !== cur), {f: cur, x, y, w}]})); };
   return html`<div>
     <div className="row" style=${{margin: '6px 0'}}>
       <label>要放置的欄位 <select value=${cur} onChange=${e => setCur(e.target.value)}><option value="">（請選擇）</option>${fields.map(f => html`<option key=${f} value=${f}>${c.fields.some(x => x.f === f) ? '✓ ' : ''}${f}</option>`)}</select></label>
       <label>字級 <input type="number" step="0.1" min="0.8" max="4" style=${{width: '70px'}} value=${c.size} onChange=${e => patch(x => ({...x, size: +e.target.value || 1.6}))} /></label>
       <button className="b" onClick=${async () => { const page = await rotateImg(c.page); patch(x => ({...x, page, fields: []})); }}>旋轉 90°（會清除已放置欄位）</button>
+      <button className="b" disabled=${!cv || !c.fields.length} title="依頁面影像上的格線，重新設定每個欄位的寬度，讓文字不超出儲存格" onClick=${() => patch(x => ({...x, fields: x.fields.map(f => { const w = fieldWallW(cv, f, x.size, x.page); return w ? {...f, w} : f; })}))}>貼齊格線</button>
       <button className="b" onClick=${() => patch(x => ({...x, fields: []}))}>清除全部</button></div>
-    <div className="mute">選好欄位後，在頁面上<b>拖曳框出該欄位的範圍</b>（文字會在框的寬度內自動換行）；只點一下＝從該點到頁面右側。同一欄位再框一次＝重設；點藍色框可移除。已放置 ${c.fields.length} 個。</div>
+    <div className="mute">選好欄位後，在頁面上<b>拖曳框出該欄位的範圍</b>（文字會在框的寬度內自動換行）；只點一下＝從該點到右側儲存格框線（「貼齊格線」可一次重設全部欄位的寬度）。同一欄位再框一次＝重設；點藍色框可移除。已放置 ${c.fields.length} 個。</div>
     <div style=${{maxHeight: '60vh', overflow: 'auto', background: '#eee', marginTop: '6px'}}>
       <div style=${{position: 'relative', containerType: 'inline-size', cursor: cur ? 'crosshair' : 'default', userSelect: 'none', fontFamily: fontOf(c)}}
         onMouseDown=${e => { if (!cur) return; const [x, y] = pos(e); setDrag({x0: x, y0: y, x1: x, y1: y}); }}
@@ -1797,18 +1815,21 @@ function FreqModal({p, update, onClose}) {
     <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${noStart || !sum} onClick=${run}>產生 ${sum} 張空白表單</button></div></${Modal}>`;
 }
 function PrintTab({p, update}) {
-  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(false);
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(false), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
       .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
+      .filter(r => stat === 'all' || (stat === 'done') === !!r.checked)
       .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
     if (g !== '施工抽查紀錄表') return list.length ? [{g, list: list.map(r => ({g, k, r}))}] : [];
     const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
     return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
-  const all = groups.flatMap(x => x.list), picked = all.filter(e => sel.has(e.r.id));
+  const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
+  const mark = (list, on) => { if (!list.length) return; if (!on && !confirm(`取消 ${list.length} 張表單的勾稽？取消後即可再次列印。`)) return;
+    update(d => { for (const e of list) { const r = d[e.k].find(x => x.id === e.r.id); if (r) { r.checked = on; r.checkedAt = on ? todayISO() : ''; } } }); if (on) setSel(s => { const n = new Set(s); list.forEach(e => n.delete(e.r.id)); return n; }); };
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
@@ -1833,16 +1854,19 @@ function PrintTab({p, update}) {
       <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單列印（${all.length}）</h2>
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
           <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
-          <button className="b" onClick=${() => tog(all.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
-          <button className="b p" disabled=${!picked.length} onClick=${() => window.print()}>列印已選（${picked.length}）</button></div></div>
-      <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。</div>
-      ${groups.length ? groups.map(({g, list}) => { const on = list.filter(e => sel.has(e.r.id)).length;
+          <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
+          <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
+          <button className="b" disabled=${!picked.length} title="標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
+          <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
+      <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已**勾稽**的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
+      ${groups.length ? groups.map(({g, list}) => { const ok2 = list.filter(e => !e.r.checked), on = ok2.filter(e => sel.has(e.r.id)).length;
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
-          <h3><label><input type="checkbox" checked=${on === list.length} ref=${el => el && (el.indeterminate = on > 0 && on < list.length)} onChange=${ev => tog(list.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${list.length}）</label></h3>
-          <div className="tw"><table><thead><tr><th style=${{width: '1%'}}></th><th>日期</th><th>表單號</th><th>內容</th></tr></thead><tbody>
-            ${list.map(e => html`<tr key=${e.r.id} style=${{cursor: 'pointer'}} onClick=${() => tog([e.r.id], !sel.has(e.r.id))}>
-              <td><input type="checkbox" checked=${sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
-              <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}</td><td>${shortText(desc(e))}</td></tr>`)}
+          <h3><label><input type="checkbox" disabled=${!ok2.length} checked=${!!ok2.length && on === ok2.length} ref=${el => el && (el.indeterminate = on > 0 && on < ok2.length)} onChange=${ev => tog(ok2.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${ok2.length}${ok2.length < list.length ? `，已勾稽 ${list.length - ok2.length}` : ''}）</label></h3>
+          <div className="tw"><table><thead><tr><th style=${{width: '1%'}}>列印</th><th style=${{width: '1%'}}>勾稽</th><th>日期</th><th>表單號</th><th>內容</th></tr></thead><tbody>
+            ${list.map(e => html`<tr key=${e.r.id} style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
+              <td><input type="checkbox" disabled=${!!e.r.checked} title=${e.r.checked ? '已勾稽，不能列印' : ''} checked=${!e.r.checked && sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
+              <td><input type="checkbox" title="勾稽（核對完成後不能再列印）" checked=${!!e.r.checked} onClick=${ev => ev.stopPropagation()} onChange=${ev => mark([e], ev.target.checked)} /></td>
+              <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td></tr>`)}
           </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
     </div>
     <div className="psheets">${picked.map(e => html`<${Sheet} key=${e.r.id} p=${p} e=${e} />`)}</div></div>`;
