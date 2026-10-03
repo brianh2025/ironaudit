@@ -149,7 +149,7 @@ const r4 = x => Math.round(x * 1e4) / 1e4;
 const pct = (x, d = 2) => Number.isFinite(x) ? (x * 100).toFixed(d) + '%' : '—';
 const money = x => Number.isFinite(x) ? Math.round(x).toLocaleString() : '—';
 const fmtQ = x => Number.isFinite(x) ? (+x.toFixed(3)).toLocaleString() : '';
-const norm = s => String(s ?? '').replace(/[\s　，,。．.、:：;；()（）\[\]【】「」'"＂]/g, '').replace(/[＜]/g, '<').replace(/[＞]/g, '>').replace(/[³]/g, '3').replace(/[²]/g, '2').toLowerCase();
+const norm = s => String(s ?? '').replace(/[\s　，,。．.、:：;；()（）\[\]【】「」'"＂]/g, '').replace(/[＜]/g, '<').replace(/[＞]/g, '>').replace(/[≧⩾]/g, '≥').replace(/[≦⩽]/g, '≤').replace(/[³]/g, '3').replace(/[²]/g, '2').toLowerCase();
 const clean = s => String(s ?? '').replace(/\s+/g, '');
 
 /* 各種日期寫法 → ISO（Date 物件、Excel 序號、115/8/3、115.08.03、2026-8-3、1150803） */
@@ -233,13 +233,28 @@ function parseContractSheet(rows) {
   }
   return items;
 }
+/* 日誌側（工程項目矩陣／日資料庫）的工項名稱，用來驗證價目表分頁是否屬於本案 */
+function logItemNames(wb) {
+  const out = new Set();
+  const push = (r, from) => { if (r) r.forEach((v, c) => { if (c >= from && v && !/合計|利雜費|總和$|^營業稅$/.test(clean(v))) out.add(norm(v)); }); };
+  if (wb.Sheets['工程項目']) { const rows = aoa(wb.Sheets['工程項目']); const nr = rows.findIndex(r => clean(r[0]) === '工程項目'); if (nr >= 0) push(rows[nr], 3); }
+  for (const sn of wb.SheetNames) if (/^日資料庫/.test(sn)) { const R = aoa(wb.Sheets[sn]); const nr = R.findIndex(r => clean(r[0]) === '工項'); if (nr >= 0) push(R[nr], 6); }
+  out.delete('');
+  return [...out];
+}
+const isHidden = (wb, si) => !!wb.Workbook?.Sheets?.[si]?.Hidden; // 隱藏分頁多半是別案複製後留下的樣板
 function parseContract(wb) {
+  const refs = logItemNames(wb); // 同一活頁簿常殘留其他案的價目表分頁，以日誌工項名稱吻合數為第一順位
   let best = null;
-  for (const sn of wb.SheetNames) {
-    const items = parseContractSheet(aoa(wb.Sheets[sn]));
+  for (const [si, sn] of wb.SheetNames.entries()) {
+    const rows = aoa(wb.Sheets[sn]);
+    const items = parseContractSheet(rows);
     if (!items || !items.length) continue;
-    const score = items.length + (/詳細|契約/.test(sn) ? 5 : 0) + (items.some(x => /^[A-Z]\d{2}$/.test(x.code)) ? 3 : 0);
-    if (!best || score > best.score) best = {sheet: sn, items, score};
+    const set = new Set(items.map(x => norm(x.name)));
+    const hit = refs.filter(n => set.has(n)).length;
+    const score = (isHidden(wb, si) ? -1e6 : 0) + hit * 100 + items.length
+      + (/詳細|契約/.test(sn) ? 5 : 0) + (/^契約/.test(sn) ? 2 : 0) + (items.some(x => /^[A-Z]\d{2}$/.test(x.code)) ? 3 : 0);
+    if (!best || score > best.score) best = {sheet: sn, items, score, hit, refs: refs.length, name: sheetProjName(rows.slice(0, 15))};
   }
   return best;
 }
@@ -259,10 +274,34 @@ function infoFromRows(rows, info = {}) {
   }
   return info;
 }
-function parseInfo(wb) {
-  if (wb.Sheets['工程資料']) return infoFromRows(aoa(wb.Sheets['工程資料']).map(r => r.slice(0, 3)));
-  const info = {}; // 無工程資料分頁：從各分頁表頭（前 15 列）讀
-  for (const sn of wb.SheetNames) infoFromRows(aoa(wb.Sheets[sn]).slice(0, 15), info);
+/* 工程資料常是從別案複製後忘了更新，故以契約分頁的工程名稱為準：名稱不符者整個略過，空白樣板分頁亦然 */
+const PLACEHOLDER = /[○◯〇□]{2}/;
+function sheetProjName(rows) {
+  for (const r of rows) for (let i = 0; i < r.length; i++) {
+    const t = String(r[i] ?? '').trim(); if (!t) continue;
+    const inline = t.match(/工程名稱\s*[:：]\s*(\S.*)$/); if (inline) return inline[1].trim(); // 「第二聯　工程名稱：○○」同格
+    if (clean(t).replace(/[:：]$/, '') !== '工程名稱') continue;
+    for (let j = i + 1; j < Math.min(r.length, i + 8); j++) { const v = String(r[j] ?? '').trim(); if (v) return v; }
+  }
+  return null;
+}
+function parseInfo(wb, mainName) {
+  const ref = norm(mainName || '');
+  const good = [], unknown = [];
+  for (const sn of wb.SheetNames) {
+    const raw = aoa(wb.Sheets[sn]).slice(0, 15);
+    const nm0 = sheetProjName(raw);
+    if (nm0 && PLACEHOLDER.test(nm0)) continue; // 「○○排水○○分線工程」之類的空白樣板分頁
+    const rows = raw.map(r => r.map(v => PLACEHOLDER.test(String(v ?? '')) ? null : v));
+    const n = norm(nm0 || '');
+    if (nm0 && ref && !(n === ref || n.startsWith(ref) || ref.startsWith(n))) continue; // 別案殘留分頁
+    (nm0 ? good : unknown).push([sn, rows]);
+  }
+  const order = [...good, ...unknown];
+  const di = order.findIndex(([sn]) => sn === '工程資料'); // 工程資料若未被判為別案，優先採用
+  if (di > 0) order.unshift(...order.splice(di, 1));
+  const info = {};
+  for (const [sn, rows] of order) infoFromRows(sn === '工程資料' ? rows.map(r => r.slice(0, 3)) : rows, info);
   return info;
 }
 
@@ -279,8 +318,9 @@ function parseSchedule(wb) {
     if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; // 略過隱藏分頁
     scheduleCands(aoa(wb.Sheets[sn]), sn, cands);
   }
-  cands.sort((a, b) => b.points.length - a.points.length);
-  return cands[0] || null;
+  const ok = cands.filter(c => c.points.length >= 3); // 去重後不足 3 點者多為誤判（如矩陣中偶然的一格數字）
+  ok.sort((a, b) => b.points.length - a.points.length);
+  return ok[0] || null;
 }
 function scheduleCands(rows, sn, cands) {
   {
@@ -322,11 +362,22 @@ function parsePastedSchedule(text) {
 
 /* ---- 施工日誌 ---- */
 let ALIAS = {}; // 使用者手動指定的「日誌名稱 → 契約代碼」，匯入前由專案設定帶入
+/* 契約名稱常有分類前綴（「品質管理，試驗規範及標準，土木工程及建築類檢驗，A3045…」），日誌只印末段。
+   字尾相符僅在整份契約唯一相符時才採用，避免誤配。 */
+function endsWithOne(items, n) {
+  if (n.length < 6) return [];
+  const c = items.filter(x => norm(x.name).endsWith(n));
+  return c.length === 1 ? c : [];
+}
+/* 契約名稱常在括號內補計算式（「營業稅（約壹．一～壹．八總和之5%)」），日誌只寫括號前的本名 */
+const parenBase = (items, n) => items.filter(x => norm(String(x.name).split(/[（(]/)[0]) === n);
 function matchItem(items, name, unit) {
   const n = norm(name); if (!n) return null;
   if (ALIAS[n]) { const a = items.find(x => x.code === ALIAS[n]); if (a) return a; }
   let c = items.filter(x => norm(x.name) === n);
+  if (!c.length) c = parenBase(items, n);
   if (!c.length && n.length >= 6) c = items.filter(x => { const m = norm(x.name); return m.startsWith(n) || n.startsWith(m); });
+  if (!c.length) c = endsWithOne(items, n);
   if (c.length > 1 && unit) { const u = c.filter(x => norm(x.unit) === norm(unit)); if (u.length) c = u; }
   return c[0] || null;
 }
@@ -480,6 +531,7 @@ async function parsePdfLogs(file, items) {
   const doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
   const logs = {}, unmatched = [], sources = [], info = {}; let cur = null, noText = 0;
   const days = {}; // date → {q2:{}, q1:{}, has2}
+  let lastTbl = null; // 前一頁的數量表欄位位置（供無表頭的續頁沿用）
   for (let pn = 1; pn <= doc.numPages; pn++) {
     const lines = await pdfPageLines(await doc.getPage(pn));
     if (!lines.length) { noText++; continue; }
@@ -511,18 +563,8 @@ async function parsePdfLogs(file, items) {
         if (m && xM != null) { const v = near(xM); if (v > 0) lg.machines[clean(m.t)] = v; }
       } }
     // 完成數量表（第一聯「施工項目」表、第二聯「工程項目」表）
-    for (let h = 0; h < lines.length; h++) {
-      const band = lines.slice(Math.max(0, h - 1), h + 2), ht = lines[h].text;
-      if (!(/單位/.test(ht) && /契約數量/.test(band.map(l => l.text).join('')) && /完成數量/.test(band.map(l => l.text).join('')))) continue;
-      // 表頭欄：同 x 位置上下文字串接（處理「本日／完成數量」分兩行）
-      const cols = [];
-      band.forEach(l => l.c.forEach(c => { const k = cols.find(k => Math.abs(k.xc - c.xc) < 22); if (k) k.t += c.t; else cols.push({xc: c.xc, x0: c.x0, t: c.t}); }));
-      const col = re => cols.find(k => re.test(k.t));
-      const cQ = col(/本日完成數量|本日.*完成數量/) || col(/^本日完成$/), cU = col(/^單位/), cP = col(/單價/);
-      if (!cQ || !cU) continue;
-      const second = !!cP; if (second) D.has2 = true;
-      const bucket = second ? D.q2 : D.q1;
-      const start = lines.indexOf(band[band.length - 1]) + 1; let prevText = '';
+    const scanQty = (start, cQ, cU, cP, second) => {
+      const bucket = second ? D.q2 : D.q1; let prevText = '';
       for (let k = start; k < lines.length; k++) {
         const L = lines[k]; if (/^二、|材料名稱|^三、|工別|營造業專業/.test(L.text)) break;
         const cs = L.c, u = cs.find(c => Math.abs(c.xc - cU.xc) < 25 && !Number.isFinite(pdfNum(c.t)) && c.t.length <= 4);
@@ -540,6 +582,26 @@ async function parsePdfLogs(file, items) {
         if (!q) continue;
         if (it && it.kind === 'normal') bucket[it.code] = second ? q : (bucket[it.code] || 0) + q; else if (!it) unmatched.push({name: name || tryNames[tryNames.length - 1], unit: clean(u.t), date: cur, q});
       }
+    };
+    let found = false;
+    for (let h = 0; h < lines.length; h++) {
+      const band = lines.slice(Math.max(0, h - 1), h + 2), ht = lines[h].text;
+      if (!(/單位/.test(ht) && /契約數量/.test(band.map(l => l.text).join('')) && /完成數量/.test(band.map(l => l.text).join('')))) continue;
+      // 表頭欄：同 x 位置上下文字串接（處理「本日／完成數量」分兩行）
+      const cols = [];
+      band.forEach(l => l.c.forEach(c => { const k = cols.find(k => Math.abs(k.xc - c.xc) < 22); if (k) k.t += c.t; else cols.push({xc: c.xc, x0: c.x0, t: c.t}); }));
+      const col = re => cols.find(k => re.test(k.t));
+      const cQ = col(/本日完成數量|本日.*完成數量/) || col(/^本日完成$/), cU = col(/^單位/), cP = col(/單價/);
+      if (!cQ || !cU) continue;
+      const second = !!cP; if (second) D.has2 = true;
+      found = true; lastTbl = {date: cur, cQ, cU, cP, second};
+      scanQty(lines.indexOf(band[band.length - 1]) + 1, cQ, cU, cP, second);
+    }
+    // 續頁：同一天的數量表跨頁時不會重印表頭，沿用前一頁的欄位位置繼續讀
+    if (!found && lastTbl && lastTbl.date === cur) {
+      let s = 0; lines.slice(0, 12).forEach((l, i) => { if (/預定進度|實際進度|開工日期|完工日期|填表日期|承攬廠商/.test(l.text)) s = i + 1; }); // 僅看頁首區塊，頁尾附註也會提到這些字
+      if (lastTbl.second) D.has2 = true;
+      scanQty(s, lastTbl.cQ, lastTbl.cU, lastTbl.cP, lastTbl.second);
     }
   }
   for (const [d, D] of Object.entries(days)) { logs[d].qty = D.has2 ? D.q2 : D.q1; sources.push(`${roc(d)}（第 ${D.pages.join('、')} 頁）${Object.keys(logs[d].qty).length} 項${D.has2 ? '，依第二聯' : ''}`); }
@@ -550,7 +612,9 @@ function pdfMatch(items, name, unit, price) {
   const n = norm(name); if (n.length < 2) return null;
   if (ALIAS[n]) { const a = items.find(x => x.code === ALIAS[n]); if (a) return a; }
   let c = items.filter(x => norm(x.name) === n);
+  if (!c.length) c = parenBase(items, n);
   if (!c.length && n.length >= 6) c = items.filter(x => { const m = norm(x.name); return m.startsWith(n) || n.startsWith(m); });
+  if (!c.length) c = endsWithOne(items, n);
   if (c.length > 1 && Number.isFinite(price)) { const p = c.filter(x => Math.abs(x.price - price) < 0.01); if (p.length) c = p; }
   if (c.length > 1 && unit) { const u = c.filter(x => norm(x.unit) === norm(unit)); if (u.length) c = u; }
   return c[0] || null;
@@ -694,10 +758,14 @@ function inferItems2(items, text) {
     else if (x.name.split(/[，,]/).some(seg => { const g = norm(seg); return g.length >= 3 && !/^(產品|租用|其他|一般|費用|材料)/.test(g) && n.includes(g); })) hit.add(x.code); }); // 名稱的其中一段（動力救生船、工程告示牌…）出現在文字中
   const OTHER = ['模板', '鋼筋', '異型塊', '基樁', '坡面工', '瀝青', '植筋', '伸縮縫', '銲接']; // 「混凝土」不含這些類別的工項（場鑄結構混凝土用模板、預鑄混凝土異型塊…），除非內容本身提到
   if (hit.size) return {codes: [...hit].slice(0, 6), ambig: []}; // 名稱直接出現在文字中
-  const kg = (text.match(/(\d+)\s*kgf/i) || [])[1], ambig = [];
+  const kg = (text.match(/(\d+)\s*k[gf]{2}/i) || [])[1], ambig = [];
+  /* 關鍵字比對只在工程本體的工項裡找：職安衛／環保／交維組內也有同名材料（如「職業安全衛生，鋼筋保護套」），
+     會讓「鋼筋」變成兩項以上而判為規格未載明，整個漏勾。除非查驗文字本身就在講這些類別。 */
+  const admin = x => /職業安全衛生|環境保護|交通維持/.test((x.group || '') + x.name);
+  const pool = /職安|安全衛生|環保|環境保護|交維|交通維持/.test(text) ? its : its.filter(x => !admin(x));
   for (const [k, m] of ITEM_KW) if (k === '坡面工' ? /坡面工(?!基礎|擋土牆|堤趾|路側)/.test(text) : text.includes(k)) { // 「坡面工」單獨是施工項目；「坡面工基礎／擋土牆」是結構部位
-    let c = its.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !(o === '坡面工' ? /坡面工(?!基礎|擋土牆|堤趾|路側)/.test(text) : text.includes(o)))));
-    if (kg && c.length > 1) { const g = c.filter(x => new RegExp(kg + '\\s*kgf', 'i').test(x.name)); if (g.length) c = g; } // 強度等級相同者
+    let c = pool.filter(x => x.name.includes(m) && !(m === '混凝土' && OTHER.some(o => x.name.includes(o) && !(o === '坡面工' ? /坡面工(?!基礎|擋土牆|堤趾|路側)/.test(text) : text.includes(o)))));
+    if (kg && c.length > 1) { const g = c.filter(x => new RegExp(kg + '\\s*k[gf]{2}', 'i').test(x.name)); if (g.length) c = g; } // 強度等級相同者（日誌常把 kgf 打成 kfg）
     if (c.length === 1) hit.add(c[0].code); // 只靠關鍵字者，該類別必須唯一才採用
     else if (c.length > 1) ambig.push({k, names: c.map(x => x.name)});
   }
@@ -1233,8 +1301,9 @@ function ImportTab({p, update}) {
           const L = await parsePdfLogs(f, items); out.info = {...L.info, ...out.info}; if (!out.logs) out.logs = {logs: {}, unmatched: [], sources: []};
           Object.assign(out.logs.logs, L.logs); out.logs.unmatched.push(...L.unmatched); out.logs.sources.push(...L.sources.map(s => `${f.name}｜${s}`)); continue; }
         const wb = await readWB(f);
-        if (mode !== 'schedule') out.info = {...parseInfo(wb), ...out.info};
-        if (mode === 'all' || mode === 'items') { const c = parseContract(wb); if (c) out.items = c; }
+        const c0 = (mode === 'all' || mode === 'items') ? parseContract(wb) : null;
+        if (mode !== 'schedule') out.info = {...parseInfo(wb, c0?.name || out.info?.name || p.info.name), ...out.info};
+        if (c0) out.items = c0;
         if (mode === 'all' || mode === 'schedule') { const s = parseSchedule(wb); if (s) out.schedule = s; }
         if (mode === 'all' || mode === 'logs') {
           const items = out.items?.items || p.items; const L = parseLogs(wb, items);
@@ -2099,8 +2168,9 @@ async function parseReportFiles(files, p) {
   const out = {info: {}, items: null, schedule: null, logs: null, records: null, notes: []};
   for (const f of files) {
     try {
-      const wb = await readWB(f); out.info = {...parseInfo(wb), ...out.info};
-      const c = parseContract(wb); if (c) out.items = c;
+      const wb = await readWB(f); const c = parseContract(wb);
+      out.info = {...parseInfo(wb, c?.name), ...out.info};
+      if (c) out.items = c;
       const sc = parseSchedule(wb); if (sc) out.schedule = sc;
       const L = parseLogs(wb, out.items?.items || p.items);
       const R = parseRecords(wb, out.items?.items || p.items, L.logs); if (R) { out.records = out.records || {inspections: [], supervisions: [], forms: [], flags: []}; for (const k in R) out.records[k].push(...R[k]); }
