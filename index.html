@@ -114,8 +114,8 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .tpl{width:100%;table-layout:fixed;border-collapse:collapse}.tpl td{border:1px solid #999;padding:2px 4px;font-size:12px;white-space:pre-wrap;word-break:break-all;vertical-align:middle;height:22px;cursor:pointer}
 .tpl.plain td{border:none}.tpl td.m{background:#e0f2fe}.tpl td.tsel{outline:2px solid #2563eb;outline-offset:-2px}.tplf{color:#2563eb;font-size:11px}
 @media print{.sheet table.tpl td{border:1px solid #000;padding:2px 4px;font-size:11pt;cursor:auto;height:auto}.sheet table.tpl.plain td{border:none}}
-.pdfsheet{position:relative;container-type:inline-size}.pdfsheet img{width:100%;display:block}.pf{position:absolute;white-space:pre-wrap;line-height:1.1;color:#000}
-.pf.pfe{background:rgba(37,99,235,.18);color:#1d4ed8;cursor:pointer;outline:1px solid #2563eb}
+.pdfsheet{position:relative;container-type:inline-size}.pdfsheet img{width:100%;display:block}.pf{position:absolute;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.15;color:#000}
+.pf.pfe{background:rgba(37,99,235,.18);color:#1d4ed8;cursor:pointer;outline:1px dashed #2563eb;min-height:1.3em;box-sizing:border-box}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -1460,18 +1460,23 @@ const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
 const formGroupOf = t => { const g = FORM_GROUPS.find(([re]) => re.test(t))?.[1] || ''; if (g !== '施工抽查紀錄表') return g; const k = SITE_KEYS.find(([, kw]) => t.includes(kw)); return k ? `${g}－${k[0]}` : g; };
 const GROUP_OPTIONS = () => PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]);
+const FONT_STACKS = {'標楷體': '"標楷體","DFKai-SB","BiauKai","Noto Serif TC","Noto Serif CJK TC",serif', '新細明體': '"新細明體","PMingLiU","MingLiU","Noto Serif TC","Noto Serif CJK TC",serif', '微軟正黑體': '"微軟正黑體","Microsoft JhengHei","Noto Sans TC","Noto Sans CJK TC",sans-serif'};
+const fontOf = t => FONT_STACKS[t.font || '標楷體'];
 const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
 const FORM_FIELDS = {
-  inspections: ['查驗類別', '查驗工項', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
+  inspections: ['查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
   supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
   forms: ['類別', '檢查結果', '缺失／備註']};
-const FORM_ALIAS = {工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
+const FORM_ALIAS = {'材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
   表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
   查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
 const formLabels = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
+/* 材料抽驗表的「材料／設備名稱」只放材料名稱（如「混凝土 210kgf/cm2」），不放整句查驗內容、里程與施工描述 */
+const matDisplay = r => { const t = String(r.content || ''), n = matName(t), kg = t.match(/(\d+)\s*kgf/i); if (n !== '（未載明材料）') return n; if (kg && /圓柱|試體/.test(t)) return `混凝土 ${kg[1]}kgf/cm2`;
+  return t.replace(/（[^）]*）|\([^)]*\)/g, '').replace(/^.*?[：:]/, '').replace(/監造|廠商|會同|取樣|試體|製作|進場|查驗|與|及|和|。/g, '').trim(); };
 function formVals(p, k, r) {
   const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''};
-  if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
+  if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
     試驗項目: r.testName, '取樣／會驗日期': roc(r.sampleDate), 試驗報告編號: r.reportNo, 報告日期: roc(r.reportDate), 試驗結果: r.testResult});
   else if (k === 'supervisions') Object.assign(v, {'督導人員／單位': r.person, 督導工項: its, '分數／等級': r.score, 內容摘要: r.content, 缺失件數: r.defects || 0, 改善期限: roc(r.fixDue), 改善完成日: roc(r.fixDone), 備註: r.note});
   else Object.assign(v, {類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
@@ -1521,10 +1526,13 @@ function docTable(el) {
 }
 /* 檔案 → 候選範本（Excel 每個工作表一份；Word 整份文件一份） */
 /* PDF 文字型：依標籤文字（欄位名稱）建議填入位置＝標籤右側 */
-function suggestPdf(lines, base, fields) {
+function suggestPdf(lines, base, fields, vrules = []) {
   const placed = [], used = new Set(), hs = [];
   lines.forEach(l => l.c.forEach(c => { const f = fields.find(f => !used.has(f) && formLabels(f).includes(norm(c.t))); if (!f) return; used.add(f); hs.push(c.h);
-    placed.push({f, x: Math.min(0.95, (c.x1 + 6) / base.w), y: Math.max(0, (base.h - c.y - c.h) / base.h)}); }));
+    // 有框線時：欄位放在標籤右邊「下一格」（越過標籤格的右框線），寬度到該格的右框線；沒有框線時放在標籤右側
+    const yc = c.y + c.h / 2, walls = vrules.filter(l => l.y0 <= yc && l.y1 >= yc).map(l => l.x).sort((a, b) => a - b), w1 = walls.find(x => x > c.x1 + 2);
+    const start = w1 ? w1 + 4 : c.x1 + 6, w2 = w1 ? walls.find(x => x > w1 + 8) : null;
+    placed.push({f, x: Math.min(0.95, start / base.w), y: Math.max(0, (base.h - c.y - c.h) / base.h), ...(w2 ? {w: Math.max(0.05, (w2 - start - 4) / base.w)} : {})}); }));
   const med = hs.sort((a, b) => a - b)[hs.length >> 1];
   return {fields: placed, size: med ? Math.min(2.4, Math.max(1.2, Math.round(med / base.w * 1000) / 10)) : 1.6};
 }
@@ -1538,7 +1546,7 @@ async function parseTemplateFile(file) {
       const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
       await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
       cands.push({kind: 'pdf', name: doc.numPages > 1 ? `${bare} 第${pn}頁` : bare, page: {img: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height}, fields: [], size: 1.6,
-        lines: page.rotate % 360 === 0 ? await pdfPageLines(page) : [], base: {w: base.width, h: base.height}});
+        lines: page.rotate % 360 === 0 ? await pdfPageLines(page) : [], base: {w: base.width, h: base.height}, vrules: page.rotate % 360 === 0 ? (await pdfRuleLines(page, lib.OPS)).v : []});
     }
   } else if (/\.docx$/i.test(file.name)) {
     const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html'), tables = [];
@@ -1551,8 +1559,8 @@ async function parseTemplateFile(file) {
     const wb = await readWB(file);
     for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({kind: 'grid', name: sn, tables: [t]}); }
   }
-  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, ...rest} = c;
-    return {...rest, id: uid(), file: file.name, group, ...(c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}})}; });
+  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, vrules, ...rest} = c;
+    return {...rest, id: uid(), file: file.name, group, ...(c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl, vrules) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}})}; });
 }
 /* 範本表格：editor 模式顯示對應標籤；列印模式（vals）填入資料 */
 function TplTable({t, ti, map, vals, sel, onPick}) {
@@ -1562,21 +1570,27 @@ function TplTable({t, ti, map, vals, sel, onPick}) {
       return html`<td key=${ci} colSpan=${c.cs} rowSpan=${c.rs} className=${(f && !vals ? 'm ' : '') + (sel === key ? 'tsel' : '')} onClick=${onPick ? () => onPick(key) : undefined}>${vals ? (f ? vals[f] ?? '' : c.t) : c.t}${!vals && f ? html`<span className="tplf">{${f}}</span>` : ''}</td>`; })}</tr>`)}</tbody></table>`;
 }
 const rotateImg = async ({img, w, h}) => { const im = new Image(); im.src = img; await im.decode(); const cv = document.createElement('canvas'); cv.width = h; cv.height = w; const g = cv.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(im, 0, 0); return {img: cv.toDataURL('image/jpeg', 0.82), w: h, h: w}; };
-function PdfFields({c, fields, patch, edit}) {
-  const [cur, setCur] = useState(''), half = c.size / 100 * c.page.w / c.page.h / 2;
+function PdfFields({c, fields, patch}) {
+  const [cur, setCur] = useState(''), [drag, setDrag] = useState(null), half = c.size / 100 * c.page.w / c.page.h / 2;
+  const pos = e => { const r = e.currentTarget.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  const finish = () => { if (!drag) return; const {x0, y0, x1, y1} = drag; setDrag(null); const moved = Math.abs(x1 - x0) >= 0.01;
+    const x = Math.min(x0, x1), y = moved ? Math.min(y0, y1) : Math.max(0, y0 - half), w = moved ? Math.abs(x1 - x0) : Math.max(0.08, 0.96 - x0);
+    patch(c0 => ({...c0, fields: [...c0.fields.filter(q => q.f !== cur), {f: cur, x, y, w}]})); };
   return html`<div>
     <div className="row" style=${{margin: '6px 0'}}>
       <label>要放置的欄位 <select value=${cur} onChange=${e => setCur(e.target.value)}><option value="">（請選擇）</option>${fields.map(f => html`<option key=${f} value=${f}>${c.fields.some(x => x.f === f) ? '✓ ' : ''}${f}</option>`)}</select></label>
       <label>字級 <input type="number" step="0.1" min="0.8" max="4" style=${{width: '70px'}} value=${c.size} onChange=${e => patch(x => ({...x, size: +e.target.value || 1.6}))} /></label>
       <button className="b" onClick=${async () => { const page = await rotateImg(c.page); patch(x => ({...x, page, fields: []})); }}>旋轉 90°（會清除已放置欄位）</button>
       <button className="b" onClick=${() => patch(x => ({...x, fields: []}))}>清除全部</button></div>
-    <div className="mute">選好欄位後，在下方頁面上點一下放置位置（文字會以該點為中央左側起排；同一欄位再點一次＝移動位置）；點藍色標籤可移除。已放置 ${c.fields.length} 個。</div>
+    <div className="mute">選好欄位後，在頁面上<b>拖曳框出該欄位的範圍</b>（文字會在框的寬度內自動換行）；只點一下＝從該點到頁面右側。同一欄位再框一次＝重設；點藍色框可移除。已放置 ${c.fields.length} 個。</div>
     <div style=${{maxHeight: '60vh', overflow: 'auto', background: '#eee', marginTop: '6px'}}>
-      <div style=${{position: 'relative', containerType: 'inline-size', cursor: cur ? 'crosshair' : 'default'}} onClick=${e => { if (!cur) return; const r = e.currentTarget.getBoundingClientRect();
-          const x = (e.clientX - r.left) / r.width, y = Math.max(0, (e.clientY - r.top) / r.height - half); patch(c0 => ({...c0, fields: [...c0.fields.filter(q => q.f !== cur), {f: cur, x, y}]})); }}>
+      <div style=${{position: 'relative', containerType: 'inline-size', cursor: cur ? 'crosshair' : 'default', userSelect: 'none', fontFamily: fontOf(c)}}
+        onMouseDown=${e => { if (!cur) return; const [x, y] = pos(e); setDrag({x0: x, y0: y, x1: x, y1: y}); }}
+        onMouseMove=${e => { if (drag) { const [x, y] = pos(e); setDrag({...drag, x1: x, y1: y}); } }} onMouseUp=${finish} onMouseLeave=${finish}>
         <img src=${c.page.img} style=${{width: '100%', display: 'block'}} draggable="false" />
-        ${c.fields.map(q => html`<div key=${q.f} title="點擊移除" className="pf pfe" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', fontSize: c.size + 'cqw'}}
-          onClick=${e => { e.stopPropagation(); patch(c0 => ({...c0, fields: c0.fields.filter(z => z.f !== q.f)})); }}>{${q.f}}</div>`)}</div></div></div>`;
+        ${c.fields.map(q => html`<div key=${q.f} title="點擊移除" className="pf pfe" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: c.size + 'cqw'}}
+          onMouseDown=${e => e.stopPropagation()} onClick=${e => { e.stopPropagation(); patch(c0 => ({...c0, fields: c0.fields.filter(z => z.f !== q.f)})); }}>{${q.f}}</div>`)}
+        ${drag && html`<div className="pf pfe" style=${{left: Math.min(drag.x0, drag.x1) * 100 + '%', top: Math.min(drag.y0, drag.y1) * 100 + '%', width: Math.abs(drag.x1 - drag.x0) * 100 + '%', height: Math.abs(drag.y1 - drag.y0) * 100 + '%'}}></div>`}</div></div></div>`;
 }
 function TplEditor({init, onSave, onClose}) {
   const [cands, setCands] = useState(init.cands), [ci, setCi] = useState(0), [sel, setSel] = useState(null);
@@ -1591,6 +1605,7 @@ function TplEditor({init, onSave, onClose}) {
     <div className="mute">${pdf ? 'PDF 範本：選好欄位後在頁面上點選要填入的位置。' : '在表格中點選要填入資料的儲存格，再選擇對應的系統欄位（藍色＝已對應）。'}已依欄位名稱自動建議，請檢查並修正；未指定類別的範本不會儲存。</div>
     <div className="row" style=${{margin: '8px 0'}}>
       ${cands.length > 1 && html`<label>範本 <select value=${ci} onChange=${e => { setCi(+e.target.value); setSel(null); }}>${cands.map((c, i) => html`<option key=${c.id} value=${i}>${i + 1}. ${c.name}（${c.group || '未指定'}）</option>`)}</select></label>`}
+      <label>字型 <select value=${cand.font || '標楷體'} onChange=${e => patch(c => ({...c, font: e.target.value}))}>${Object.keys(FONT_STACKS).map(f => html`<option key=${f}>${f}</option>`)}</select></label>
       <label>所屬類別 <select value=${cand.group} onChange=${e => regroup(e.target.value)}><option value="">（請選擇）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></label>
       ${!pdf && html`<button className="b" disabled=${!k} onClick=${() => patch(c => ({...c, map: suggestMap(c.tables, fields)}))}>重新自動建議</button>
         <button className="b" onClick=${() => patch(c => ({...c, map: {}}))}>清除對應</button>`}</div>
@@ -1623,9 +1638,9 @@ const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負�
 function Sheet({p, e}) {
   const I = p.info, r = e.r, tpl = ((p.formTemplates || []).filter(t => t.tables || t.page)).find(t => t.group === e.g) || (p.formTemplates || []).find(t => (t.tables || t.page) && t.group === e.g.split('－')[0]);
   if (tpl?.page) { const vals = formVals(p, e.k, r);
-    return html`<div className="sheet pdfsheet"><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`; }
+    return html`<div className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl)}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`; }
   if (tpl) { const vals = formVals(p, e.k, r);
-    return html`<div className="sheet">${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; }
+    return html`<div className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; }
   return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
     <table><tbody>
       <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
