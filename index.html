@@ -882,7 +882,12 @@ function auditWeek(p, monday) {
 const SITE_CODE = [[/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
   [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工(?!基礎|擋土牆|堤趾|路側)/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
 /* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
+/* 文件管理編碼表（監造計畫的文管編號）：依表單類別（施工抽查再分工程類別）查編號，有就優先採用 */
+const docGroup = (p, r, k) => { if (k === 'forms') return `${r.cat}表單`; if (k === 'supervisions') return r.kind === '技師督導' ? '技師督導紀錄表' : '查核及團體督導紀錄';
+  if ((r.type || '施工查驗') === '材料查驗') return '材料設備品質抽驗紀錄表'; const n = SITE_NAME[siteLetter(p, r)]; return n ? `施工抽查紀錄表－${n}` : '施工抽查紀錄表'; };
+const docCode = (p, r, k) => { const L = p.docCodes || [], g = docGroup(p, r, k); return (L.find(x => x.group === g) || L.find(x => x.group === g.split('－')[0]))?.code || ''; };
 function formPrefix(p, r, listKey) {
+  const dc = docCode(p, r, listKey); if (dc) return dc;
   const P = p.settings.prefix || {}, base = k => P[k] || DEFAULT_PREFIX[k] || k;
   if (listKey === 'forms') return base(r.cat);
   if (listKey === 'supervisions') return base(r.kind === '技師督導' ? '技師督導' : '查核');
@@ -1760,6 +1765,77 @@ function StdCard({p, update}) {
     ${ap && html`<${StdApply} p=${p} update=${update} onClose=${() => setAp(false)} />`}</div>`;
 }
 
+/* ================= 文件管理編碼表：上傳監造計畫的文管編號表（PDF／Excel／Word），對應到表單類別，新表單號以文管編號為前綴 ================= */
+function pdfGrid(lines, h, v) {
+  const vs = v.filter(l => l.y1 - l.y0 >= 20), xs = uniqSorted(vs.map(l => l.x), 3); if (xs.length < 3) return null;
+  const top = Math.max(...vs.map(l => l.y1)), bot = Math.min(...vs.map(l => l.y0)), tx0 = xs[0], tx1 = xs.at(-1), hg = [];
+  h.forEach(l => { const g = hg.find(q => Math.abs(q.y - l.y) <= 3); g ? g.segs.push([Math.max(tx0, l.x0), Math.min(tx1, l.x1)]) : hg.push({y: l.y, segs: [[Math.max(tx0, l.x0), Math.min(tx1, l.x1)]]}); });
+  const covered = g => { let tot = 0, end = -1e9; g.segs.filter(q => q[1] > q[0]).sort((a, b) => a[0] - b[0]).forEach(([a, b]) => { tot += Math.max(0, b - Math.max(a, end)); end = Math.max(end, b); }); return tot; };
+  const ys = uniqSorted(hg.filter(g => covered(g) >= (tx1 - tx0) * 0.6 && g.y <= top + 3 && g.y >= bot - 3).map(g => g.y), 3).reverse(); if (ys.length < 2) return null;
+  const rowIv = []; for (let i = 0; i + 1 < ys.length; i++) if (ys[i] - ys[i + 1] > 6) rowIv.push([ys[i], ys[i + 1]]);
+  const colOf = x => { for (let c = 0; c + 1 < xs.length; c++) if (x >= xs[c] && x < xs[c + 1]) return c; return -1; };
+  const cells = rowIv.map(() => xs.slice(1).map(() => []));
+  for (const l of lines) for (const c of l.c) { const ri = rowIv.findIndex(([a, b]) => l.y < a && l.y >= b - 2), ci = colOf(c.xc); if (ri >= 0 && ci >= 0) cells[ri][ci].push({y: l.y, x: c.x0, t: c.t}); }
+  return cells.map(r => r.map(a => a.sort((p, q) => q.y - p.y || p.x - q.x).map(c => c.t).join('')));
+}
+/* 檔案 → 表格列（每列一個字串陣列）。PDF 優先用框線切欄列，沒有框線時以每行的文字片段當儲存格 */
+async function tableRowsFromFile(file) {
+  const rows = [];
+  if (/\.pdf$/i.test(file.name)) {
+    const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise; let noText = 0;
+    for (let pn = 1; pn <= doc.numPages; pn++) { const page = await doc.getPage(pn), lines = await pdfPageLines(page); if (!lines.length) { noText++; continue; }
+      const {h, v} = await pdfRuleLines(page, lib.OPS), g = pdfGrid(lines, h, v); (g || lines.map(l => l.c.map(c => c.t))).forEach(r => rows.push(r.map(x => x.trim()))); }
+    if (noText === doc.numPages) throw new Error('這份 PDF 是掃描影像，沒有文字層，無法讀取');
+  } else if (/\.docx$/i.test(file.name)) {
+    const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html');
+    dom.querySelectorAll('table').forEach(t => docTable(t).rows.forEach(r => { const a = []; r.forEach(c => { while (a.length < c.c) a.push(''); a[c.c] = c.t; }); rows.push(a); }));
+  } else {
+    const wb = await readWB(file);
+    for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; aoa(wb.Sheets[sn]).forEach(r => rows.push(r.map(v => v == null ? '' : String(v).trim()))); }
+  }
+  return rows.filter(r => r.some(Boolean));
+}
+const DOC_CODE_RE = /編號|編碼|代碼|代號|文管/, DOC_NAME_RE = /名稱|表單|表名|紀錄表|文件/;
+const docColGuess = rows => { const n = Math.max(...rows.slice(0, 40).map(r => r.length), 1); let nc = -1, cc = -1;
+  for (const r of rows.slice(0, 8)) r.forEach((t, i) => { if (nc < 0 && DOC_NAME_RE.test(t) && t.length <= 10) nc = i; if (cc < 0 && DOC_CODE_RE.test(t) && t.length <= 10) cc = i; });
+  if (nc < 0 || cc < 0 || nc === cc) { nc = 1; cc = 0; } return [Math.min(nc, n - 1), Math.min(cc, n - 1)]; };
+const buildDocEntries = (rows, nc, cc) => rows.map(r => ({name: (r[nc] || '').replace(/\s+/g, ''), code: (r[cc] || '').replace(/\s+/g, '')})).filter(e => e.name.length >= 3 && e.code && !(DOC_NAME_RE.test(e.name) && e.name.length <= 6) && !DOC_CODE_RE.test(e.code))
+  .map(e => ({id: uid(), ...e, group: formGroupOf(e.name)}));
+function DocCodeEditor({init, onSave, onClose}) {
+  const rows = init.rows, [cols, setCols] = useState(() => rows ? docColGuess(rows) : [0, 1]), [ents, setEnts] = useState(() => init.entries || buildDocEntries(rows, ...docColGuess(rows)));
+  const nCol = rows ? Math.max(...rows.slice(0, 60).map(r => r.length), 1) : 0, sample = i => rows.slice(0, 8).map(r => r[i]).filter(Boolean).slice(0, 3).join('／').slice(0, 24);
+  const setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e));
+  const regen = (nc, cc) => { setCols([nc, cc]); setEnts(buildDocEntries(rows, nc, cc)); };
+  return html`<${Modal} title="文件管理編碼表" onClose=${onClose}>
+    ${rows && html`<div className="mute">請指定「表單名稱」與「文管編號」各是哪一欄，再核對下方結果並指定所屬類別（類別為空者不會使用）。</div>
+      <div className="row" style=${{margin: '8px 0'}}>
+        <label>表單名稱欄 <select value=${cols[0]} onChange=${e => regen(+e.target.value, cols[1])}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label>
+        <label>文管編號欄 <select value=${cols[1]} onChange=${e => regen(cols[0], +e.target.value)}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label></div>`}
+    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th>表單名稱</th><th>文管編號</th><th>所屬類別（本系統表單）</th><th></th></tr></thead><tbody>
+      ${ents.map(e => html`<tr key=${e.id}><td><input style=${{width: '100%'}} value=${e.name} onChange=${ev => setE(e.id, 'name', ev.target.value)} /></td>
+        <td><input value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
+        <td><select value=${e.group} onChange=${ev => setE(e.id, 'group', ev.target.value)}><option value="">（不使用）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></td>
+        <td><button className="b" onClick=${() => setEnts(es => es.filter(x => x.id !== e.id))}>刪除</button></td></tr>`)}</tbody></table></div>
+    ${!ents.length && html`<div className="empty">沒有辨識到「名稱＋編號」的列，請調整上方欄位</div>`}
+    <div className="row" style=${{justifyContent: 'space-between', marginTop: '12px'}}><button className="b" onClick=${() => setEnts(es => [...es, {id: uid(), name: '', code: '', group: ''}])}>＋ 新增一列</button>
+      <button className="b p" onClick=${() => onSave(ents.filter(e => e.group && e.code))}>儲存（${ents.filter(e => e.group && e.code).length} 筆）</button></div></${Modal}>`;
+}
+function renumberAll(d) { for (const k of ['inspections', 'supervisions', 'forms']) { const list = d[k], sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
+  sorted.forEach(r => { r.no = ''; }); for (const r of sorted) r.no = nextNo(d, list, formPrefix(d, r, k)); } }
+function DocCodeCard({p, update}) {
+  const [busy, setBusy] = useState(false), [ed, setEd] = useState(null), L = p.docCodes || [];
+  const total = p.inspections.length + p.supervisions.length + p.forms.length;
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>文件管理編碼表（${L.length}）${p.docCodesFile ? html` <span className="mute">來源：${p.docCodesFile}</span>` : ''}</h2>
+      <div className="row"><label className="b">${busy ? '讀取中…' : '上傳文管編碼表'}<input type="file" hidden accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
+          try { const rows = await tableRowsFromFile(f); if (!rows.length) alert('檔案中找不到表格內容'); else setEd({rows, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+        ${L.length > 0 && html`<button className="b" onClick=${() => setEd({entries: L.map(x => ({...x})), file: p.docCodesFile})}>編輯</button>`}</div></div>
+    <div className="mute">依監造計畫的文件管理編碼表，設定各種表單的文管編號（施工抽查可依工程類別各設一個）。設定後新產生的表單號為「文管編號－流水號」；沒有設定的類別仍使用上方的表單號前綴。</div>
+    ${L.length > 0 && html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>類別</th><th>表單名稱</th><th>文管編號</th></tr></thead><tbody>${L.map(x => html`<tr key=${x.id}><td>${x.group}</td><td>${x.name}</td><td className="nw">${x.code}</td></tr>`)}</tbody></table></div>
+      <div className="row" style=${{marginTop: '8px'}}><button className="b d" disabled=${!total} onClick=${() => { if (confirm(`依文管編碼表重新編號既有的 ${total} 張查驗／督導／表單？\n表單號會依日期順序重編，已列印或送出的表單號會改變，建議先下載 JSON 備份。`)) update(d => renumberAll(d)); }}>依編碼表重新編號既有表單（${total}）</button>
+        <button className="b" onClick=${() => { if (confirm('移除文管編碼表？既有表單號不會改變。')) update(d => { d.docCodes = []; d.docCodesFile = ''; }); }}>移除編碼表</button></div>`}
+    ${ed && html`<${DocCodeEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { d.docCodes = list; d.docCodesFile = ed.file || ''; }); setEd(null); }} />`}</div>`;
+}
+
 /* ================= 試驗報告回填 ================= */
 function TestTab({p, update}) {
   const [all, setAll] = useState(false);
@@ -1834,6 +1910,7 @@ function SettingsTab({p, update, onDelete, onRestore}) {
       ${Object.keys(DEFAULT_PREFIX).map(k => html`<label key=${k} className="f">表單號前綴：${k}<input value=${p.settings.prefix[k] || ''} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`)}
       ${[['labor', '出工工別（以、分隔）'], ['machines', '機具名稱（以、分隔）']].map(([k, t]) => html`<label key=${k} className="f wide">${t}<input defaultValue=${p.settings[k].join('、')} onBlur=${e => { const v = e.target.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean); update(d => { d.settings[k] = v; }); }} /></label>`)}
     </div></div>
+    <${DocCodeCard} p=${p} update=${update} />
     <div className="card"><h2>清除匯入資料</h2><div className="mute" style=${{marginBottom: '8px'}}>清除契約項目、預定進度、施工日誌與所有查驗／督導／表單填報，保留專案本身、工程資料與設定，之後可重新匯入。</div>
       <button className="b d" onClick=${() => { if (confirm(`確定清除「${p.info.name}」的所有匯入資料與填報？專案本身、工程資料與設定會保留。\n手動填報的內容（如試驗報告編號）也會一併清除，建議先下載 JSON 備份。`)) { update(d => clearProjectData(d)); alert('已清除，可重新匯入。'); } }}>清除資料（保留專案）…</button></div>
     <div className="card"><h2>刪除專案</h2><button className="b d" onClick=${onDelete}>刪除此專案…</button></div></div>`;
