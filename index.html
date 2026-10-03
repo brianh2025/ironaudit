@@ -673,7 +673,7 @@ function classifyLine(raw, date) {
   const res = /不合格|未通過/.test(t) ? '不合格' : /合格/.test(t) ? '合格' : '';
   if (/會驗|會壓|抗壓|試驗/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: true, sampleDate: date}}; // 進場查驗＋日誌載明辦理會驗，待取得報告後回填編號
   if (/取樣|試體/.test(t)) return {list: 'inspections', r: {date, type: '材料查驗', items: [], content: t, result: res, testNeed: false}}; // 僅取樣：以進場查驗填報
-  if (/專任工程人員.*(督察|督導)|技師.*督導/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
+  if (/專任工程人員.*(督察|督導)|技師.*(督導|督察)/.test(t)) return {list: 'supervisions', r: {date, kind: '技師督導', person: '', items: [], content: t, defects: 0}};
   if (/查驗|抽查|廠驗|不合格/.test(t)) return {list: 'inspections', r: {date, type: /進場|材料|廠驗|尺寸/.test(t) ? '材料查驗' : '施工查驗', items: [], content: t, result: res, testNeed: false}};
   if (/防汛|汛期/.test(t)) return {list: 'forms', r: {date, cat: '防汛', title: t, result: '', note: ''}};
   return null;
@@ -711,12 +711,13 @@ function parseVendorRecords(wb, items, logs) {
   const conc = items.filter(x => x.kind === 'normal' && /混凝土/.test(x.name) && /預拌/.test(x.name) && !/模板|鋼筋|瀝青|基樁|異型塊|預鑄|坡面工|試體|CLSM|低強度|試驗|檢驗/.test(x.name));
   const WORK_VERB = /組立|綁紮|澆置|澆築|澆灌|打設|開挖|回填|拆模|鋪設|吊放|施作|組裝|安裝|填築|整平/;
   const splitWork = t => { const o = []; let cur = '', depth = 0; for (const ch of t) { if (/[（(]/.test(ch)) depth++; else if (/[）)]/.test(ch)) depth = Math.max(0, depth - 1); if (!depth && /[及與和、，,；;]/.test(ch)) { o.push(cur); cur = ''; } else cur += ch; } o.push(cur); return o.map(x => x.trim()).filter(Boolean); };
-  const stationOf = x => { const l = parseLocation(x); return /\d\+\d/.test(l) ? l : ''; };
+  const stationOf = x => { const l = parseLocation(x); return /[\dkK]\s*\+\s*\d/.test(l) ? l : ''; };
   const expandLine = c => {
     if (c.list !== 'inspections' || c.r.testNeed) return null;
-    const m = c.r.content.match(/^(.{0,12}?)(材料取樣|材料查驗|施工查驗|取樣|查驗|抽查)[：:]\s*(.+)$/); if (!m) return null;
-    const [, mat0, kind, body] = m, locAll = stationOf(body), sampling = /取樣|材料/.test(kind);
-    const segs = splitWork(body).filter(x => WORK_VERB.test(x)).map(seg0 => ({seg0, code: SITE_CODE.find(([re]) => re.test(seg0))?.[1]})).filter(x => SITE_NAME[x.code]);
+    let m = c.r.content.match(/^(.{0,12}?)(材料取樣|材料查驗|施工查驗|取樣|查驗|抽查)[：:]\s*(.+)$/), mat0 = '', kind, body, tail = false;
+    if (m) [, mat0, kind, body] = m; else { const m2 = c.r.type === '施工查驗' && c.r.content.match(/^(.+?)(施工查驗|查驗|抽查|自主檢查)[。.]?$/); if (!m2) return null; [, body, kind] = m2; tail = true; } // 「監造（里程）基樁、基礎鋼筋查驗」：工項列在「查驗」之前
+    const locAll = stationOf(body), sampling = !tail && /取樣|材料/.test(kind);
+    const segs = splitWork(body).filter(x => tail || WORK_VERB.test(x)).map(seg0 => ({seg0, code: SITE_CODE.find(([re]) => re.test(seg0))?.[1]})).filter(x => SITE_NAME[x.code]);
     if (!segs.length || (!sampling && segs.length < 2)) return null;
     const out = [], withLoc = x => x + (!stationOf(x) && locAll ? `(${locAll})` : ''), base = {date: c.r.date, result: c.r.result || '', testNeed: false, keepItems: true};
     const concIts = seg => /異型塊/.test(seg) ? [] : conc.filter(x => x.name.includes((/PC|襯底|打底/.test(seg) ? '140' : '210') + 'kgf')).map(x => x.code);
@@ -753,6 +754,7 @@ function parseVendorRecords(wb, items, logs) {
     const all = h.map((v, c) => clean(v) ? c : -1).filter(c => c >= 0);
     for (const r of rows.slice(1)) { const d = parseAnyDate(r[0]); if (!d) continue;
       for (const a of secs) { const b = all.find(c => c > a) ?? a + 12; for (let c = a; c < b; c++) if (typeof r[c] === 'string') add(r[c], d); } } }
+  for (const d of Object.keys(logs || {}).sort()) for (const f of ['safety', 'tests', 'notify', 'notes']) for (const line of String(logs[d]?.[f] || '').split(/\n/)) add(line, d); // 「記事」分頁的職安衛、施工取樣試驗紀錄等欄（已由施工日誌解析讀入）
   // 查驗只依「監造查驗欄位」（記事／取樣試驗／重要事項等）的文字建立；施工概況寫了施工不代表有查驗，因此不由施工項目推出查驗
   out.inspections.forEach(x => delete x.mat);
   for (const t of tests.sort((a, b) => a.date.localeCompare(b.date))) {
