@@ -140,7 +140,8 @@ const dayDiff = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 864e5);
 const todayISO = () => toISO(new Date());
 const WK = '日一二三四五六';
 const wkday = s => WK[fromISO(s).getDay()];
-const roc = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+y - 1911}/${m}/${d}`; };
+const roc = s => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+y - 1911}年${+m}月${+d}日`; };
+const rocMD = s => { if (!s) return ''; const [, m, d] = s.split('-'); return `${+m}月${+d}日`; };
 const mondayOf = s => { const d = fromISO(s); const w = (d.getDay() + 6) % 7; d.setDate(d.getDate() - w); return toISO(d); };
 const num = v => { if (v == null || v === '') return NaN; if (typeof v === 'number') return v; const t = String(v).replace(/[,，\s%]/g, ''); return t === '' ? NaN : Number(t); };
 const isNum = v => Number.isFinite(num(v));
@@ -1795,8 +1796,8 @@ function AuditTab({p, C, quick}) {
       <div className="mute" style=${{marginTop: '6px'}}>判定方式：施工日誌某日有完成數量的「需查驗」工項，須在該日前後 ${p.settings.tolerance} 天內有勾選該工項的查驗紀錄（容許天數可於專案設定調整）。</div></div>
     <div className="card"><h2>工項查驗比對</h2>
       ${A.rows.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工項</th><th>本週施工日</th><th className="n">本週數量</th><th>查驗表單號</th><th>稽核結果</th><th>未查驗日</th><th className="noprint"></th></tr></thead><tbody>
-        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => roc(d).slice(4)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
-          <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => roc(d).slice(4)).join('、')}</td>
+        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => rocMD(d)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
+          <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => rocMD(d)).join('、')}</td>
           <td className="noprint">${r.status !== 'ok' && html`<button className="b s" onClick=${() => quick({items: [r.it.code], date: r.missDays[0], type: '施工查驗'})}>補填查驗</button>`}</td></tr>`)}
       </tbody></table></div>` : html`<div className="empty">本週施工日誌無需查驗工項的完成數量</div>`}</div>
     <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(360px,1fr))'}}>
