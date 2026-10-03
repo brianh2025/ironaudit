@@ -1164,18 +1164,53 @@ function missingInspections(p) {
   for (const {o, m} of flat) { const draft = {date: m.date, type: '施工查驗', items: [o.it.code], content: o.it.name}; m.no = freeNo(formPrefix(p, draft, 'inspections')); }
   return out;
 }
+/* 缺漏匯出的版面：黑金配色（依使用者提供的 Excel 版面套用）。彙總表每個缺漏日期一列、工項資訊跨列合併並可收合，工項區塊交錯底色，A4 橫向、一頁寬、標題列每頁重複、只在工項區塊邊界分頁 */
+const rocPad = d => { const [y, m, dd] = d.split('-'); return `${+y - 1911}年${m}月${dd}日`; };
+const supers = t => String(t ?? '').replace(/\bM3\b/gi, 'M³').replace(/\bM2\b/gi, 'M²').replace(/cm2/g, 'cm²');
 async function exportAuditAll(p) {
-  const L = missingInspections(p); if (!L.length) return alert('還沒有施工日誌或需查驗工項，沒有可匯出的資料');
-  const wb = new ExcelJS.Workbook(), s = wb.addWorksheet('依工項缺漏彙總'), d = wb.addWorksheet('缺漏明細'), total = L.reduce((a, o) => a + o.miss.length, 0);
-  s.addRow([`${p.info.name}　查驗缺漏（依工項，截至 ${roc(todayISO())}，共缺 ${total} 次）`]); s.getCell('A1').font = {...FONT, size: 14, bold: true}; s.addRow([]);
-  s.addRow(['項次', '工項', '單位', '施工天數', '缺漏次數', '缺漏日期', '預編表單編號']);
-  L.forEach(o => s.addRow([o.it.code, o.it.name, o.it.unit, o.work, o.miss.length, o.miss.map(m => roc(m.date)).join('、'), o.miss.map(m => m.no).join('、')]));
-  s.addRow(['', '合計', '', L.reduce((a, o) => a + o.work, 0), total, '', '']);
-  [8, 40, 6, 10, 10, 48, 40].forEach((w, i) => s.getColumn(i + 1).width = w);
-  d.addRow(['項次', '工項', '單位', '缺漏日期', '當日數量', '預編表單編號']);
-  L.forEach(o => o.miss.forEach(m => d.addRow([o.it.code, o.it.name, o.it.unit, roc(m.date), m.qty, m.no])));
-  [8, 40, 6, 16, 10, 16].forEach((w, i) => d.getColumn(i + 1).width = w);
-  [s, d].forEach(w => w.eachRow(r => r.eachCell(c => { if (!c.font?.bold) c.font = FONT; c.alignment = {wrapText: true, vertical: 'top'}; })));
+  const L = missingInspections(p).filter(o => o.miss.length); if (!L.length) return alert('沒有缺漏的查驗，或還沒有施工日誌、需查驗的工項');
+  const G = {ink: 'FF1A1A1A', ink2: 'FF2A2A2A', gold: 'FFC9A227', gold2: 'FFD9C98A', amber: 'FFD97706', deep: 'FFB8860B', txt: 'FF262626', grey: 'FF8A8577', line: 'FFE3E1DC', alt: 'FFF7F5F0', white: 'FFFFFFFF'};
+  const F = (o = {}) => ({name: '微軟正黑體', size: 11, color: {argb: G.txt}, ...o, ...(o.color ? {color: {argb: o.color}} : {})}), fill = c => ({type: 'pattern', pattern: 'solid', fgColor: {argb: c}});
+  const bd = (l = G.line, t = G.line, b = G.line) => ({left: {style: 'thin', color: {argb: G.line}}, right: {style: 'thin', color: {argb: G.line}}, top: t && {style: 'thin', color: {argb: t}}, bottom: b && {style: 'thin', color: {argb: b}}});
+  const units = t => [...String(t)].reduce((a, c) => a + (c.charCodeAt(0) > 255 ? 2 : 1), 0), need = (t, per = 16, add = 6.1) => { const n = Math.ceil(units(t) / 50); return n > 1 ? n * per + add : 21.95; }; // 工項欄約 50 單位寬，估需要的列高
+  const today = todayISO(), total = L.reduce((a, o) => a + o.miss.length, 0), days = L.reduce((a, o) => a + o.work, 0);
+  const common = tab => ({properties: {tabColor: {argb: tab}}, pageSetup: {paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: {left: 0.5, right: 0.5, top: 0.59722, bottom: 0.59722, header: 0.30556, footer: 0.30556}}});
+  const wb = new ExcelJS.Workbook(), s = wb.addWorksheet('依工項缺漏彙總', {...common(G.gold), views: [{showGridLines: false, zoomScale: 82, state: 'frozen', ySplit: 3}]});
+  s.properties.outlineLevelRow = 1; [9.57, 57.14, 8.57, 12.43, 12.43, 21, 21].forEach((w, i) => s.getColumn(i + 1).width = w);
+  const band = (row, c1, c2, font, fl, alignment, border) => { for (let c = c1; c <= c2; c++) { const x = s.getCell(row, c); x.font = font; x.fill = fill(fl); x.alignment = alignment; if (border) x.border = border; } };
+  s.getCell('A1').value = p.info.name || '專案'; band(1, 1, 7, F({bold: true, size: 13, color: G.gold}), G.ink, {horizontal: 'center', vertical: 'middle'}); s.getRow(1).height = 30; s.mergeCells('A1:G1');
+  s.getCell('A2').value = `查驗缺漏報表（依工項）　｜　截至 ${rocPad(today)}　｜　共缺 ${total} 次`; band(2, 1, 7, F({size: 10.5, color: G.gold2}), G.ink2, {horizontal: 'center', vertical: 'middle'}, {top: {style: 'thick', color: {argb: G.amber}}}); s.getRow(2).height = 21.95; s.mergeCells('A2:G2');
+  ['項次', '工項', '單位', '施工天數', '缺漏次數', '缺漏日期', '預編表單編號'].forEach((t, i) => { s.getCell(3, i + 1).value = t; });
+  band(3, 1, 7, F({bold: true, color: G.gold}), G.ink, {horizontal: 'center', vertical: 'middle', wrapText: true}, {left: {style: 'thin', color: {argb: 'FFBFBFBF'}}, right: {style: 'thin', color: {argb: 'FFBFBFBF'}}, top: {style: 'thin', color: {argb: G.gold}}, bottom: {style: 'thin', color: {argb: G.gold}}}); s.getRow(3).height = 26.1;
+  const breaks = []; let r = 4, page = 505 - 0, used = 30 + 21.95 + 26.1; const cap2 = 505 - (30 + 21.95 + 26.1);
+  L.forEach((o, bi) => {
+    const n = o.miss.length, name = supers(o.it.name), fl = bi % 2 ? G.alt : G.white, top = bi ? G.gold : null, hs = o.miss.map(() => 21.95); if (n * 21.95 < need(name)) hs[0] += need(name) - n * 21.95;
+    const bh = hs.reduce((a, b) => a + b, 0); if (bi && used + bh > page) { breaks.push(r - 1); page = cap2; used = 0; } used += bh; if (!bi) page = 505;
+    if (n > 1) for (let c = 1; c <= 5; c++) s.mergeCells(r, c, r + n - 1, c); // 先合併再逐格設樣式（合併會把主格樣式複製給被合併格）
+    o.miss.forEach((m, k) => { const row = r + k, st = (font, al, extra) => ({font, fill: fill(fl), alignment: al, border: bd(G.line, k ? G.line : top, !k && n > 1 ? G.line : null)});
+      const cells = [[o.it.code, F({bold: true, color: G.ink}), {horizontal: 'center', vertical: 'middle'}], [name, F(), {horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1}], [supers(o.it.unit), F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'middle'}],
+        [o.work, F(), {horizontal: 'right', vertical: 'middle', indent: 1}], [n, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'middle', indent: 1}], [rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'middle'}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'middle'}]];
+      cells.forEach(([v, font, al], c) => { if (k && c < 5) return; const x = s.getCell(row, c + 1); x.value = v; Object.assign(x, st(font, al)); if (c < 5) x.border = bd(G.line, top, null); }); // 合併格只設主格（被合併格與主格共用樣式），外框上緣＝區塊分隔線
+      s.getRow(row).height = hs[k]; if (k) s.getRow(row).outlineLevel = 1; });
+    r += n; });
+  const last = r - 1; breaks.forEach(b => s.getRow(b).addPageBreak());
+  s.getCell(r, 1).value = '合計'; s.mergeCells(r, 1, r, 3); s.getCell(r, 4).value = {formula: `SUM(D4:D${last})`, result: days}; s.getCell(r, 5).value = {formula: `SUM(E4:E${last})`, result: total};
+  for (let c = 1; c <= 7; c++) { const x = s.getCell(r, c); x.font = F({bold: true, size: 12, color: G.gold}); x.fill = fill(G.ink); x.alignment = {horizontal: c === 4 || c === 5 ? 'right' : 'center', vertical: 'middle', indent: c === 4 || c === 5 ? 1 : 0}; x.border = {left: {style: 'thin', color: {argb: 'FFCBDCEA'}}, right: {style: 'thin', color: {argb: 'FFCBDCEA'}}, top: {style: 'thin', color: {argb: G.gold}}, bottom: {style: 'medium', color: {argb: G.amber}}}; }
+  s.getRow(r).height = 26.1; s.getRow(r + 1).height = 9.95;
+  const from = Object.keys(p.logs).sort()[0] || p.info.startDate || today;
+  s.getCell(r + 2, 1).value = `製表日期：${rocPad(today)}　｜　資料來源：公共工程施工日誌查核紀錄　｜　統計區間：${rocPad(from)}～${rocPad(today)}　｜　缺漏次數＝該工項當日未填報查驗表單之次數`; s.mergeCells(r + 2, 1, r + 2, 7);
+  for (let c = 1; c <= 7; c++) { const x = s.getCell(r + 2, c); x.font = F({size: 9, color: G.grey}); x.alignment = {horizontal: 'left', vertical: 'middle', indent: 1}; } s.getRow(r + 2).height = 20.1;
+  s.pageSetup.printArea = `A1:G${r + 2}`; s.pageSetup.printTitlesRow = '1:3';
+  /* 缺漏明細：每個缺漏一列，工項交錯底色 */
+  const d = wb.addWorksheet('缺漏明細', {...common(G.ink), views: [{showGridLines: false, state: 'frozen', ySplit: 1}]}); [9.57, 57.14, 8.57, 18.14, 14.29, 21].forEach((w, i) => d.getColumn(i + 1).width = w);
+  ['項次', '工項', '單位', '缺漏日期', '當日數量', '預編表單編號'].forEach((t, i) => { const x = d.getCell(1, i + 1); x.value = t; x.font = F({bold: true, color: G.gold}); x.fill = fill(G.ink); x.alignment = {horizontal: 'center', vertical: 'middle', wrapText: true}; x.border = {left: {style: 'thin', color: {argb: 'FFBFBFBF'}}, right: {style: 'thin', color: {argb: 'FFBFBFBF'}}, top: {style: 'thin', color: {argb: 'FFBFBFBF'}}, bottom: {style: 'thin', color: {argb: G.gold}}}; }); d.getRow(1).height = 26.1;
+  let dr = 2; const dbreaks = []; let dused = 26.1; const dcap = 505;
+  L.forEach((o, bi) => o.miss.forEach(m => { const fl = bi % 2 ? G.alt : G.white, name = supers(o.it.name), h = need(name, 15, 6) > 21.95 ? need(name, 15, 6) : 20.1;
+    [[o.it.code, F({bold: true, color: G.ink}), {horizontal: 'center', vertical: 'top', wrapText: true}], [name, F(), {vertical: 'top', wrapText: true, indent: 1}], [supers(o.it.unit), F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'top', wrapText: true}],
+      [rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'top', wrapText: true}], [m.qty, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'top', wrapText: true, indent: 1}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'top', wrapText: true}]]
+      .forEach(([v, font, al], c) => { const x = d.getCell(dr, c + 1); x.value = v; x.font = font; x.fill = fill(fl); x.alignment = al; x.border = bd(G.line, dr > 2 ? G.line : null, G.line); });
+    d.getRow(dr).height = h; dr++; }));
+  d.pageSetup.printArea = `A1:F${dr - 1}`; d.pageSetup.printTitlesRow = '1:1';
   downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_查驗缺漏_${todayISO().replace(/-/g, '')}.xlsx`);
 }
 /* ================= 共用元件 ================= */
