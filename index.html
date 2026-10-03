@@ -1798,7 +1798,7 @@ function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen') !== '0'; } catch { return true; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen', v ? '1' : '0'); } catch {} };
-  const [sel, setSel] = useState(() => new Set()), [shut, setShut] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
+  const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
       .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
@@ -1810,7 +1810,8 @@ function PrintTab({p, update, only}) {
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
   const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
   const allMonths = groups.flatMap(({g, list}) => [...new Set(list.flatMap(e => [yr(e.r.date), ym(e.r.date)]))].map(k => mk(g, k)));
-  const togShut = keys => setShut(s => { const n = new Set(s); const close = keys.some(k => !n.has(k)); keys.forEach(k => close ? n.add(k) : n.delete(k)); return n; });
+  const isShut = k => !opened.has(k) && !q; // 年、月預設收合；搜尋時全部展開
+  const togShut = keys => setOpened(s => { const n = new Set(s); const close = keys.some(k => !isShut(k)); keys.forEach(k => close ? n.delete(k) : n.add(k)); return n; });
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
   const mark = (list, on) => { if (!list.length) return; if (!confirm(on ? `勾稽 ${list.length} 張表單？勾稽後不能再列印，要重印須先取消勾稽。` : `取消 ${list.length} 張表單的勾稽？取消後即可再次列印。`)) return;
     update(d => { for (const e of list) { const r = d[e.k].find(x => x.id === e.r.id); if (r) { r.checked = on; r.checkedAt = on ? todayISO() : ''; } } }); if (on) setSel(s => { const n = new Set(s); list.forEach(e => n.delete(e.r.id)); return n; }); };
@@ -1840,7 +1841,7 @@ function PrintTab({p, update, only}) {
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
           <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
           <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
-          <button className="b" onClick=${() => togShut(allMonths)} title="依月份收合或展開所有清單">${allMonths.length && allMonths.every(k => shut.has(k)) ? '全部展開' : '全部收合'}</button>
+          <button className="b" onClick=${() => togShut(allMonths)} title="依月份收合或展開所有清單">${allMonths.length && allMonths.every(isShut) ? '全部展開' : '全部收合'}</button>
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
@@ -1849,7 +1850,7 @@ function PrintTab({p, update, only}) {
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
           <h3><label><input type="checkbox" disabled=${!ok2.length} checked=${!!ok2.length && on === ok2.length} ref=${el => el && (el.indeterminate = on > 0 && on < ok2.length)} onChange=${ev => tog(ok2.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${ok2.length}${ok2.length < list.length ? `，已勾稽 ${list.length - ok2.length}` : ''}）</label></h3>
           <div className="tw"><table><thead><tr><th style=${{width: '1%'}}>列印</th><th>日期</th><th>表單號</th><th>內容</th><th style=${{paddingLeft: '28px'}}>勾稽</th></tr></thead><tbody>
-            ${list.flatMap((e, i) => { const k = ym(e.r.date), y = yr(e.r.date), prev = list[i - 1], out = [], yKey = mk(g, y), mKey = mk(g, k), yShut = shut.has(yKey), mShut = shut.has(mKey);
+            ${list.flatMap((e, i) => { const k = ym(e.r.date), y = yr(e.r.date), prev = list[i - 1], out = [], yKey = mk(g, y), mKey = mk(g, k), yShut = isShut(yKey), mShut = isShut(mKey);
               const sum = ms => `（${ms.length} 張${ms.some(x => sel.has(x.r.id) && !x.r.checked) ? `，已選 ${ms.filter(x => sel.has(x.r.id) && !x.r.checked).length}` : ''}${ms.some(x => x.r.checked) ? `，已勾稽 ${ms.filter(x => x.r.checked).length}` : ''}）`;
               if (!prev || yr(prev.r.date) !== y) out.push(html`<tr key=${'y' + yKey} style=${{cursor: 'pointer', background: 'var(--line)'}} onClick=${() => togShut([yKey])}><td colSpan="6"><b>${yShut ? '▸' : '▾'} ${yrLabel(y)}</b>${sum(list.filter(x => yr(x.r.date) === y))}</td></tr>`);
               if (!yShut && (!prev || ym(prev.r.date) !== k)) out.push(html`<tr key=${'m' + mKey} style=${{cursor: 'pointer', background: 'var(--bg)'}} onClick=${() => togShut([mKey])}><td colSpan="6" style=${{paddingLeft: '24px'}}><b>${mShut ? '▸' : '▾'} ${ymLabel(k)}</b>${sum(list.filter(x => ym(x.r.date) === k))}</td></tr>`);
