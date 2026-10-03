@@ -1530,7 +1530,7 @@ function formVals(p, k, r) {
   return v;
 }
 /* 多頁範本：每一頁可各自設定預填文字（tpl.pre）。紀錄的該欄是空白、或仍是該類別的共用預填值時，用此頁的預填；使用者改過的內容優先 */
-const PRE_FIELDS = {'督導人員／單位': 'person', 內容摘要: 'content', 備註: 'note', '缺失／備註': 'note', 表單名稱: 'title'};
+const PRE_FIELDS = {'督導人員／單位': 'person', 內容摘要: 'content', 備註: 'note', '缺失／備註': 'note', 表單名稱: 'title', 查驗項目及內容: 'content', '位置／里程': 'location', '缺失內容／改善要求': 'defect'};
 function pageVals(p, group, vals, tpl) {
   const out = {...vals}, def = p.formDefaults?.[group.split('－')[0]] || {};
   for (const [f, t] of Object.entries(tpl.pre || {})) if (t && PRE_FIELDS[f] && (!out[f] || out[f] === def[PRE_FIELDS[f]])) out[f] = t;
@@ -1669,7 +1669,7 @@ function TplEditor({init, onSave, onClose}) {
   const patch = fn => setCands(cs => cs.map((c, i) => i === ci ? fn(c) : c));
   const setField = (key, f) => patch(c => ({...c, map: Object.fromEntries(Object.entries({...c.map, [key]: f}).filter(([, v]) => v))}));
   const [st, sr, sc] = sel ? sel.split(':').map(Number) : [];
-  const ready = cands.filter(c => c.group), pdf = cand.kind === 'pdf', placed = pdf ? cand.fields.map(q => q.f) : Object.values(cand.map || {}), preFields = Object.keys(PRE_FIELDS).filter(f => placed.includes(f));
+  const ready = cands.filter(c => c.group), pdf = cand.kind === 'pdf', placed = pdf ? cand.fields.map(q => q.f) : Object.values(cand.map || {}), preFields = Object.keys(PRE_FIELDS).filter(f => fields.includes(f));
   const regroup = g => { const kk = kindOf(g), fl = kk ? [...FORM_BASE, ...FORM_FIELDS[kk]] : [];
     patch(c => ({...c, group: g, ...(!pdf && kk && !Object.keys(c.map || {}).length ? {map: suggestMap(c.tables, fl)} : {})})); };
   return html`<${Modal} title=${init.id ? '編輯表單範本' : `表單範本對應（共 ${cands.length} 份）`} onClose=${onClose}>
@@ -1681,7 +1681,7 @@ function TplEditor({init, onSave, onClose}) {
       ${!pdf && html`<button className="b" disabled=${!k} onClick=${() => patch(c => ({...c, map: suggestMap(c.tables, fields)}))}>重新自動建議</button>
         <button className="b" onClick=${() => patch(c => ({...c, map: {}}))}>清除對應</button>`}</div>
     ${preFields.length > 0 && html`<div className="card" style=${{margin: '6px 0'}}><b>此頁預填文字</b><span className="mute">（多頁範本每一頁可不同；留空＝用紀錄本身的內容。紀錄已自行修改的內容優先）</span>
-      ${preFields.map(f => html`<label key=${f} className="f wide">${f}<textarea rows="2" value=${cand.pre?.[f] || ''} onChange=${ev => patch(c => ({...c, pre: {...c.pre, [f]: ev.target.value}}))} /></label>`)}</div>`}
+      ${preFields.map(f => html`<label key=${f} className="f wide">${f}${placed.includes(f) ? '' : '（此頁尚未放置／對應這個欄位，需先放置才會印出）'}<textarea rows="2" value=${cand.pre?.[f] || ''} onChange=${ev => patch(c => ({...c, pre: {...c.pre, [f]: ev.target.value}}))} /></label>`)}</div>`}
     ${pdf ? html`<${PdfFields} key=${cand.id} c=${cand} fields=${fields} patch=${patch} />` : html`
       ${sel && cand.tables[st]?.rows[sr]?.[sc] && html`<div className="msg warn row">已選儲存格：「${cand.tables[st].rows[sr][sc].t || '（空白）'}」 對應欄位：
         <select value=${cand.map[sel] || ''} onChange=${e => setField(sel, e.target.value)}><option value="">（不對應）</option>${fields.map(f => html`<option key=${f}>${f}</option>`)}</select></div>`}
