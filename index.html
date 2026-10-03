@@ -1494,15 +1494,6 @@ function InspectionTab(props) {
   return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
-function AuditRecTab(props) {
-  const K = ['工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'];
-  const fields = [{k: 'date', label: '日期', type: 'date'}, {k: 'kind', label: '類別', type: 'select', options: K}, {k: 'no', label: '表單號'}, {k: 'person', label: '查核單位／委員'},
-    {k: 'score', label: '分數／等級'}, {k: 'defects', label: '缺失件數', type: 'number'}, {k: 'content', label: '查核意見摘要', type: 'textarea'},
-    {k: 'fixDue', label: '改善期限', type: 'date'}, {k: 'fixDone', label: '改善完成日', type: 'date'}, {k: 'note', label: '備註', type: 'textarea'}];
-  const cols = [['日期', r => roc(r.date)], ['類別', r => r.kind], ['表單號', r => r.no], ['單位', r => r.person], ['分數', r => r.score], ['缺失', r => r.defects || 0],
-    ['改善', r => r.defects ? (r.fixDone ? html`<span className="tag ok">${roc(r.fixDone)}</span>` : html`<span className=${'tag ' + (r.fixDue && r.fixDue < todayISO() ? 'bad' : 'warn')}>期限 ${roc(r.fixDue) || '未定'}</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="supervisions" title="查核及團體督導" filter=${r => r.kind !== '技師督導'} fields=${fields} cols=${cols} defaults=${{kind: K[0]}} prefixKey=${r => formPrefix(props.p, r, 'supervisions')} />`;
-}
 /* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
 const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
@@ -1801,7 +1792,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
     <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${noStart || !(sum || nDel)} onClick=${run}>${regen ? `重新產生（刪除 ${nDel}、新增 ${sum}）` : `產生 ${sum} 張空白表單`}</button></div></${Modal}>`;
 }
 /* 這四類各有獨立頁面（範本、自動產生、列印）；其餘類別留在「表單列印」 */
-const SPLIT_GROUPS = ['技師督導紀錄表', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
+const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
@@ -1830,9 +1821,9 @@ function PrintTab({p, update, only}) {
           try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
           finally { setBusy(false); } }} /></label></div>
-      <div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
-        <button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
-        <button className="b" title="開工日、工期、展延或頻率改了之後，刪除未修改的自動產生表單並依新條件補齊" onClick=${() => setFq('regen')}>重新產生…</button></div>
+      ${NFG.length ? html`<div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
+        ${NFG.some(([g]) => g !== '查核及團體督導紀錄') && html`<button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
+        <button className="b" title="開工日、工期、展延或頻率改了之後，刪除未修改的自動產生表單並依新條件補齊" onClick=${() => setFq('regen')}>重新產生…</button>`}</div>` : null}
       ${tplOpen ? html`<div>
       <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
       ${tpls.map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
@@ -1840,7 +1831,7 @@ function PrintTab({p, update, only}) {
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
       </div>` : tpls.length ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${tpls.map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
     </div>
-    ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
+    ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG.filter(([g]) => g !== '查核及團體督導紀錄')} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const last = [...new Map(list.map(t => [t.group, t])).values()], gs = new Set(last.map(t => t.group)); d.formTemplates = [...(d.formTemplates || []).filter(x => (x.tables || x.page) && !gs.has(x.group)), ...last]; }); setEd(null); }} />`}
     <div className="card noprint">
@@ -2248,8 +2239,8 @@ function FolderTab() {
 }
 
 /* ================= 主程式 ================= */
-const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'gtech', 'check', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
-const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['gtech', '技師督導'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['check', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
+const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['填報', ['insp', 'tests', 'gtech', 'gcheck', 'gsec', 'genv', 'gtraf', 'gflood', 'print']], ['稽核', ['audit']], ['資料夾', ['folder']], ['設定', ['set']]];
+const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['gtech', '技師督導'], ['gsec', '職安衛表單'], ['genv', '環保表單'], ['gtraf', '交維表單'], ['gflood', '防汛表單'], ['gcheck', '查核／團體督導'], ['print', '表單列印'], ['audit', '每週稽核'], ['folder', '資料夾採購統計'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
    父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
@@ -2373,7 +2364,7 @@ function App() {
         ${tab === 'log' && html`<${LogTab} ...${props} />`}
         ${tab === 'insp' && html`<${InspectionTab} ...${props} preset=${preset} clearPreset=${() => setPreset(null)} />`}
         ${tab === 'tests' && html`<${TestTab} ...${props} />`}
-        ${tab === 'check' && html`<${AuditRecTab} ...${props} />`}
+        ${tab === 'gcheck' && html`<${PrintTab} ...${props} only=${['查核及團體督導紀錄']} />`}
         ${tab === 'gtech' && html`<${PrintTab} ...${props} only=${['技師督導紀錄表']} />`}
         ${tab === 'gsec' && html`<${PrintTab} ...${props} only=${['職安衛表單']} />`}
         ${tab === 'genv' && html`<${PrintTab} ...${props} only=${['環保表單']} />`}
