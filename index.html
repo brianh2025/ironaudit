@@ -111,6 +111,9 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 .sheet .st{text-align:center;font-size:18pt;font-weight:bold;margin:0 0 10px}.sheet table{width:100%;border-collapse:collapse}
 .sheet th,.sheet td{border:1px solid #000;padding:6px 8px;text-align:left;vertical-align:top}.sheet th{width:18%;background:#f2f2f2;white-space:nowrap;font-size:12pt;color:#000;font-weight:bold;text-transform:none;letter-spacing:0}
 .sheet td.pre{white-space:pre-wrap;height:2.2em}.sheet .sg{display:flex;justify-content:space-between;gap:12px;margin-top:28px}.sheet .sg div{flex:1;border-bottom:1px solid #000;padding-bottom:28px}}
+.tpl{width:100%;table-layout:fixed;border-collapse:collapse}.tpl td{border:1px solid #999;padding:2px 4px;font-size:12px;white-space:pre-wrap;word-break:break-all;vertical-align:middle;height:22px;cursor:pointer}
+.tpl.plain td{border:none}.tpl td.m{background:#e0f2fe}.tpl td.tsel{outline:2px solid #2563eb;outline-offset:-2px}.tplf{color:#2563eb;font-size:11px}
+@media print{.sheet table.tpl td{border:1px solid #000;padding:2px 4px;font-size:11pt;cursor:auto;height:auto}.sheet table.tpl.plain td{border:none}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -872,6 +875,7 @@ function formPrefix(p, r, listKey) {
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
   let ch = false; p.settings.prefix = p.settings.prefix || {};
+  if (p.formTemplates?.some(t => !t.tables)) { p.formTemplates = p.formTemplates.filter(t => t.tables); ch = true; }
   for (const k in DEFAULT_PREFIX) { const v = p.settings.prefix[k]; if (v === undefined || OLD_PREFIX[k].includes(v)) { p.settings.prefix[k] = DEFAULT_PREFIX[k]; ch = true; } }
   const old = /^(施查|材查|查核|安|環|交|技督|汛|N|E[1-5](-[1-5X])?)-\d+$/;
   for (const k of ['inspections', 'supervisions', 'forms']) {
@@ -1420,65 +1424,111 @@ function FormTab(props) {
   return html`<${RecordTab} ...${props} listKey="forms" title="職安衛／環保／交維／防汛表單" fields=${fields} cols=${cols} defaults=${{cat: '職安衛', result: '符合'}} prefixKey=${r => formPrefix(props.p, r, 'forms')} />`;
 }
 
-/* ================= 監造計畫表單範本：上傳監造計畫（PDF／Word／Excel），辨識「○○紀錄表／檢查表」表單，列印時沿用其格式 ================= */
-const FORM_TITLE_RE = /(紀錄表|檢查表|查驗表|抽驗表|抽查表|查核表|督導表)$/;
+/* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
 const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
 const formGroupOf = t => FORM_GROUPS.find(([re]) => re.test(t))?.[1] || '';
-const cleanTitle = t => clean(t).replace(/^(?:(?:附?表|附件|圖)[\d\-－.]*|\d+[-.、])/, '');
-const isFormTitle = t => { const c = clean(t); return c.length >= 4 && c.length <= 40 && FORM_TITLE_RE.test(c) && !/[，。；：,;]|\.{3,}|…/.test(c) && cleanTitle(c).length >= 4; };
-/* stream：依序的 {title} 或 {row: [儲存格…]}；同名表單取列數最多者（排除目錄、內文提及） */
-function templatesFromStream(stream, file) {
-  const out = []; let cur = null;
-  for (const s of stream) {
-    if (s.title) { cur = {title: cleanTitle(s.title), rows: []}; out.push(cur); }
-    else if (cur && s.row.some(c => c) && cur.rows.length < 60 && !/^第[一二三四五六七八九十\d]+[章節]/.test(s.row[0] || '')) cur.rows.push(s.row);
-  }
-  const best = new Map();
-  for (const t of out) { const k = norm(t.title); if (t.rows.length >= 3 && (!best.has(k) || t.rows.length > best.get(k).rows.length)) best.set(k, t); }
-  return [...best.values()].map(t => ({id: uid(), title: t.title, group: formGroupOf(t.title), rows: t.rows, file}));
+const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
+const FORM_FIELDS = {
+  inspections: ['查驗類別', '查驗工項', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
+  supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
+  forms: ['類別', '檢查結果', '缺失／備註']};
+const FORM_ALIAS = {工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
+  表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
+  查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
+function formVals(p, k, r) {
+  const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''};
+  if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
+    試驗項目: r.testName, '取樣／會驗日期': roc(r.sampleDate), 試驗報告編號: r.reportNo, 報告日期: roc(r.reportDate), 試驗結果: r.testResult});
+  else if (k === 'supervisions') Object.assign(v, {'督導人員／單位': r.person, 督導工項: its, '分數／等級': r.score, 內容摘要: r.content, 缺失件數: r.defects || 0, 改善期限: roc(r.fixDue), 改善完成日: roc(r.fixDone), 備註: r.note});
+  else Object.assign(v, {類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
+  return v;
+}
+/* 依儲存格文字（欄位名稱）自動建議：標籤右側的空白格，否則其下方的空白格 */
+function suggestMap(tables, fields) {
+  const map = {}, used = new Set();
+  const labelOf = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
+  tables.forEach((t, ti) => t.rows.forEach((row, ri) => row.forEach((c, ci) => {
+    const n = norm(c.t); if (!n) return; const f = fields.find(f => !Object.values(map).includes(f) && labelOf(f).includes(n)); if (!f) return;
+    const right = row[ci + 1], below = t.rows[ri + (c.rs || 1)]?.find(x => x.c <= c.c && c.c < x.c + x.cs);
+    const tgt = right && !right.t ? [ci + 1] : below && !below.t ? [t.rows[ri + (c.rs || 1)].indexOf(below), ri + (c.rs || 1)] : null; if (!tgt) return;
+    const key = tgt.length === 1 ? `${ti}:${ri}:${tgt[0]}` : `${ti}:${tgt[1]}:${tgt[0]}`; if (!used.has(key)) { used.add(key); map[key] = f; }
+  })));
+  return map;
+}
+const emptyTable = rows => ({widths: [], heights: [], rows});
+function sheetToTable(ws) {
+  if (!ws['!ref']) return null;
+  const R = XLSX.utils.decode_range(ws['!ref']), merges = ws['!merges'] || [], covered = new Set(), tops = new Map();
+  merges.forEach(m => { for (let r = m.s.r; r <= m.e.r; r++) for (let c = m.s.c; c <= m.e.c; c++) covered.add(r + ',' + c); tops.set(m.s.r + ',' + m.s.c, m); });
+  const rows = []; let filled = 0;
+  for (let r = R.s.r; r <= R.e.r; r++) { const row = [];
+    for (let c = R.s.c; c <= R.e.c; c++) { const key = r + ',' + c; if (covered.has(key) && !tops.has(key)) continue;
+      const cell = ws[XLSX.utils.encode_cell({r, c})], t = cell ? String(cell.w ?? cell.v ?? '').trim() : '', m = tops.get(key); if (t) filled++;
+      row.push({c: c - R.s.c, t, cs: m ? m.e.c - m.s.c + 1 : 1, rs: m ? m.e.r - m.s.r + 1 : 1}); }
+    rows.push(row); }
+  if (filled < 2 || rows.length > 200) return null;
+  const widths = [], heights = []; for (let c = R.s.c; c <= R.e.c; c++) { const w = ws['!cols']?.[c]; widths.push(w?.wpx || (w?.wch ? w.wch * 7.5 : 64)); }
+  for (let r = R.s.r; r <= R.e.r; r++) { const h = ws['!rows']?.[r]; heights.push(h?.hpx || (h?.hpt ? h.hpt * 1.333 : 0)); }
+  return {widths, heights, rows};
 }
 let mammothP;
 const loadMammoth = () => window.mammoth ? Promise.resolve(window.mammoth) : mammothP || (mammothP = new Promise((res, rej) => {
   const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js';
   s.onload = () => res(window.mammoth); s.onerror = () => rej(new Error('無法載入 Word 元件（請確認網路）')); document.head.appendChild(s);
 }));
-async function parsePlanTemplates(file) {
-  const stream = [];
-  if (/\.pdf$/i.test(file.name)) {
-    const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise; let noText = 0;
-    for (let pn = 1; pn <= doc.numPages; pn++) {
-      const lines = await pdfPageLines(await doc.getPage(pn)); if (!lines.length) { noText++; continue; }
-      for (const l of lines) { if (l.c.length <= 2 && isFormTitle(l.text)) stream.push({title: l.text}); else { const row = l.c.map(c => c.t); if (!(row.length === 1 && /^[-—\d\s\/第頁]+$/.test(row[0]))) stream.push({row}); } }
-    }
-    if (noText === doc.numPages) throw new Error('這份 PDF 是掃描影像，沒有文字層，無法辨識（請先 OCR，或改傳 Word／Excel 版）');
-  } else if (/\.docx$/i.test(file.name)) {
-    const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html');
+function docTable(el) {
+  const occ = new Set(), rows = []; let nc = 0;
+  [...el.querySelectorAll('tr')].forEach((tr, r) => { const row = []; let col = 0;
+    [...tr.children].forEach(td => { while (occ.has(r + ',' + col)) col++; td.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+      const cs = td.colSpan || 1, rs = td.rowSpan || 1; row.push({c: col, t: td.textContent.trim(), cs, rs});
+      for (let a = 0; a < rs; a++) for (let b = 0; b < cs; b++) if (a || b) occ.add((r + a) + ',' + (col + b)); col += cs; nc = Math.max(nc, col); });
+    rows.push(row); });
+  return {widths: Array(nc || 1).fill(100), heights: [], rows};
+}
+/* 檔案 → 候選範本（Excel 每個工作表一份；Word 整份文件一份） */
+async function parseTemplateFile(file) {
+  const cands = [];
+  if (/\.docx$/i.test(file.name)) {
+    const html = (await (await loadMammoth()).convertToHtml({arrayBuffer: await file.arrayBuffer()})).value, dom = new DOMParser().parseFromString(html, 'text/html'), tables = [];
     for (const el of dom.body.children) {
-      if (el.tagName === 'TABLE') el.querySelectorAll('tr').forEach(tr => stream.push({row: [...tr.children].map(c => c.textContent.trim())}));
-      else { const t = el.textContent.trim(); if (isFormTitle(t)) stream.push({title: t}); else if (t) stream.push({row: [t]}); }
-    }
+      if (el.tagName === 'TABLE') tables.push(docTable(el));
+      else { const t = el.textContent.trim(); if (t) tables.push({plain: true, widths: [100], heights: [], rows: [[{c: 0, t, cs: 1, rs: 1}]]}); } }
+    const title = tables.find(t => t.plain)?.rows[0][0].t || '';
+    if (tables.some(t => !t.plain)) cands.push({name: title && title.length <= 40 ? title : file.name.replace(/\.docx$/i, ''), tables});
   } else {
     const wb = await readWB(file);
-    for (const [si, sn] of wb.SheetNames.entries()) {
-      if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; let titled = false;
-      if (isFormTitle(sn)) stream.push({title: sn});
-      for (const r of aoa(wb.Sheets[sn])) { const row = r.map(v => v == null ? '' : String(v).trim()); while (row.length && !row.at(-1)) row.pop();
-        const ne = row.filter(Boolean); if (ne.length && ne.length <= 2 && isFormTitle(ne[0])) { stream.push({title: ne[0]}); titled = true; } else stream.push({row}); }
-    }
+    for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({name: sn, tables: [t]}); }
   }
-  return templatesFromStream(stream, file.name);
+  return cands.map(c => { const group = formGroupOf(file.name + c.name), k = PRINT_KINDS.find(([g]) => g === group)?.[1];
+    return {...c, group, map: group ? suggestMap(c.tables, [...FORM_BASE, ...FORM_FIELDS[k]]) : {}}; });
 }
-/* 列印時：以範本列為版面，工程資料與本筆紀錄的欄位依「欄位名稱」填入，其餘列（檢查項目）保留空白供手寫 */
-function TplRows({rows, vals}) {
-  const nc = Math.max(...rows.map(r => r.length));
-  return rows.map((r, i) => {
-    const n0 = norm(r[0]), hit = n0.length >= 2 ? vals.find(([l]) => { const nl = norm(l); return nl && (n0.includes(nl) || nl.includes(n0)); }) : null;
-    if (!hit && r.length === 1) return html`<tr key=${i}><th colSpan=${nc}>${r[0]}</th></tr>`;
-    const cells = [...r]; if (hit) { if (cells.length < 2) cells.push(''); cells[1] = hit[1]; }
-    while (cells.length < nc) cells.push('');
-    return html`<tr key=${i}>${cells.map((c, j) => html`<td key=${j} className=${hit && j === 1 ? 'pre' : ''}>${c}</td>`)}</tr>`;
-  });
+/* 範本表格：editor 模式顯示對應標籤；列印模式（vals）填入資料 */
+function TplTable({t, ti, map, vals, sel, onPick}) {
+  const tot = t.widths.reduce((a, b) => a + b, 0) || 1;
+  return html`<table className=${'tpl' + (t.plain ? ' plain' : '')}><colgroup>${t.widths.map((w, i) => html`<col key=${i} style=${{width: (w / tot * 100) + '%'}} />`)}</colgroup><tbody>
+    ${t.rows.map((r, ri) => html`<tr key=${ri} style=${t.heights[ri] ? {height: t.heights[ri] + 'px'} : null}>${r.map((c, ci) => { const key = `${ti}:${ri}:${ci}`, f = map[key];
+      return html`<td key=${ci} colSpan=${c.cs} rowSpan=${c.rs} className=${(f && !vals ? 'm ' : '') + (sel === key ? 'tsel' : '')} onClick=${onPick ? () => onPick(key) : undefined}>${vals ? (f ? vals[f] ?? '' : c.t) : c.t}${!vals && f ? html`<span className="tplf">{${f}}</span>` : ''}</td>`; })}</tr>`)}</tbody></table>`;
+}
+function TplEditor({init, onSave, onClose}) {
+  const [cands, setCands] = useState(init.cands), [ci, setCi] = useState(0), [group, setGroup] = useState(init.group || cands[0]?.group || ''), [sel, setSel] = useState(null);
+  const cand = cands[ci], k = PRINT_KINDS.find(([g]) => g === group)?.[1], fields = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : FORM_BASE;
+  const patch = fn => setCands(cands.map((c, i) => i === ci ? fn(c) : c));
+  const setField = (key, f) => patch(c => ({...c, map: Object.fromEntries(Object.entries({...c.map, [key]: f}).filter(([, v]) => v))}));
+  const [st, sr, sc] = sel ? sel.split(':').map(Number) : [];
+  return html`<${Modal} title=${init.id ? '編輯表單範本對應' : '表單範本對應'} onClose=${onClose}>
+    <div className="mute">在表格中點選要填入資料的儲存格，再選擇對應的系統欄位（藍色＝已對應）。已依欄位名稱自動建議，請檢查並修正。</div>
+    <div className="row" style=${{margin: '8px 0'}}>
+      <label>所屬類別 <select value=${group} onChange=${e => { const g = e.target.value, kk = PRINT_KINDS.find(([x]) => x === g)?.[1]; setGroup(g); if (kk && !Object.keys(cand.map).length) patch(c => ({...c, map: suggestMap(c.tables, [...FORM_BASE, ...FORM_FIELDS[kk]])})); }}>
+        <option value="">（請選擇）</option>${PRINT_KINDS.map(([g]) => html`<option key=${g}>${g}</option>`)}</select></label>
+      ${cands.length > 1 && html`<label>工作表 <select value=${ci} onChange=${e => { setCi(+e.target.value); setSel(null); }}>${cands.map((c, i) => html`<option key=${i} value=${i}>${c.name}</option>`)}</select></label>`}
+      <button className="b" disabled=${!k} onClick=${() => patch(c => ({...c, map: suggestMap(c.tables, fields)}))}>重新自動建議</button>
+      <button className="b" onClick=${() => patch(c => ({...c, map: {}}))}>清除對應</button></div>
+    ${sel && html`<div className="msg warn row">已選儲存格：「${cand.tables[st].rows[sr][sc].t || '（空白）'}」 對應欄位：
+      <select value=${cand.map[sel] || ''} onChange=${e => setField(sel, e.target.value)}><option value="">（不對應）</option>${fields.map(f => html`<option key=${f}>${f}</option>`)}</select></div>`}
+    <div style=${{maxHeight: '55vh', overflow: 'auto', background: '#fff'}}>${cand.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${cand.map} sel=${sel} onPick=${setSel} />`)}</div>
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${!group}
+      onClick=${() => onSave({id: init.id || uid(), group, name: cand.name, file: init.file, tables: cand.tables, map: cand.map})}>儲存範本</button></div></${Modal}>`;
 }
 
 /* ================= 表單列印：依表單類別列出專案所有查驗／督導／安環表單，勾選後逐張列印 ================= */
@@ -1500,10 +1550,9 @@ function sheetRows(p, k, r) {
 }
 const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
 function Sheet({p, e}) {
-  const I = p.info, r = e.r, tpl = (p.formTemplates || []).find(t => t.group === e.g);
-  if (tpl) { const vals = [['工程名稱', I.name], ['契約編號', I.contractNo], ['表單編號', r.no], ['主辦機關', I.owner], ['日期', r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''], ['監造單位', I.supervisor], ['承攬廠商', I.contractor], ...sheetRows(p, e.k, r)];
-    return html`<div className="sheet"><div className="st">${tpl.title}</div><table><tbody><${TplRows} rows=${tpl.rows} vals=${vals} /></tbody></table>
-      <div className="sg">${SIGNS[e.k].map(s => html`<div key=${s}>${s}：</div>`)}</div></div>`; }
+  const I = p.info, r = e.r, tpl = (p.formTemplates || []).find(t => t.tables && t.group === e.g);
+  if (tpl) { const vals = formVals(p, e.k, r);
+    return html`<div className="sheet">${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; }
   return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
     <table><tbody>
       <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
@@ -1515,7 +1564,7 @@ function Sheet({p, e}) {
     <div className="sg">${SIGNS[e.k].map(s => html`<div key=${s}>${s}：</div>`)}</div></div>`;
 }
 function PrintTab({p, update}) {
-  const [cand, setCand] = useState(null), [busy, setBusy] = useState(false);
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false);
   const [sel, setSel] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.map(([g, k, f]) => ({g, list: p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
     .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
@@ -1525,22 +1574,16 @@ function PrintTab({p, update}) {
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2>監造計畫表單範本（${(p.formTemplates || []).length}）</h2>
-        <label className="b">${busy ? '解析中…' : '上傳監造計畫'}<input type="file" hidden multiple accept=".pdf,.docx,.xlsx,.xlsm,.xls" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
-          try { const all = []; for (const f of fs) all.push(...await parsePlanTemplates(f)); if (!all.length) alert('沒有辨識到表單。表單標題需以「紀錄表／檢查表／查驗表／抽驗表／抽查表／查核表／督導表」結尾，且至少含 3 列內容。'); else setCand(all.map(t => ({...t, on: !!t.group}))); }
-          catch (er) { alert('解析失敗：' + er.message); console.error(er); } setBusy(false); }} /></label></div>
-      <div className="mute">上傳監造計畫（PDF、Word 或 Excel）後，自動辨識其中的表單；確認後，列印時該類別表單會沿用監造計畫的欄位與檢查項目格式，並把系統內的紀錄填入對應欄位。</div>
-      ${(p.formTemplates || []).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.title}（${t.rows.length} 列，來源：${t.file}）
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單範本（${(p.formTemplates || []).filter(t => t.tables).length}）</h2>
+        <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden accept=".xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
+          try { const cands = await parseTemplateFile(f); if (!cands.length) alert('檔案中找不到可用的表格（支援 Excel、Word；PDF 無法對應欄位）'); else setEd({cands, file: f.name}); }
+          catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label></div>
+      <div className="mute">上傳實際使用的空白表單（Excel 或 Word），在表格上點選儲存格、指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；沒有對應的儲存格維持範本原樣。每個類別保留一份範本。</div>
+      ${(p.formTemplates || []).filter(t => t.tables).map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（來源：${t.file}，已對應 ${Object.keys(t.map).length} 欄）
+        <button className="b" onClick=${() => setEd({id: t.id, group: t.group, file: t.file, cands: [{name: t.name, tables: t.tables, map: t.map}]})}>編輯對應</button>
         <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
     </div>
-    ${cand && html`<${Modal} title="辨識到的監造計畫表單" onClose=${() => setCand(null)}>
-      <div className="mute">勾選要使用的表單並確認它所屬的類別（同一類別只會保留一份，後勾選者覆蓋舊範本）。「不指定」者不會用於列印。</div>
-      ${cand.map((t, i) => html`<details key=${t.id} style=${{margin: '8px 0'}}><summary><label onClick=${e => e.stopPropagation()}><input type="checkbox" checked=${t.on} onChange=${e => setCand(cand.map((x, j) => j === i ? {...x, on: e.target.checked} : x))} /></label>
-          <b>${t.title}</b>（${t.rows.length} 列）
-          <select value=${t.group} onClick=${e => e.stopPropagation()} onChange=${e => setCand(cand.map((x, j) => j === i ? {...x, group: e.target.value} : x))}><option value="">不指定</option>${PRINT_KINDS.map(([g]) => html`<option key=${g}>${g}</option>`)}</select></summary>
-          <div className="tw"><table><tbody>${t.rows.slice(0, 12).map((r, k) => html`<tr key=${k}>${r.map((c, j) => html`<td key=${j}>${c}</td>`)}</tr>`)}</tbody></table></div></details>`)}
-      <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${() => { const use = cand.filter(t => t.on && t.group).map(({on, ...t}) => t), gs = new Set(use.map(t => t.group));
-        update(d => { d.formTemplates = [...(d.formTemplates || []).filter(t => !gs.has(t.group)), ...use.filter((t, i, a) => a.findLastIndex(x => x.group === t.group) === i)]; }); setCand(null); }}>確認使用</button></div></${Modal}>`}
+    ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${t => { update(d => { d.formTemplates = [...(d.formTemplates || []).filter(x => x.tables && x.group !== t.group && x.id !== t.id), t]; }); setEd(null); }} />`}
     <div className="card noprint">
       <div className="row" style=${{justifyContent: 'space-between'}}><h2>表單列印（${all.length}）</h2>
         <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} />
