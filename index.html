@@ -1535,20 +1535,27 @@ const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位
 const FORM_FIELDS = {
   inspections: ['查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
   supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
-  forms: ['類別', '檢查結果', '缺失／備註']};
-const FORM_ALIAS = {'材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
-  表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
-  查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
+  forms: ['表單名稱', '類別', '檢查結果', '缺失／備註']};
+const FORM_ALIAS = {'表單名稱': ['表單名稱', '檢查表名稱', '表名', '檢查項目', '檢查名稱'], '缺失／備註': ['缺失', '備註', '缺失／備註', '缺失事項', '缺失內容', '缺失及改善情形', '改善情形', '改善事項'], 類別: ['類別', '項目類別', '檢查類別'], '材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
+  表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期', '督導日期', '督察日期', '巡查日期', '稽查日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
+  查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位', '督察人員', '技師姓名', '督導單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
 const formLabels = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
 /* 材料抽驗表的「材料／設備名稱」只放材料名稱（如「混凝土 210kgf/cm2」），不放整句查驗內容、里程與施工描述 */
-const matDisplay = r => { const t = String(r.content || ''), n = matName(t), kg = t.match(/(\d+)\s*kgf/i); if (n !== '（未載明材料）') return n; if (kg && /圓柱|試體/.test(t)) return `混凝土 ${kg[1]}kgf/cm2`;
-  return t.replace(/（[^）]*）|\([^)]*\)/g, '').replace(/^.*?[：:]/, '').replace(/監造|廠商|會同|取樣|試體|製作|進場|查驗|與|及|和|。/g, '').trim(); };
+const matDisplay = r => {
+  const t = String(r.content || ''), n = matName(t), kg = (t.match(/(\d+)\s*k[gf]{2}/i) || [])[1];
+  if (kg && (/混凝土|圓柱|試體|澆置/.test(t)) && !/瀝青|CLSM|低強度|基樁|異型塊/i.test(t)) return `${kg}kgf/cm2混凝土`; // 圓柱試體製作 → 混凝土（保留強度）
+  if (n === '混凝土') return '混凝土';
+  if (n !== '（未載明材料）') return n;
+  // 其餘：去掉括弧、前綴（「○○：」）、監造／廠商／會同／取樣…等動作用語，只留下材料名稱
+  return t.replace(/（[^）]*）|\([^)]*\)/g, '').replace(/^.*?[：:]/, '').replace(/監造|廠商|會同|取樣|試體|試驗|製作|進場|查驗|與|及|和|，.*$|,.*$|。/g, '').trim();
+};
 function formVals(p, k, r) {
   const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: r.date ? `${roc(r.date)}（${wkday(r.date)}）` : ''};
   if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
     試驗項目: r.testName, '取樣／會驗日期': roc(r.sampleDate), 試驗報告編號: r.reportNo, 報告日期: roc(r.reportDate), 試驗結果: r.testResult});
   else if (k === 'supervisions') Object.assign(v, {'督導人員／單位': r.person, 督導工項: its, '分數／等級': r.score, 內容摘要: r.content, 缺失件數: r.defects || 0, 改善期限: roc(r.fixDue), 改善完成日: roc(r.fixDone), 備註: r.note});
-  else Object.assign(v, {類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
+  else Object.assign(v, {表單名稱: r.title, 類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
+  if (k === 'inspections' && r.type === '材料查驗') v['查驗項目及內容'] = matDisplay(r); // 材料抽驗表只放材料名稱（舊範本把材料欄對到此欄者也適用）
   return v;
 }
 /* 依儲存格文字（欄位名稱）自動建議：標籤右側的空白格，否則其下方的空白格 */
@@ -1923,12 +1930,15 @@ function DocCodeCard({p, update}) {
 }
 
 /* ================= 試驗報告回填 ================= */
+/* 試驗回填的材料：先看查驗內容與試驗項目，判斷不出時改看查驗勾選的契約工項（手動勾選「試驗會驗」的紀錄常沒有寫材料文字） */
+const testMat = (p, r) => { const nm = itemNames(p, r.items), n = matName([r.content, r.testName, ...nm].filter(Boolean).join(' '));
+  if (n !== '（未載明材料）') return n; return nm.length ? shortList(nm) : matDisplay(r) || n; };
 function TestTab({p, update}) {
   const [all, setAll] = useState(false);
   const list = p.inspections.filter(r => r.testNeed && (all || !r.reportNo)).sort((a, b) => (a.sampleDate || a.date).localeCompare(b.sampleDate || b.date));
   const set = (id, k, v) => update(d => { d.inspections.find(x => x.id === id)[k] = v; });
   const due = +p.settings.testDue || 30;
-  const cols = [['查驗表單號', r => r.no], ['材料', r => matName(r.content || r.testName), false, 'nw'], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
+  const cols = [['查驗表單號', r => r.no], ['材料', r => testMat(p, r), false, 'nw'], ['進場日', r => roc(r.date), true], ['會驗日', r => roc(r.sampleDate || r.date), true],
     ['已過天數', r => { const age = dayDiff(r.sampleDate || r.date, todayISO()); return html`<span className=${!r.reportNo && age > due ? 'tag bad' : ''}>${age}</span>`; }, false, 'n'],
     ['試驗報告編號', r => html`<input key=${r.id + 'n'} defaultValue=${r.reportNo || ''} onBlur=${e => set(r.id, 'reportNo', e.target.value.trim())} placeholder="輸入後離開欄位即儲存" />`],
     ['報告日期', r => html`<input type="date" value=${r.reportDate || ''} onChange=${e => set(r.id, 'reportDate', e.target.value)} />`, true],
