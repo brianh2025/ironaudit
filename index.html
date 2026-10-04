@@ -187,6 +187,7 @@ const Store = (() => {
 
 /* 表單編碼（施工抽查紀錄表 E＋工程類別代碼）：A 測量、B 開挖、C 回填、D 鋼筋、E 模板、F 混凝土、G 臨時擋土設施、H 預力混凝土基樁、I 臨時擋抽移排水、J 瀝青混凝土鋪面、K 控制性低強度回填材料(CLSM)、L 植筋、M 混凝土塊、N 坡面工、
    U 安全衛生、V 環境保護、W 交維設施、X 汛期工地防災、Y 材料設備送審、Z 材料設備檢驗；技師督導 RT、機關督導（查核／團體督導）RQ。例：ED-001 ＝ 鋼筋工程第 1 張 */
+const PREFIX_GROUP = {施工查驗: '施工抽查紀錄表', 材料查驗: '材料設備品質抽驗紀錄表', 技師督導: '技師督導紀錄表', 查核: '查核及團體督導紀錄'}; // 前綴設定 → 文管編碼表的表單類別
 const DEFAULT_PREFIX = {施工查驗: 'E', 材料查驗: 'E', 技師督導: 'RT', 查核: 'RQ', 職安衛: 'EU', 環保: 'EV', 交維: 'EW', 防汛: 'EX'};
 const OLD_PREFIX = {施工查驗: ['施查', 'E1'], 材料查驗: ['材查', 'E2'], 技師督導: ['技督'], 查核: ['查核', 'N'], 職安衛: ['安', 'E3'], 環保: ['環', 'E4'], 交維: ['交', 'E5'], 防汛: ['汛']};
 function newProject(name = '新專案') {
@@ -2237,7 +2238,8 @@ function SettingsTab({p, update, onDelete, onRestore}) {
       ${I('startDate', '開工日期', 'date')}${I('duration', '契約工期（日曆天）', 'number')}${I('extendDays', '展延天數', 'number')}${I('amount', '契約金額（元）', 'number')}</div></div>
     <div className="card"><h2>稽核與編號設定</h2><div className="grid">
       ${S('tolerance', '查驗比對容許天數（±天）')}${S('testDue', '試驗報告回填期限（天）')}
-      ${Object.keys(DEFAULT_PREFIX).map(k => html`<label key=${k} className="f">表單號前綴：${k}<input value=${p.settings.prefix[k] || ''} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`)}
+      ${Object.keys(DEFAULT_PREFIX).map(k => { const g = PREFIX_GROUP[k] || `${k}表單`, dc = (p.docCodes || []).filter(x => x.group === g || x.group.startsWith(g + '－')).map(x => x.code);
+        return html`<label key=${k} className="f">表單號前綴：${k}${dc.length ? '（依文管編碼表）' : ''}<input value=${dc.length ? dc.join('、') : p.settings.prefix[k] || ''} disabled=${!!dc.length} onChange=${e => { const v = e.target.value; update(d => { d.settings.prefix[k] = v; }); }} /></label>`; })}
       ${[['labor', '出工工別（以、分隔）'], ['machines', '機具名稱（以、分隔）']].map(([k, t]) => html`<label key=${k} className="f wide">${t}<input defaultValue=${p.settings[k].join('、')} onBlur=${e => { const v = e.target.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean); update(d => { d.settings[k] = v; }); }} /></label>`)}
     </div></div>
     <${DocCodeCard} p=${p} update=${update} />
