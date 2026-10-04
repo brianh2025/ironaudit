@@ -970,7 +970,7 @@ function formPrefix(p, r, listKey) {
 const siteLetter = (p, r) => SITE_CODE.find(([re]) => re.test([r.content, r.testName, r.location, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ')))?.[1] || '';
 const SITE_NAME = {A: '測量', B: '開挖', C: '回填', D: '鋼筋', E: '模板', F: '混凝土', G: '臨時擋土設施', H: '預力混凝土基樁', I: '臨時擋抽移排水', J: '瀝青混凝土鋪面', K: 'CLSM', L: '植筋', M: '混凝土塊', N: '坡面工'};
 /* 範本類別名稱：施工抽查紀錄表可再分「－鋼筋」「－模板」等工程類別，沒有個別範本時沿用「施工抽查紀錄表」 */
-const SITE_KEYS = [['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
+const SITE_KEYS = [['臨時擋土設施', '鋼板樁'], ['臨時擋土設施', '鋼軌樁'], ['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
 const kindOf = g => PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x + '－'))?.[1];
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
@@ -2126,30 +2126,25 @@ async function tableRowsFromFile(file) {
   }
   return rows.filter(r => r.some(Boolean));
 }
-const DOC_CODE_RE = /編號|編碼|代碼|代號|文管/, DOC_NAME_RE = /名稱|表單|表名|紀錄表|文件/;
-const docColGuess = rows => { const n = Math.max(...rows.slice(0, 40).map(r => r.length), 1); let nc = -1, cc = -1;
-  for (const r of rows.slice(0, 8)) r.forEach((t, i) => { if (nc < 0 && DOC_NAME_RE.test(t) && t.length <= 10) nc = i; if (cc < 0 && DOC_CODE_RE.test(t) && t.length <= 10) cc = i; });
-  if (nc < 0 || cc < 0 || nc === cc) { nc = 1; cc = 0; } return [Math.min(nc, n - 1), Math.min(cc, n - 1)]; };
-const buildDocEntries = (rows, nc, cc) => rows.map(r => ({name: (r[nc] || '').replace(/\s+/g, ''), code: (r[cc] || '').replace(/\s+/g, '')})).filter(e => e.name.length >= 3 && e.code && !(DOC_NAME_RE.test(e.name) && e.name.length <= 6) && !DOC_CODE_RE.test(e.code))
-  .map(e => ({id: uid(), ...e, group: formGroupOf(e.name)}));
+/* 文件編碼一覽表：總類／總類代碼／細類／細類代碼（總類欄合併儲存格時，往下沿用上一列）；編號 = 總類代碼＋細類代碼，例如 檢驗 E ＋ 鋼筋工程施工抽查紀錄表 F → EF */
+const buildDocEntries = rows => {
+  const hi = rows.findIndex(r => r.some(t => /總\s*類\s*代碼/.test(t)) && r.some(t => /細\s*類\s*代碼/.test(t))); if (hi < 0) return null;
+  const H = rows[hi], tc = H.findIndex(t => /總\s*類\s*代碼/.test(t)), sc = H.findIndex(t => /細\s*類\s*代碼/.test(t)), nc = H.findIndex(t => /^細\s*類$/.test(t.trim())), out = []; let big = '';
+  for (const r of rows.slice(hi + 1)) { const t = (r[tc] || '').replace(/\s+/g, ''), name = (r[nc] || '').replace(/\s+/g, ''), sub = (r[sc] || '').replace(/\s+/g, '');
+    if (t) big = /^[A-Za-z]+$/.test(t) ? t : ''; if (!name || !sub) continue;
+    out.push({id: uid(), name, code: big + sub, group: /抽查|檢查表|督導|查核/.test(name) ? formGroupOf(name) : ''}); }
+  return out;
+};
 function DocCodeEditor({init, onSave, onClose}) {
-  const rows = init.rows, [cols, setCols] = useState(() => rows ? docColGuess(rows) : [0, 1]), [ents, setEnts] = useState(() => init.entries || buildDocEntries(rows, ...docColGuess(rows)));
-  const nCol = rows ? Math.max(...rows.slice(0, 60).map(r => r.length), 1) : 0, sample = i => rows.slice(0, 8).map(r => r[i]).filter(Boolean).slice(0, 3).join('／').slice(0, 24);
-  const setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e));
-  const regen = (nc, cc) => { setCols([nc, cc]); setEnts(buildDocEntries(rows, nc, cc)); };
+  const [ents, setEnts] = useState(init.entries), setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e)), use = ents.filter(e => e.group && e.code);
   return html`<${Modal} title="文件管理編碼表" onClose=${onClose}>
-    ${rows && html`<div className="mute">請指定「表單名稱」與「文管編號」各是哪一欄，再核對下方結果並指定所屬類別（類別為空者不會使用）。</div>
-      <div className="row" style=${{margin: '8px 0'}}>
-        <label>表單名稱欄 <select value=${cols[0]} onChange=${e => regen(+e.target.value, cols[1])}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label>
-        <label>文管編號欄 <select value=${cols[1]} onChange=${e => regen(cols[0], +e.target.value)}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label></div>`}
-    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th>表單名稱</th><th>文管編號</th><th>所屬類別（本系統表單）</th><th></th></tr></thead><tbody>
-      ${ents.map(e => html`<tr key=${e.id}><td><input style=${{width: '100%'}} value=${e.name} onChange=${ev => setE(e.id, 'name', ev.target.value)} /></td>
-        <td><input value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
+    <div className="mute">已依監造計畫的「文件編碼一覽表」讀出各表單的文管編號（總類代碼＋細類代碼）。右欄是對應到本系統哪一種表單，系統能對應的已自動帶入；標示「不使用」的是本系統沒有的文件，不會用到。</div>
+    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto', marginTop: '8px'}}><table><thead><tr><th>表單名稱（細類）</th><th>文管編號</th><th>對應本系統表單</th><th></th></tr></thead><tbody>
+      ${ents.map(e => html`<tr key=${e.id}><td>${e.name}</td>
+        <td><input style=${{width: '70px'}} value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
         <td><select value=${e.group} onChange=${ev => setE(e.id, 'group', ev.target.value)}><option value="">（不使用）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></td>
         <td><button className="b" onClick=${() => setEnts(es => es.filter(x => x.id !== e.id))}>刪除</button></td></tr>`)}</tbody></table></div>
-    ${!ents.length && html`<div className="empty">沒有辨識到「名稱＋編號」的列，請調整上方欄位</div>`}
-    <div className="row" style=${{justifyContent: 'space-between', marginTop: '12px'}}><button className="b" onClick=${() => setEnts(es => [...es, {id: uid(), name: '', code: '', group: ''}])}>＋ 新增一列</button>
-      <button className="b p" onClick=${() => onSave(ents.filter(e => e.group && e.code))}>儲存（${ents.filter(e => e.group && e.code).length} 筆）</button></div></${Modal}>`;
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${() => onSave(use)}>儲存（${use.length} 筆）</button></div></${Modal}>`;
 }
 function renumberAll(d) { for (const k of ['inspections', 'supervisions', 'forms']) { const list = d[k], sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
   sorted.forEach(r => { r.no = ''; }); for (const r of sorted) r.no = nextNo(d, list, formPrefix(d, r, k)); } }
@@ -2158,7 +2153,7 @@ function DocCodeCard({p, update}) {
   const total = p.inspections.length + p.supervisions.length + p.forms.length;
   return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>文件管理編碼表（${L.length}）${p.docCodesFile ? html` <span className="mute">來源：${p.docCodesFile}</span>` : ''}</h2>
       <div className="row"><label className="b">${busy ? '讀取中…' : '上傳文管編碼表'}<input type="file" hidden accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
-          try { const rows = await tableRowsFromFile(f); if (!rows.length) alert('檔案中找不到表格內容'); else setEd({rows, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+          try { const rows = await tableRowsFromFile(f); const entries = rows.length && buildDocEntries(rows); if (!entries) alert('找不到「總類代碼」「細類代碼」欄位，請確認上傳的是監造計畫的文件編碼一覽表'); else setEd({entries, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
         ${L.length > 0 && html`<button className="b" onClick=${() => setEd({entries: L.map(x => ({...x})), file: p.docCodesFile})}>編輯</button>`}</div></div>
     <div className="mute">依監造計畫的文件管理編碼表，設定各種表單的文管編號（施工抽查可依工程類別各設一個）。設定後新產生的表單號為「文管編號－流水號」；沒有設定的類別仍使用上方的表單號前綴。</div>
     ${L.length > 0 && html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>類別</th><th>表單名稱</th><th>文管編號</th></tr></thead><tbody>${L.map(x => html`<tr key=${x.id}><td>${x.group}</td><td>${x.name}</td><td className="nw">${x.code}</td></tr>`)}</tbody></table></div>
