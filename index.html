@@ -1827,18 +1827,33 @@ function NewFormModal({p, update, group, onClose, onSaved}) {
 const FREQ_DEFAULT = {'技師督導紀錄表': ['month', 1], '防汛表單': ['month', 1], '職安衛表單': ['week', 1], '交維表單': ['week', 1]};
 /* 平日的國定假日與補假（行政院人事行政總處行事曆，資料來源 ruyut/TaiwanCalendar；僅含 2025–2027，其他年度只避開週末與週三）。自動產生的表單日期不排在週三、週末與這些日子 */
 const HOLIDAYS = new Set('2025-01-01 2025-01-27 2025-01-28 2025-01-29 2025-01-30 2025-01-31 2025-02-28 2025-04-03 2025-04-04 2025-05-30 2025-09-29 2025-10-06 2025-10-10 2025-10-24 2025-12-25 2026-01-01 2026-02-16 2026-02-17 2026-02-18 2026-02-19 2026-02-20 2026-02-27 2026-04-03 2026-04-06 2026-05-01 2026-06-19 2026-09-25 2026-09-28 2026-10-09 2026-10-26 2026-12-25 2027-01-01 2027-02-04 2027-02-05 2027-02-08 2027-02-09 2027-02-10 2027-03-01 2027-04-05 2027-04-06 2027-04-30 2027-06-09 2027-09-15 2027-09-28 2027-10-11 2027-10-25 2027-12-24 2027-12-31'.split(' '));
-const okFormDay = d => { const w = fromISO(d).getDay(); return w !== 0 && w !== 6 && w !== 3 && !HOLIDAYS.has(d); };
+/* 使用者額外指定要避開的日期：可寫 7/1、7月1日（每年都避開）或 115/7/1、2026-07-01（只避開該年），以逗號或空白分隔 */
+function parseAvoid(text) {
+  const exact = new Set(), md = new Set(), bad = [];
+  for (const t of String(text || '').split(/[,，、;；\s]+/).filter(Boolean)) {
+    let m, y, mo, dd;
+    if ((m = t.match(/^(\d{2,4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/))) { y = +m[1] < 1000 ? +m[1] + 1911 : +m[1]; mo = +m[2]; dd = +m[3]; }
+    else if ((m = t.match(/^(\d{1,2})[/\-.](\d{1,2})$/)) || (m = t.match(/^(\d{1,2})月(\d{1,2})日?$/))) { mo = +m[1]; dd = +m[2]; }
+    else { bad.push(t); continue; }
+    if (mo < 1 || mo > 12 || dd < 1 || dd > 31) { bad.push(t); continue; }
+    if (y) exact.add(`${y}-${pad(mo)}-${pad(dd)}`); else md.add(`${pad(mo)}-${pad(dd)}`);
+  }
+  return {exact, md, bad};
+}
+const okFormDay = (d, av) => { const w = fromISO(d).getDay(); return w !== 0 && w !== 6 && w !== 3 && !HOLIDAYS.has(d) && !(av && (av.exact.has(d) || av.md.has(d.slice(5)))); };
 /* 從 d 起往後找、找不到再往前找（都限在期間內）第一個可用的日子 */
-function pickFormDay(d, lo, hi) {
-  for (let x = d; x <= hi; x = addDays(x, 1)) if (okFormDay(x)) return x;
-  for (let x = addDays(d, -1); x >= lo; x = addDays(x, -1)) if (okFormDay(x)) return x;
+function pickFormDay(d, lo, hi, av) {
+  for (let x = d; x <= hi; x = addDays(x, 1)) if (okFormDay(x, av)) return x;
+  for (let x = addDays(d, -1); x >= lo; x = addDays(x, -1)) if (okFormDay(x, av)) return x;
   return null; } // 整個期間都沒有可用日（例如春節連假整週）就不產生該期間的表單
-function freqPeriods(startISO, endISO, unit, n, wd = 2) { // wd：週表單落在週幾（1＝週一…7＝週日）
+/* 該月第 nth 個星期 wd（1＝週一…7＝週日）的日期；該月沒有第 nth 個就取最後一個 */
+function nthWeekday(y, m, wd, nth) { const first = new Date(y, m - 1, 1).getDay(), last = new Date(y, m, 0).getDate(); let day = 1 + ((wd % 7) - first + 7) % 7 + 7 * ((nth || 1) - 1); while (day > last) day -= 7; return `${y}-${pad(m)}-${pad(day)}`; }
+function freqPeriods(startISO, endISO, unit, n, wd = 2, av, nth = 2) { // wd：週表單落在週幾（1＝週一…7＝週日）
   const out = []; if (!startISO || !endISO || endISO < startISO) return out; n = Math.max(1, +n || 1);
   if (unit === 'week') { let from = addDays(startISO, -((fromISO(startISO).getDay() + 6) % 7)); // 以週一為週首（與每週稽核一致）
-    while (from <= endISO) { const to = addDays(from, 7 * n - 1); const d0 = addDays(from, wd - 1), lo = from < startISO ? startISO : from; const dd = pickFormDay(d0 < startISO ? startISO : d0, lo, to); if (dd) out.push({from, to, date: dd}); from = addDays(to, 1); } }
+    while (from <= endISO) { const to = addDays(from, 7 * n - 1); const d0 = addDays(from, wd - 1), lo = from < startISO ? startISO : from; const dd = pickFormDay(d0 < startISO ? startISO : d0, lo, to, av); if (dd) out.push({from, to, date: dd}); from = addDays(to, 1); } }
   else { let [y, m] = startISO.split('-').map(Number), from = `${y}-${pad(m)}-01`;
-    while (from <= endISO) { const e = new Date(y, m - 1 + n, 0), to = toISO(e); const lo = from < startISO ? startISO : from; const dd = pickFormDay(lo, lo, to); if (dd) out.push({from, to, date: dd}); m += n; y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1; from = `${y}-${pad(m)}-01`; } }
+    while (from <= endISO) { const e = new Date(y, m - 1 + n, 0), to = toISO(e); const lo = from < startISO ? startISO : from, d0 = nthWeekday(y, m, wd, nth), dd = pickFormDay(d0 < lo ? lo : d0, lo, to, av); if (dd) out.push({from, to, date: dd}); m += n; y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1; from = `${y}-${pad(m)}-01`; } }
   return out;
 }
 const freqEnd = (p, upto) => upto === 'today' ? todayISO() : dayInfo(p, p.info.startDate || todayISO()).end;
@@ -1848,29 +1863,31 @@ const autoSig = r => JSON.stringify([r.date, r.person || '', r.content || '', r.
 function untouched(p, g, r) { if (!r.auto || r.checked) return false; if (r.autoSig) return r.autoSig === autoSig(r);
   const def = p.formDefaults?.[g] || {}, same = (v, d) => !v || v === (d || ''); // 舊版產生的紀錄沒有簽章：只有內容仍是空白或預填值才算未修改
   return same(r.person, def.person) && same(r.content, def.content) && same(r.note, def.note) && same(r.title, def.title || (r.cat || '') + '檢查表') && !r.result && !r.score && !r.defects && !r.fixDue; }
-function freqPlan(p, g, unit, n, upto, regen, wd) { const ps = freqPeriods(p.info.startDate, freqEnd(p, upto), unit, n, wd), all = freqRecs(p, g), del = regen ? all.filter(r => untouched(p, g, r)) : [], have = all.filter(r => !del.includes(r));
+function freqPlan(p, g, unit, n, upto, regen, wd, av, nth) { const ps = freqPeriods(p.info.startDate, freqEnd(p, upto), unit, n, wd, av, nth), all = freqRecs(p, g), del = regen ? all.filter(r => untouched(p, g, r)) : [], have = all.filter(r => !del.includes(r));
   const todo = ps.filter(q => !have.some(r => r.date >= q.from && r.date <= q.to)); return {total: ps.length, todo, del, kept: ps.length - todo.length}; }
 function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = false}) {
-  const saved = p.formFreq || {}, [upto, setUpto] = useState('end'), [regen, setRegen] = useState(regen0);
-  const [cfg, setCfg] = useState(() => Object.fromEntries(GL.map(([g]) => [g, {wd: 2, ...(saved[g] || (FREQ_DEFAULT[g] ? {on: true, unit: FREQ_DEFAULT[g][0], n: FREQ_DEFAULT[g][1]} : {on: false, unit: 'month', n: 1}))}])));
+  const saved = p.formFreq || {}, [upto, setUpto] = useState('end'), [regen, setRegen] = useState(regen0), [avoidTxt, setAvoidTxt] = useState(p.formAvoid || ''), av = useMemo(() => parseAvoid(avoidTxt), [avoidTxt]);
+  const [cfg, setCfg] = useState(() => Object.fromEntries(GL.map(([g]) => [g, {wd: 2, nth: 2, ...(saved[g] || (FREQ_DEFAULT[g] ? {on: true, unit: FREQ_DEFAULT[g][0], n: FREQ_DEFAULT[g][1]} : {on: false, unit: 'month', n: 1}))}])));
   const set = (g, k, v) => setCfg(c => ({...c, [g]: {...c[g], [k]: v}}));
-  const plans = Object.fromEntries(GL.map(([g]) => [g, freqPlan(p, g, cfg[g].unit, cfg[g].n, upto, regen, cfg[g].wd)])), sum = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].todo.length : 0), 0), nDel = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].del.length : 0), 0);
+  const plans = Object.fromEntries(GL.map(([g]) => [g, freqPlan(p, g, cfg[g].unit, cfg[g].n, upto, regen, cfg[g].wd, av, cfg[g].nth)])), sum = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].todo.length : 0), 0), nDel = GL.reduce((a, [g]) => a + (cfg[g].on ? plans[g].del.length : 0), 0);
   const noStart = !p.info.startDate;
   const run = () => { if (regen && nDel && !confirm(`將刪除 ${nDel} 張「自動產生、尚未修改、未勾稽」的空白表單，並依目前的開工日、工期與頻率新增 ${sum} 張。\n已修改或已勾稽的表單不會動。確定重新產生？`)) return;
-    update(d => { d.formFreq = cfg;
+    update(d => { d.formFreq = cfg; d.formAvoid = avoidTxt;
     for (const [g, k, kind] of GL) { if (!cfg[g].on) continue; const def = d.formDefaults?.[g] || {};
-      if (regen) { const del = new Set(freqPlan(d, g, cfg[g].unit, cfg[g].n, upto, true, cfg[g].wd).del.map(r => r.id)); d[k] = d[k].filter(r => !del.has(r.id)); }
-      for (const q of freqPlan(d, g, cfg[g].unit, cfg[g].n, upto, false, cfg[g].wd).todo) {
+      if (regen) { const del = new Set(freqPlan(d, g, cfg[g].unit, cfg[g].n, upto, true, cfg[g].wd, av, cfg[g].nth).del.map(r => r.id)); d[k] = d[k].filter(r => !del.has(r.id)); }
+      for (const q of freqPlan(d, g, cfg[g].unit, cfg[g].n, upto, false, cfg[g].wd, av, cfg[g].nth).todo) {
         const r = k === 'supervisions' ? {id: uid(), date: q.date, kind, person: def.person || '', items: [], content: def.content || '', score: '', defects: 0, fixDue: '', fixDone: '', note: def.note || '', auto: true}
           : {id: uid(), date: q.date, cat: kind, title: def.title || kind + '檢查表', result: '', note: def.note || '', auto: true};
         r.autoSig = autoSig(r); r.no = nextNo(d, d[k], formPrefix(d, r, k)); d[k].push(r); } } }); onClose(sum, nDel); };
   return html`<${Modal} title="依頻率產生空白表單" onClose=${() => onClose(0)}>
-    <div className="mute">從開工日起，依各表單的頻率，為每個期間（週＝週一至週日，月＝日曆月）各產生一張空白表單並自動編號（週表單日期預設取週二，可改週一、週四、週五；月表單取每月 1 日起第一個可用日；日期一律避開週三、週末與國定假日；之後都可逐張修改）；該期間已有同類表單者不重複產生。技師督導的督導技師／內容會帶入上次記住的預填內容。</div>
+    <div className="mute">從開工日起，依各表單的頻率，為每個期間（週＝週一至週日，月＝日曆月）各產生一張空白表單並自動編號（週表單日期預設取週二，可改週一、週四、週五；月表單預設取每月第 2 個週二，可改第幾個、週幾；日期一律避開週三、週末與國定假日；之後都可逐張修改）；該期間已有同類表單者不重複產生。技師督導的督導技師／內容會帶入上次記住的預填內容。</div>
     ${noStart && html`<div className="msg bad">請先在「設定」填寫開工日期與契約工期。</div>`}
     <div className="row" style=${{margin: '8px 0'}}><label><input type="checkbox" checked=${regen} onChange=${e => setRegen(e.target.checked)} /> <b>重新產生</b>（開工日、工期、展延或頻率改了之後使用）</label><label>產生到 <select value=${upto} onChange=${e => setUpto(e.target.value)}><option value="end">完工日（${p.info.startDate ? roc(freqEnd(p, 'end')) : '—'}）</option><option value="today">今天（${roc(todayISO())}）</option></select></label></div>
+    <div className="row" style=${{margin: '8px 0'}}><label style=${{flex: 1}}>額外避開的日期（平日、週三、週末與國定假日本來就會避開）<input style=${{width: '100%'}} placeholder="例：7/1、9/1、10/1（每年都避開）或 115/7/1（只避開該年），逗號分隔" value=${avoidTxt} onChange=${e => setAvoidTxt(e.target.value)} /></label></div>
+    ${av.bad.length > 0 && html`<div className="msg bad">看不懂這些日期：${av.bad.join('、')}</div>`}
     <div className="tw"><table><thead><tr><th></th><th>表單</th><th>頻率</th><th className="n">期間數</th><th className="n">${regen ? '保留' : '已涵蓋'}</th>${regen ? html`<th className="n">將刪除</th>` : ''}<th className="n">將新增</th></tr></thead><tbody>
       ${GL.map(([g]) => html`<tr key=${g}><td><input type="checkbox" checked=${cfg[g].on} onChange=${e => set(g, 'on', e.target.checked)} /></td><td>${g}</td>
-        <td className="nw">每 <input type="number" min="1" style=${{width: '56px'}} value=${cfg[g].n} onChange=${e => set(g, 'n', e.target.value)} /> <select value=${cfg[g].unit} onChange=${e => set(g, 'unit', e.target.value)}><option value="week">週</option><option value="month">月</option></select> 1 次${cfg[g].unit === 'week' ? html` ，日期取 <select value=${cfg[g].wd} onChange=${e => set(g, 'wd', +e.target.value)}>${[['一', 1], ['二', 2], ['四', 4], ['五', 5]].map(([w, i]) => html`<option key=${w} value=${i}>週${w}</option>`)}</select>` : ''}</td>
+        <td className="nw">每 <input type="number" min="1" style=${{width: '56px'}} value=${cfg[g].n} onChange=${e => set(g, 'n', e.target.value)} /> <select value=${cfg[g].unit} onChange=${e => set(g, 'unit', e.target.value)}><option value="week">週</option><option value="month">月</option></select> 1 次${cfg[g].unit === 'week' ? html` ，日期取 <select value=${cfg[g].wd} onChange=${e => set(g, 'wd', +e.target.value)}>${[['一', 1], ['二', 2], ['四', 4], ['五', 5]].map(([w, i]) => html`<option key=${w} value=${i}>週${w}</option>`)}</select>` : html` ，日期取第 <select value=${cfg[g].nth} onChange=${e => set(g, 'nth', +e.target.value)}>${[1, 2, 3, 4].map(i => html`<option key=${i} value=${i}>${i}</option>`)}</select> 個 <select value=${cfg[g].wd} onChange=${e => set(g, 'wd', +e.target.value)}>${[['一', 1], ['二', 2], ['四', 4], ['五', 5]].map(([w, i]) => html`<option key=${w} value=${i}>週${w}</option>`)}</select>`}</td>
         <td className="n">${plans[g].total}</td><td className="n">${plans[g].kept}</td>${regen ? html`<td className="n">${cfg[g].on ? plans[g].del.length : 0}</td>` : ''}<td className="n"><b>${cfg[g].on ? plans[g].todo.length : 0}</b></td></tr>`)}</tbody></table></div>
     <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" disabled=${noStart || !(sum || nDel)} onClick=${run}>${regen ? `重新產生（刪除 ${nDel}、新增 ${sum}）` : `產生 ${sum} 張空白表單`}</button></div></${Modal}>`;
 }
