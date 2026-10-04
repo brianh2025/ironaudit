@@ -970,7 +970,7 @@ function formPrefix(p, r, listKey) {
 const siteLetter = (p, r) => SITE_CODE.find(([re]) => re.test([r.content, r.testName, r.location, ...(r.items || []).map(c => p.items.find(x => x.code === c)?.name)].join(' ')))?.[1] || '';
 const SITE_NAME = {A: '測量', B: '開挖', C: '回填', D: '鋼筋', E: '模板', F: '混凝土', G: '臨時擋土設施', H: '預力混凝土基樁', I: '臨時擋抽移排水', J: '瀝青混凝土鋪面', K: 'CLSM', L: '植筋', M: '混凝土塊', N: '坡面工'};
 /* 範本類別名稱：施工抽查紀錄表可再分「－鋼筋」「－模板」等工程類別，沒有個別範本時沿用「施工抽查紀錄表」 */
-const SITE_KEYS = [['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
+const SITE_KEYS = [['臨時擋土設施', '鋼板樁'], ['臨時擋土設施', '鋼軌樁'], ['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
 const kindOf = g => PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x + '－'))?.[1];
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
@@ -1823,6 +1823,49 @@ function NewFormModal({p, update, group, onClose, onSaved}) {
       <label><input type="checkbox" checked=${remember} onChange=${e => setRemember(e.target.checked)} /> 記住此內容，下次新增時預填</label></div>
     <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b" onClick=${() => save(false)}>儲存</button><button className="b p" onClick=${() => save(true)}>儲存並列印</button></div></${Modal}>`;
 }
+/* 表單掃描檔：勾稽前必須先上傳簽核完成的掃描檔（PDF 或圖片），存在專案資料裡 */
+const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function ScanModal({update, e, onClose}) {
+  const [busy, setBusy] = useState(false), r = e.r, rec = scan => update(d => { const x = d[e.k].find(z => z.id === r.id); if (x) { if (scan) x.scan = scan; else delete x.scan; } });
+  const pick = async ev => { const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+    if (!/^(application\/pdf|image\/)/.test(f.type) && !/\.(pdf|jpe?g|png|tiff?)$/i.test(f.name)) return alert('請上傳 PDF 或圖片（JPG、PNG）掃描檔');
+    if (f.size > 15 * 1048576) return alert('檔案超過 15 MB，請先壓縮後再上傳');
+    setBusy(true); try { const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('讀取檔案失敗')); fr.readAsDataURL(f); });
+      rec({name: f.name, type: f.type || 'application/pdf', size: f.size, data, at: todayISO()}); } catch (er) { alert(er.message); } finally { setBusy(false); } };
+  const open = () => { const b64 = r.scan.data.split(',')[1], u8 = Uint8Array.from(atob(b64), c => c.charCodeAt(0)), url = URL.createObjectURL(new Blob([u8], {type: r.scan.type})); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000); };
+  return html`<${Modal} title=${`掃描檔：${r.no || ''}（${roc(r.date)}）`} onClose=${onClose}>
+    <div className="mute">勾稽前必須先上傳這張表單簽核完成的掃描檔（PDF、JPG、PNG，單檔 15 MB 內）。掃描檔存在這個專案的資料裡，匯出 JSON 備份時會一併帶出。</div>
+    ${r.scan ? html`<div className="msg ok" style=${{margin: '8px 0'}}>📎 ${r.scan.name}（${fmtSize(r.scan.size)}，${roc(r.scan.at)} 上傳）</div>` : html`<div className="msg warn" style=${{margin: '8px 0'}}>尚未上傳掃描檔，不能勾稽</div>`}
+    <div className="row"><label className="b p">${busy ? '讀取中…' : r.scan ? '更換掃描檔' : '上傳掃描檔'}<input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*" disabled=${busy || !!r.checked} onChange=${pick} /></label>
+      ${r.scan && html`<button className="b" onClick=${open}>開啟檢視</button><button className="b d" disabled=${!!r.checked} title=${r.checked ? '已勾稽，要先取消勾稽才能移除' : ''} onClick=${() => { if (confirm('移除這張表單的掃描檔？')) rec(null); }}>移除</button>`}
+      <button className="b" style=${{marginLeft: 'auto'}} onClick=${onClose}>關閉</button></div>
+    ${r.checked && html`<div className="mute" style=${{marginTop: '6px'}}>已勾稽的表單要先取消勾稽，才能更換或移除掃描檔。</div>`}</${Modal}>`;
+}
+/* 編輯既有表單（督導、查核、職安衛、環保、交維、防汛）：可改日期、編號、內容；自動產生的表單改過之後，「重新產生」就不會再動它 */
+function EditFormModal({p, update, e, onClose}) {
+  const k = e.k, r0 = e.r, sup = k === 'supervisions', [f, setF] = useState(() => ({...r0})), set = (key, v) => setF(x => ({...x, [key]: v}));
+  const dup = f.no && p[k].some(x => x.id !== r0.id && x.no === f.no);
+  const save = () => { update(d => { const r = d[k].find(x => x.id === r0.id); if (r) Object.assign(r, {date: f.date, no: f.no, note: f.note || '', ...(sup ? {kind: f.kind, person: f.person || '', score: f.score || '', content: f.content || '', defects: +f.defects || 0, fixDue: f.fixDue || '', fixDone: f.fixDone || ''} : {title: f.title || '', result: f.result || ''})}); }); onClose(); };
+  const del = () => { if (!confirm(`刪除表單 ${r0.no || ''}（${roc(r0.date)}）？`)) return; update(d => { d[k] = d[k].filter(x => x.id !== r0.id); }); onClose(); };
+  return html`<${Modal} title=${`編輯表單 ${r0.no || ''}`} onClose=${onClose}>
+    <div className="grid">
+      <label className="f">日期<input type="date" value=${f.date || ''} onChange=${ev => set('date', ev.target.value)} /></label>
+      <label className="f">表單編號<input value=${f.no || ''} onChange=${ev => set('no', ev.target.value)} /></label>
+      ${sup ? html`
+        ${r0.kind !== '技師督導' && html`<label className="f">類別<select value=${f.kind} onChange=${ev => set('kind', ev.target.value)}>${['查核', '工程會查核', '縣府工程查核', '縣府督導小組', '團體督導', '其他查核'].map(x => html`<option key=${x}>${x}</option>`)}</select></label>`}
+        <label className="f">${r0.kind === '技師督導' ? '督導技師' : '查核單位／委員'}<input value=${f.person || ''} onChange=${ev => set('person', ev.target.value)} /></label>
+        ${r0.kind !== '技師督導' && html`<label className="f">分數／等級<input value=${f.score || ''} onChange=${ev => set('score', ev.target.value)} /></label>`}
+        <label className="f wide">${r0.kind === '技師督導' ? '督導內容' : '查核意見摘要'}<textarea rows="5" value=${f.content || ''} onChange=${ev => set('content', ev.target.value)} /></label>
+        <label className="f">缺失件數<input type="number" min="0" value=${f.defects || 0} onChange=${ev => set('defects', ev.target.value)} /></label>
+        <label className="f">改善期限<input type="date" value=${f.fixDue || ''} onChange=${ev => set('fixDue', ev.target.value)} /></label>
+        <label className="f">改善完成日<input type="date" value=${f.fixDone || ''} onChange=${ev => set('fixDone', ev.target.value)} /></label>`
+      : html`
+        <label className="f wide">表單名稱<input value=${f.title || ''} onChange=${ev => set('title', ev.target.value)} /></label>
+        <label className="f">檢查結果<select value=${f.result || ''} onChange=${ev => set('result', ev.target.value)}><option value="">（空白）</option><option>合格</option><option>不合格</option><option>符合</option><option>缺失待改善</option><option>已改善</option></select></label>`}
+      <label className="f wide">${sup ? '備註' : '缺失／備註'}<textarea rows="2" value=${f.note || ''} onChange=${ev => set('note', ev.target.value)} /></label></div>
+    ${dup && html`<div className="msg warn">這個編號和另一張表單重複</div>`}
+    <div className="row" style=${{justifyContent: 'space-between', marginTop: '12px'}}><button className="b d" onClick=${del}>刪除這張</button><div className="row"><button className="b" onClick=${onClose}>取消</button><button className="b p" disabled=${!f.date} onClick=${save}>儲存</button></div></div></${Modal}>`;
+}
 /* 依頻率產生空白表單：技師督導、防汛每月 1 次；職安衛、交維每週 1 次（可調整），從開工日排到完工日（或今天），已有紀錄的期間不重複產生 */
 const FREQ_DEFAULT = {'技師督導紀錄表': ['month', 1], '防汛表單': ['month', 1], '職安衛表單': ['week', 1], '交維表單': ['week', 1]};
 /* 平日的國定假日與補假（行政院人事行政總處行事曆，資料來源 ruyut/TaiwanCalendar；僅含 2025–2027，其他年度只避開週末與週三）。自動產生的表單日期不排在週三、週末與這些日子 */
@@ -1895,7 +1938,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
 const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
-  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [stat, setStat] = useState('all');
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen2') === '1'; } catch { return false; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen2', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
@@ -1906,13 +1949,14 @@ function PrintTab({p, update, only}) {
     if (g !== '施工抽查紀錄表') return list.length ? [{g, list: list.map(r => ({g, k, r}))}] : [];
     const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
     return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
+  const scanEnt = scanOf && ['inspections', 'supervisions', 'forms'].map(k => ({k, r: p[k].find(x => x.id === scanOf)})).find(x => x.r);
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
   const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
   const allMonths = groups.flatMap(({g, list}) => [...new Set(list.flatMap(e => [yr(e.r.date), ym(e.r.date)]))].map(k => mk(g, k)));
   const isShut = k => !opened.has(k) && !q; // 年、月預設收合；搜尋時全部展開
   const togShut = keys => setOpened(s => { const n = new Set(s); const close = keys.some(k => !isShut(k)); keys.forEach(k => close ? n.delete(k) : n.add(k)); return n; });
   const tog = (ids, on) => setSel(s => { const n = new Set(s); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
-  const mark = (list, on) => { if (!list.length) return; if (!confirm(on ? `勾稽 ${list.length} 張表單？勾稽後不能再列印，要重印須先取消勾稽。` : `取消 ${list.length} 張表單的勾稽？取消後即可再次列印。`)) return;
+  const mark = (list0, on) => { let list = list0; if (on) { list = list0.filter(e => e.r.scan); const miss = list0.length - list.length; if (miss) alert(list.length ? `有 ${miss} 張還沒上傳掃描檔，不能勾稽，已略過；其餘 ${list.length} 張繼續。` : `${miss > 1 ? `這 ${miss} 張` : '這張'}表單還沒上傳掃描檔，不能勾稽。請先按「掃描檔」上傳簽核完成的掃描檔。`); } if (!list.length) return; if (!confirm(on ? `勾稽 ${list.length} 張表單？勾稽後不能再列印，要重印須先取消勾稽。` : `取消 ${list.length} 張表單的勾稽？取消後即可再次列印。`)) return;
     update(d => { for (const e of list) { const r = d[e.k].find(x => x.id === e.r.id); if (r) { r.checked = on; r.checkedAt = on ? todayISO() : ''; } } }); if (on) setSel(s => { const n = new Set(s); list.forEach(e => n.delete(e.r.id)); return n; }); };
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
@@ -1933,6 +1977,8 @@ function PrintTab({p, update, only}) {
       </div>` : tpls.length ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${tpls.map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
     </div>
     ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG.filter(([g]) => g !== '查核及團體督導紀錄')} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
+    ${scanEnt && html`<${ScanModal} update=${update} e=${scanEnt} onClose=${() => setScanOf(null)} />`}
+    ${edit && html`<${EditFormModal} p=${p} update=${update} e=${edit} onClose=${() => setEdit(null)} />`}
     ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const old = (d.formTemplates || []).filter(x => x.tables || x.page), gs = new Set(list.map(t => t.group)); // 編輯單一頁：只換掉那一頁；新上傳：同類別的舊範本整組換成新檔的所有頁（多頁範本每頁都保留，依頁序列印）
       d.formTemplates = ed.id ? old.map(x => x.id === ed.id ? list[0] : x) : [...old.filter(x => !gs.has(x.group)), ...list]; }); setEd(null); }} />`}
@@ -1943,13 +1989,13 @@ function PrintTab({p, update, only}) {
           <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
           <button className="b" onClick=${() => togShut(allMonths)} title="依月份收合或展開所有清單">${allMonths.length && allMonths.every(isShut) ? '全部展開' : '全部收合'}</button>
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
-          <button className="b" disabled=${!picked.length} title="標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
+          <button className="b" disabled=${!picked.length} title="需先上傳掃描檔；標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
       <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已勾稽的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
       ${groups.length ? groups.map(({g, list}) => { const ok2 = list.filter(e => !e.r.checked), on = ok2.filter(e => sel.has(e.r.id)).length;
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
           <h3><label><input type="checkbox" disabled=${!ok2.length} checked=${!!ok2.length && on === ok2.length} ref=${el => el && (el.indeterminate = on > 0 && on < ok2.length)} onChange=${ev => tog(ok2.map(e => e.r.id), ev.target.checked)} /> ${g}（${on}/${ok2.length}${ok2.length < list.length ? `，已勾稽 ${list.length - ok2.length}` : ''}）</label></h3>
-          <div className="tw"><table><thead><tr><th style=${{width: '1%'}}>列印</th><th>日期</th><th>表單號</th><th>內容</th><th style=${{paddingLeft: '28px'}}>勾稽</th></tr></thead><tbody>
+          <div className="tw"><table><thead><tr><th style=${{width: '1%'}}>列印</th><th>日期</th><th>表單號</th><th>內容</th><th style=${{paddingLeft: '28px'}}>勾稽／掃描檔／編輯</th></tr></thead><tbody>
             ${list.flatMap((e, i) => { const k = ym(e.r.date), y = yr(e.r.date), prev = list[i - 1], out = [], yKey = mk(g, y), mKey = mk(g, k), yShut = isShut(yKey), mShut = isShut(mKey);
               const sum = ms => `（${ms.length} 張${ms.some(x => sel.has(x.r.id) && !x.r.checked) ? `，已選 ${ms.filter(x => sel.has(x.r.id) && !x.r.checked).length}` : ''}${ms.some(x => x.r.checked) ? `，已勾稽 ${ms.filter(x => x.r.checked).length}` : ''}）`;
               if (!prev || yr(prev.r.date) !== y) out.push(html`<tr key=${'y' + yKey} style=${{cursor: 'pointer', background: 'var(--line)'}} onClick=${() => togShut([yKey])}><td colSpan="6"><b>${yShut ? '▸' : '▾'} ${yrLabel(y)}</b>${sum(list.filter(x => yr(x.r.date) === y))}</td></tr>`);
@@ -1957,7 +2003,7 @@ function PrintTab({p, update, only}) {
               if (!yShut && !mShut) out.push(html`<tr key=${e.r.id} className="vm" style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
                 <td><input type="checkbox" disabled=${!!e.r.checked} title=${e.r.checked ? '已勾稽，不能列印' : '列印'} checked=${!e.r.checked && sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
                 <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td>
-                <td style=${{paddingLeft: '28px'}}><button className="b s" style=${{whiteSpace: 'nowrap'}} onClick=${ev => { ev.stopPropagation(); mark([e], !e.r.checked); }}>${e.r.checked ? '取消勾稽' : '勾稽'}</button></td></tr>`);
+                <td style=${{paddingLeft: '28px'}}><button className="b s" style=${{whiteSpace: 'nowrap'}} disabled=${!e.r.checked && !e.r.scan} title=${!e.r.checked && !e.r.scan ? '要先上傳掃描檔才能勾稽' : ''} onClick=${ev => { ev.stopPropagation(); mark([e], !e.r.checked); }}>${e.r.checked ? '取消勾稽' : '勾稽'}</button> <button className="b s" style=${{whiteSpace: 'nowrap'}} title=${e.r.scan ? e.r.scan.name : '上傳簽核完成的掃描檔'} onClick=${ev => { ev.stopPropagation(); setScanOf(e.r.id); }}>${e.r.scan ? '📎 掃描檔' : '掃描檔'}</button>${e.k !== 'inspections' && html` <button className="b s" style=${{whiteSpace: 'nowrap'}} onClick=${ev => { ev.stopPropagation(); setEdit(e); }}>編輯</button>`}</td></tr>`);
               return out; })}
           </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
     </div>
@@ -2080,30 +2126,25 @@ async function tableRowsFromFile(file) {
   }
   return rows.filter(r => r.some(Boolean));
 }
-const DOC_CODE_RE = /編號|編碼|代碼|代號|文管/, DOC_NAME_RE = /名稱|表單|表名|紀錄表|文件/;
-const docColGuess = rows => { const n = Math.max(...rows.slice(0, 40).map(r => r.length), 1); let nc = -1, cc = -1;
-  for (const r of rows.slice(0, 8)) r.forEach((t, i) => { if (nc < 0 && DOC_NAME_RE.test(t) && t.length <= 10) nc = i; if (cc < 0 && DOC_CODE_RE.test(t) && t.length <= 10) cc = i; });
-  if (nc < 0 || cc < 0 || nc === cc) { nc = 1; cc = 0; } return [Math.min(nc, n - 1), Math.min(cc, n - 1)]; };
-const buildDocEntries = (rows, nc, cc) => rows.map(r => ({name: (r[nc] || '').replace(/\s+/g, ''), code: (r[cc] || '').replace(/\s+/g, '')})).filter(e => e.name.length >= 3 && e.code && !(DOC_NAME_RE.test(e.name) && e.name.length <= 6) && !DOC_CODE_RE.test(e.code))
-  .map(e => ({id: uid(), ...e, group: formGroupOf(e.name)}));
+/* 文件編碼一覽表：總類／總類代碼／細類／細類代碼（總類欄合併儲存格時，往下沿用上一列）；編號 = 總類代碼＋細類代碼，例如 檢驗 E ＋ 鋼筋工程施工抽查紀錄表 F → EF */
+const buildDocEntries = rows => {
+  const hi = rows.findIndex(r => r.some(t => /總\s*類\s*代碼/.test(t)) && r.some(t => /細\s*類\s*代碼/.test(t))); if (hi < 0) return null;
+  const H = rows[hi], tc = H.findIndex(t => /總\s*類\s*代碼/.test(t)), sc = H.findIndex(t => /細\s*類\s*代碼/.test(t)), nc = H.findIndex(t => /^細\s*類$/.test(t.trim())), out = []; let big = '';
+  for (const r of rows.slice(hi + 1)) { const t = (r[tc] || '').replace(/\s+/g, ''), name = (r[nc] || '').replace(/\s+/g, ''), sub = (r[sc] || '').replace(/\s+/g, '');
+    if (t) big = /^[A-Za-z]+$/.test(t) ? t : ''; if (!name || !sub) continue;
+    out.push({id: uid(), name, code: big + sub, group: /抽查|檢查表|督導|查核/.test(name) ? formGroupOf(name) : ''}); }
+  return out;
+};
 function DocCodeEditor({init, onSave, onClose}) {
-  const rows = init.rows, [cols, setCols] = useState(() => rows ? docColGuess(rows) : [0, 1]), [ents, setEnts] = useState(() => init.entries || buildDocEntries(rows, ...docColGuess(rows)));
-  const nCol = rows ? Math.max(...rows.slice(0, 60).map(r => r.length), 1) : 0, sample = i => rows.slice(0, 8).map(r => r[i]).filter(Boolean).slice(0, 3).join('／').slice(0, 24);
-  const setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e));
-  const regen = (nc, cc) => { setCols([nc, cc]); setEnts(buildDocEntries(rows, nc, cc)); };
+  const [ents, setEnts] = useState(init.entries), setE = (id, k, v) => setEnts(es => es.map(e => e.id === id ? {...e, [k]: v} : e)), use = ents.filter(e => e.group && e.code);
   return html`<${Modal} title="文件管理編碼表" onClose=${onClose}>
-    ${rows && html`<div className="mute">請指定「表單名稱」與「文管編號」各是哪一欄，再核對下方結果並指定所屬類別（類別為空者不會使用）。</div>
-      <div className="row" style=${{margin: '8px 0'}}>
-        <label>表單名稱欄 <select value=${cols[0]} onChange=${e => regen(+e.target.value, cols[1])}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label>
-        <label>文管編號欄 <select value=${cols[1]} onChange=${e => regen(cols[0], +e.target.value)}>${Array.from({length: nCol}, (_, i) => html`<option key=${i} value=${i}>第 ${i + 1} 欄（${sample(i)}）</option>`)}</select></label></div>`}
-    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto'}}><table><thead><tr><th>表單名稱</th><th>文管編號</th><th>所屬類別（本系統表單）</th><th></th></tr></thead><tbody>
-      ${ents.map(e => html`<tr key=${e.id}><td><input style=${{width: '100%'}} value=${e.name} onChange=${ev => setE(e.id, 'name', ev.target.value)} /></td>
-        <td><input value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
+    <div className="mute">已依監造計畫的「文件編碼一覽表」讀出各表單的文管編號（總類代碼＋細類代碼）。右欄是對應到本系統哪一種表單，系統能對應的已自動帶入；標示「不使用」的是本系統沒有的文件，不會用到。</div>
+    <div className="tw" style=${{maxHeight: '55vh', overflow: 'auto', marginTop: '8px'}}><table><thead><tr><th>表單名稱（細類）</th><th>文管編號</th><th>對應本系統表單</th><th></th></tr></thead><tbody>
+      ${ents.map(e => html`<tr key=${e.id}><td>${e.name}</td>
+        <td><input style=${{width: '70px'}} value=${e.code} onChange=${ev => setE(e.id, 'code', ev.target.value.trim())} /></td>
         <td><select value=${e.group} onChange=${ev => setE(e.id, 'group', ev.target.value)}><option value="">（不使用）</option>${GROUP_OPTIONS().map(g => html`<option key=${g}>${g}</option>`)}</select></td>
         <td><button className="b" onClick=${() => setEnts(es => es.filter(x => x.id !== e.id))}>刪除</button></td></tr>`)}</tbody></table></div>
-    ${!ents.length && html`<div className="empty">沒有辨識到「名稱＋編號」的列，請調整上方欄位</div>`}
-    <div className="row" style=${{justifyContent: 'space-between', marginTop: '12px'}}><button className="b" onClick=${() => setEnts(es => [...es, {id: uid(), name: '', code: '', group: ''}])}>＋ 新增一列</button>
-      <button className="b p" onClick=${() => onSave(ents.filter(e => e.group && e.code))}>儲存（${ents.filter(e => e.group && e.code).length} 筆）</button></div></${Modal}>`;
+    <div className="row" style=${{justifyContent: 'flex-end', marginTop: '12px'}}><button className="b p" onClick=${() => onSave(use)}>儲存（${use.length} 筆）</button></div></${Modal}>`;
 }
 function renumberAll(d) { for (const k of ['inspections', 'supervisions', 'forms']) { const list = d[k], sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.no || '').localeCompare(b.no || ''));
   sorted.forEach(r => { r.no = ''; }); for (const r of sorted) r.no = nextNo(d, list, formPrefix(d, r, k)); } }
@@ -2112,7 +2153,7 @@ function DocCodeCard({p, update}) {
   const total = p.inspections.length + p.supervisions.length + p.forms.length;
   return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>文件管理編碼表（${L.length}）${p.docCodesFile ? html` <span className="mute">來源：${p.docCodesFile}</span>` : ''}</h2>
       <div className="row"><label className="b">${busy ? '讀取中…' : '上傳文管編碼表'}<input type="file" hidden accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; setBusy(true);
-          try { const rows = await tableRowsFromFile(f); if (!rows.length) alert('檔案中找不到表格內容'); else setEd({rows, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
+          try { const rows = await tableRowsFromFile(f); const entries = rows.length && buildDocEntries(rows); if (!entries) alert('找不到「總類代碼」「細類代碼」欄位，請確認上傳的是監造計畫的文件編碼一覽表'); else setEd({entries, file: f.name}); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
         ${L.length > 0 && html`<button className="b" onClick=${() => setEd({entries: L.map(x => ({...x})), file: p.docCodesFile})}>編輯</button>`}</div></div>
     <div className="mute">依監造計畫的文件管理編碼表，設定各種表單的文管編號（施工抽查可依工程類別各設一個）。設定後新產生的表單號為「文管編號－流水號」；沒有設定的類別仍使用上方的表單號前綴。</div>
     ${L.length > 0 && html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>類別</th><th>表單名稱</th><th>文管編號</th></tr></thead><tbody>${L.map(x => html`<tr key=${x.id}><td>${x.group}</td><td>${x.name}</td><td className="nw">${x.code}</td></tr>`)}</tbody></table></div>
