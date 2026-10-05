@@ -1937,11 +1937,12 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
 }
 /* 這四類各有獨立頁面（範本、自動產生、列印）；其餘類別留在「表單列印」 */
 const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
-function PrintTab({p, update, only}) {
+function PrintTab({p, update, only, pick, clearPick}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen2') === '1'; } catch { return false; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen2', v ? '1' : '0'); } catch {} };
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
+  useEffect(() => { if (pick?.length) { setSel(new Set(pick)); setStat('all'); clearPick(); setTimeout(() => window.print(), 600); } }, [pick]); // 稽核頁「列印所有缺漏表單」：帶入已建立的表單並直接開啟列印
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
       .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
@@ -2184,7 +2185,7 @@ function TestTab({p, update}) {
 }
 
 /* ================= 每週稽核 ================= */
-function AuditTab({p, C, quick}) {
+function AuditTab({p, C, quick, update, printMissing}) {
   const [mon, setMon] = useState(mondayOf(C.last?.date || todayISO()));
   const A = useMemo(() => auditWeek(p, mon), [p, mon]);
   const cnt = s => A.rows.filter(r => r.status === s).length;
@@ -2195,6 +2196,11 @@ function AuditTab({p, C, quick}) {
         <button className="b" onClick=${() => setMon(addDays(mon, 7))}>下週 ▶</button>
         <b>${roc(A.monday)}（一）～ ${roc(A.end)}（日）</b></div>
       <div className="row"><button className="b" onClick=${() => exportAuditExcel(p, A)}>匯出本週稽核表 Excel</button>
+        <button className="b p" title="依施工日誌，為整個專案缺漏的查驗各建立一張預編表單號的查驗單，並直接列印" onClick=${() => { const L = missingInspections(p).flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
+          if (!L.length) return alert('沒有缺漏的查驗');
+          if (!confirm(`整個專案共缺漏 ${L.length} 次查驗，將依缺漏日期新增 ${L.length} 張查驗單（結果空白、表單號依預編號碼），並直接列印。\n\n新增後這些日期會視為已有查驗紀錄。要繼續嗎？`)) return;
+          const recs = L.map(({o, m}) => ({id: uid(), date: m.date, type: '施工查驗', items: [o.it.code], location: '', content: o.it.name, result: '', no: m.no}));
+          update(d => { d.inspections.push(...recs); }); printMissing(recs.map(r => r.id)); }}>列印所有缺漏表單</button>
         <button className="b p" title="不分週次：依工項列出整個專案缺漏的查驗次數、日期與預編表單編號" onClick=${() => exportAuditAll(p).catch(e => alert('匯出失敗：' + e.message))}>匯出全部缺漏（依工項）</button></div></div>
       <div className="kpis" style=${{marginTop: '10px'}}>
         <div className="kpi"><div className="l">本週施工之需查驗工項</div><div className="v">${A.rows.length}</div></div>
@@ -2366,7 +2372,7 @@ function DriveImport({existing, onCreate, onReplace, onClose}) {
 }
 
 function App() {
-  const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null), [drv, setDrv] = useState(false);
+  const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null), [pick, setPick] = useState(null), [drv, setDrv] = useState(false);
   useEffect(() => { Store.list().then(l => { l.forEach(x => { if (migrateProject(x)) Store.put(x); }); setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
   const p = projects?.find(x => x.id === cur);
   const saveT = useRef({});
@@ -2406,8 +2412,8 @@ function App() {
         ${tab === 'gtraf' && html`<${PrintTab} ...${props} only=${['交維表單']} />`}
         ${tab === 'gflood' && html`<${PrintTab} ...${props} only=${['防汛表單']} />`}
         ${tab === 'stat' && html`<${InspStatTab} ...${props} />`}
-        ${tab === 'print' && html`<${PrintTab} ...${props} />`}
-        ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} />`}
+        ${tab === 'print' && html`<${PrintTab} ...${props} pick=${pick} clearPick=${() => setPick(null)} />`}
+        ${tab === 'audit' && html`<${AuditTab} ...${props} quick=${quick} printMissing=${ids => { setPick(ids); setTab('print'); }} />`}
         ${tab === 'set' && html`<${SettingsTab} ...${props} onDelete=${del} onRestore=${restore} />`}
       </main>`
     : html`<main><div className="card empty"><h2>歡迎使用 Ironaudit 智慧監造報表</h2><p>建立專案後，於「資料匯入」匯入契約詳細價目表、預定進度表與廠商施工日誌。</p>
