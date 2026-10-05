@@ -1600,12 +1600,12 @@ function InspectionTab(props) {
 const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
 const formGroupOf = t => { const g = FORM_GROUPS.find(([re]) => re.test(t))?.[1] || ''; if (g !== '施工抽查紀錄表') return g; const k = SITE_KEYS.find(([, kw]) => t.includes(kw)); return k ? `${g}－${k[0]}` : g; };
-const GROUP_OPTIONS = () => PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]);
+const GROUP_OPTIONS = () => [...PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]), '查驗申請單'];
 const FONT_STACKS = {'標楷體': '"標楷體","DFKai-SB","BiauKai","Noto Serif TC","Noto Serif CJK TC",serif', '新細明體': '"新細明體","PMingLiU","MingLiU","Noto Serif TC","Noto Serif CJK TC",serif', '微軟正黑體': '"微軟正黑體","Microsoft JhengHei","Noto Sans TC","Noto Sans CJK TC",sans-serif'};
 const fontOf = t => FONT_STACKS[t.font || '標楷體'];
 const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
 const FORM_FIELDS = {
-  inspections: ['查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
+  inspections: ['申請單編號', '查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
   supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
   forms: ['表單名稱', '類別', '檢查結果', '缺失／備註']};
 const FORM_ALIAS = {'表單名稱': ['表單名稱', '檢查表名稱', '表名', '檢查項目', '檢查名稱'], '缺失／備註': ['缺失', '備註', '缺失／備註', '缺失事項', '缺失內容', '缺失及改善情形', '改善情形', '改善事項'], 類別: ['類別', '項目類別', '檢查類別'], '材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
@@ -1623,7 +1623,7 @@ const matDisplay = r => {
 };
 function formVals(p, k, r) {
   const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: roc(r.date)};
-  if (k === 'inspections') Object.assign(v, {查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
+  if (k === 'inspections') Object.assign(v, {申請單編號: r.reqNo, 查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
     試驗項目: r.testName, '取樣／會驗日期': roc(r.sampleDate), 試驗報告編號: r.reportNo, 報告日期: roc(r.reportDate), 試驗結果: r.testResult});
   else if (k === 'supervisions') Object.assign(v, {'督導人員／單位': r.person, 督導工項: its, '分數／等級': r.score, 內容摘要: r.content, 缺失件數: r.defects || 0, 改善期限: roc(r.fixDue), 改善完成日: roc(r.fixDone), 備註: r.note});
   else Object.assign(v, {表單名稱: r.title, 類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
@@ -1801,7 +1801,7 @@ const PRINT_KINDS = [
 const sheetTitle = (g, r) => g === '查核及團體督導紀錄' ? `${r.kind || '查核'}紀錄` : r.cat ? r.title || `${r.cat}檢查表` : g;
 function sheetRows(p, k, r) {
   const its = itemNames(p, r.items).join('、');
-  if (k === 'inspections') return [['查驗類別', r.type || '施工查驗'], ['查驗工項', its], ['位置／里程', r.location], ['查驗項目及內容', r.content], ['查驗結果', r.result],
+  if (k === 'inspections') return [...(r.reqNo ? [['申請單編號', r.reqNo]] : []), ['查驗類別', r.type || '施工查驗'], ['查驗工項', its], ['位置／里程', r.location], ['查驗項目及內容', r.content], ['查驗結果', r.result],
     ...(r.defect || r.fixDone ? [['缺失內容／改善要求', r.defect], ['缺失改善完成日', roc(r.fixDone)]] : []),
     ...(r.testNeed ? [['試驗項目', r.testName], ['取樣／會驗日期', roc(r.sampleDate)], ['試驗報告編號', r.reportNo], ['報告日期', roc(r.reportDate)], ['試驗結果', r.testResult]] : [])];
   if (k === 'supervisions') return [[r.kind === '技師督導' ? '督導技師' : '查核單位／委員', r.person], ...(its ? [['督導工項', its]] : []), ...(r.score ? [['分數／等級', r.score]] : []),
@@ -1809,6 +1809,28 @@ function sheetRows(p, k, r) {
   return [['類別', r.cat], ['檢查結果', r.result], ['缺失／備註', r.note]];
 }
 const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
+/* ================= 工程查驗申請單（監造計畫表 6-1）：與施工抽查紀錄表一對一連動，申請單編號存在查驗紀錄的 reqNo，日期、工項、位置都取自該查驗單 ================= */
+const reqPrefix = p => (p.docCodes || []).find(x => x.group === '查驗申請單')?.code || 'EB';
+const isSiteInsp = r => (r.type || '施工查驗') === '施工查驗';
+function nextReqNo(list, pre) { const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$'); let mx = 0; list.forEach(r => { const m = String(r.reqNo || '').match(re); if (m) mx = Math.max(mx, +m[1]); }); return `${pre}-${pad(mx + 1, 3)}`; }
+const STD_TABLE = {A: '測量放樣', B: '開挖', C: '構造物回填', D: '鋼筋', E: '模板', F: '混凝土', G: '鋼板樁', I: '排水器', J: '瀝青混凝土', K: 'CLSM'};
+function ReqSheet({p, e}) {
+  const I = p.info, r = e.r, L = stdLetter(itemNames(p, r.items).join(' ') + ' ' + (r.content || '')) || siteLetter(p, r), std = STD_TABLE[L];
+  return html`<div className="sheet"><div className="st">工程查驗申請單</div>
+    <div style=${{textAlign: 'right', marginBottom: '6px'}}>編號：${r.reqNo || '＿＿＿＿＿＿'}　　（對應抽查紀錄表：${r.no}）</div>
+    <div style=${{marginBottom: '6px'}}>□材料設備檢驗、■施工作業檢查、□施工設備查證、□施工品質檢驗</div>
+    <table><tbody>
+      <tr><th>工程名稱</th><td>${I.name}</td><th>申請日期</th><td>${roc(r.date)}</td></tr>
+      <tr><th>主辦機關</th><td>${I.owner}</td><th>監造單位</th><td>${I.supervisor}</td></tr>
+      <tr><th>廠商</th><td colSpan="3">${I.contractor}</td></tr>
+      <tr><th>檢驗(查)項目</th><td>${itemNames(p, r.items).join('、') || r.content}</td><th>依據規定</th><td>${std ? `監造計畫「${std}工程施工抽查標準表」` : '監造計畫施工抽查標準表'}</td></tr>
+      <tr><th>檢驗(查)位置</th><td>${r.location}</td><th>預定檢驗(查)時間</th><td>${roc(r.date)}　　時</td></tr>
+      <tr><th>樣品名稱</th><td></td><th>樣品數量</th><td></td></tr>
+      <tr><th>試驗單位</th><td colSpan="3"></td></tr>
+      <tr><th>備註</th><td colSpan="3" style=${{fontSize: '10.5pt'}}>1.材料檢驗、設備檢驗、施工品質檢驗、施工設備查證、查驗及施工檢查由廠商提出申請。<br />2.各項工程使用材料設備及施工品質之試驗應由符合CNS 17025 (ISO/IEC 17025)規定及依標準法授權之實驗室認證機構認可之實驗室辦理，並出具試驗報告。<br />3.測量作業之檢查應於24小時前提出申請，其餘之施工作業檢查申請應於檢驗(查)前4小時前提出申請。<br />4.欄位依需求填寫，其餘免填。<br />5.本申請表由廠商填具一式二份送請監造單位簽認後，送監造單位執行檢查；由監造單位及廠商各存一份。</td></tr>
+    </tbody></table>
+    <div className="sg"><div>廠商：</div><div>監造單位：</div></div></div>`;
+}
 function Sheet({p, e}) {
   const I = p.info, r = e.r, all = (p.formTemplates || []).filter(t => t.tables || t.page), pages = all.filter(t => t.group === e.g), tpls = pages.length ? pages : all.filter(t => t.group === e.g.split('－')[0]);
   if (tpls.length) { const base = formVals(p, e.k, r); // 多頁範本：每頁各印一頁，依上傳順序；每頁可有自己的預填文字
@@ -1973,7 +1995,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
 const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only, pick, clearPick}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
-  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all');
+  const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all'), [reqMode, setReqMode] = useState(false);
   const [tplOpen, setTplOpen] = useState(false); // 範本區預設收合
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const tplFor = g => { const A = (p.formTemplates || []).filter(t => t.tables || t.page); return A.some(t => t.group === g) || A.some(t => t.group === g.split('－')[0]); };
@@ -1991,6 +2013,10 @@ function PrintTab({p, update, only, pick, clearPick}) {
   const gapN = p.inspections.filter(r => isGapForm(p, r)).length;
   const scanEnt = scanOf && ['inspections', 'supervisions', 'forms'].map(k => ({k, r: p[k].find(x => x.id === scanOf)})).find(x => x.r);
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
+  const reqPick = picked.filter(e => e.k === 'inspections' && isSiteInsp(e.r));
+  const printReq = () => { const ids = new Set(reqPick.map(e => e.r.id)); // 沒有申請單編號的先依日期順序補編，已編者不動
+    update(d => { const pre = reqPrefix(d); d.inspections.filter(r => ids.has(r.id) && !r.reqNo).sort((a, b) => (a.date || '').localeCompare(b.date || '') || String(a.no).localeCompare(String(b.no))).forEach(r => { r.reqNo = nextReqNo(d.inspections, pre); }); });
+    setReqMode(true); setTimeout(() => { window.print(); setReqMode(false); }, 500); };
   const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
   const allMonths = groups.flatMap(({g, list}) => [...new Set(list.flatMap(e => [yr(e.r.date), ym(e.r.date)]))].map(k => mk(g, k)));
   const isShut = k => !opened.has(k) && !q; // 年、月預設收合；搜尋時全部展開
@@ -2031,6 +2057,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
           ${!only && gapN > 0 && html`<button className="b d" title="刪除「列印所有缺漏表單」自動產生、尚未填寫結果、未勾稽也沒有掃描檔的查驗單" onClick=${() => { if (!confirm(`刪除 ${gapN} 張自動補漏產生的查驗單？\n只刪除結果空白、未勾稽、沒有掃描檔者；刪除後這些日期會重新列為缺漏，表單號可再被預編使用。`)) return; const ids = new Set(p.inspections.filter(r => isGapForm(p, r)).map(r => r.id)); update(d => { d.inspections = d.inspections.filter(r => !ids.has(r.id)); }); setSel(s => { const n = new Set(s); ids.forEach(i => n.delete(i)); return n; }); }}>刪除自動補漏（${gapN}）</button>`}
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="需先上傳掃描檔；標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
+          ${!only && html`<button className="b" disabled=${!reqPick.length} title="列印已選施工抽查紀錄表對應的工程查驗申請單（編號自動依序編列，之後與抽查單連動）" onClick=${printReq}>列印申請單（${reqPick.length}）</button>`}
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) doPrint(picked); }}>列印已選（${picked.length}）</button></div></div>
       <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已勾稽的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
       ${groups.length ? groups.map(({g, list}) => { const ok2 = list.filter(e => !e.r.checked), on = ok2.filter(e => sel.has(e.r.id)).length;
@@ -2043,12 +2070,12 @@ function PrintTab({p, update, only, pick, clearPick}) {
               if (!yShut && (!prev || ym(prev.r.date) !== k)) out.push(html`<tr key=${'m' + mKey} style=${{cursor: 'pointer', background: 'var(--bg)'}} onClick=${() => togShut([mKey])}><td colSpan="6" style=${{paddingLeft: '24px'}}><b>${mShut ? '▸' : '▾'} ${ymLabel(k)}</b>${sum(list.filter(x => ym(x.r.date) === k))}</td></tr>`);
               if (!yShut && !mShut) out.push(html`<tr key=${e.r.id} className="vm" style=${{cursor: e.r.checked ? 'default' : 'pointer', opacity: e.r.checked ? 0.55 : 1}} onClick=${() => { if (!e.r.checked) tog([e.r.id], !sel.has(e.r.id)); }}>
                 <td><input type="checkbox" disabled=${!!e.r.checked} title=${e.r.checked ? '已勾稽，不能列印' : '列印'} checked=${!e.r.checked && sel.has(e.r.id)} onClick=${ev => ev.stopPropagation()} onChange=${ev => tog([e.r.id], ev.target.checked)} /></td>
-                <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td>
+                <td className="nw">${roc(e.r.date)}</td><td className="nw">${e.r.no}${e.r.reqNo ? html` <span className="tag" title="對應的工程查驗申請單編號">申請單 ${e.r.reqNo}</span>` : ''}${e.r.checked ? html` <span className="tag ok">已勾稽${e.r.checkedAt ? ' ' + roc(e.r.checkedAt) : ''}</span>` : ''}</td><td>${shortText(desc(e))}</td>
                 <td style=${{paddingLeft: '28px'}}><button className="b s" style=${{whiteSpace: 'nowrap'}} disabled=${!e.r.checked && !e.r.scan} title=${!e.r.checked && !e.r.scan ? '要先上傳掃描檔才能勾稽' : ''} onClick=${ev => { ev.stopPropagation(); mark([e], !e.r.checked); }}>${e.r.checked ? '取消勾稽' : '勾稽'}</button> <button className="b s" style=${{whiteSpace: 'nowrap'}} title=${e.r.scan ? e.r.scan.name : '上傳簽核完成的掃描檔'} onClick=${ev => { ev.stopPropagation(); setScanOf(e.r.id); }}>${e.r.scan ? '📎 掃描檔' : '掃描檔'}</button>${e.k !== 'inspections' && html` <button className="b s" style=${{whiteSpace: 'nowrap'}} onClick=${ev => { ev.stopPropagation(); setEdit(e); }}>編輯</button>`}</td></tr>`);
               return out; })}
           </tbody></table></div></div>`; }) : html`<div className="empty">尚無可列印的紀錄（先在「查驗填報」等頁填報）</div>`}
     </div>
-    <div className="psheets">${picked.map(e => html`<${Sheet} key=${e.r.id} p=${p} e=${e} />`)}</div></div>`;
+    <div className="psheets">${reqMode ? reqPick.map(e => html`<${ReqSheet} key=${e.r.id} p=${p} e=${e} />`) : picked.map(e => html`<${Sheet} key=${e.r.id} p=${p} e=${e} />`)}</div></div>`;
 }
 const shortText = s => s.length > 80 ? s.slice(0, 80) + '…' : s;
 
@@ -2173,7 +2200,7 @@ const buildDocEntries = rows => {
   const H = rows[hi], tc = H.findIndex(t => /總\s*類\s*代碼/.test(t)), sc = H.findIndex(t => /細\s*類\s*代碼/.test(t)), nc = H.findIndex(t => /^細\s*類$/.test(t.trim())), out = []; let big = '';
   for (const r of rows.slice(hi + 1)) { const t = (r[tc] || '').replace(/\s+/g, ''), name = (r[nc] || '').replace(/\s+/g, ''), sub = (r[sc] || '').replace(/\s+/g, '');
     if (t) big = /^[A-Za-z]+$/.test(t) ? t : ''; if (!name || !sub) continue;
-    out.push({id: uid(), name, code: big + sub, group: /抽查|檢查表|督導|查核|材料設備檢驗申請單/.test(name) ? formGroupOf(name) : ''}); }
+    out.push({id: uid(), name, code: big + sub, group: name === '檢驗申請單' ? '查驗申請單' : /抽查|檢查表|督導|查核|材料設備檢驗申請單/.test(name) ? formGroupOf(name) : ''}); }
   return out;
 };
 function DocCodeEditor({init, onSave, onClose}) {
