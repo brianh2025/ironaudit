@@ -1974,7 +1974,7 @@ const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '�
 function PrintTab({p, update, only, pick, clearPick}) {
   const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all');
-  const [tplOpen, setTplOpenRaw] = useState(() => { try { return localStorage.getItem('ss.tplOpen2') === '1'; } catch { return false; } }), setTplOpen = v => { setTplOpenRaw(v); try { localStorage.setItem('ss.tplOpen2', v ? '1' : '0'); } catch {} };
+  const [tplOpen, setTplOpen] = useState(false); // 範本區預設收合
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   useEffect(() => { if (pick?.length) { setSel(new Set(pick)); setStat('all'); clearPick(); setTimeout(() => window.print(), 600); } }, [pick]); // 稽核頁「列印所有缺漏表單」：帶入已建立的表單並直接開啟列印
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
@@ -1998,21 +1998,21 @@ function PrintTab({p, update, only, pick, clearPick}) {
   const desc = e => e.k === 'inspections' ? [itemNames(p, e.r.items).join('、'), e.r.location, e.r.content].filter(Boolean).join('｜') : e.k === 'supervisions' ? [e.r.person, e.r.content].filter(Boolean).join('｜') : [e.r.title, e.r.note].filter(Boolean).join('｜');
   return html`<div>
     <div className="card noprint">
-      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none'}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} ${only ? only[0] : '抽查表單'}範本（${tpls.length}）</h2>
-        <label className="b">${busy ? '讀取中…' : '上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
+      <div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer', userSelect: 'none', margin: 0}} title="點一下展開／收合" onClick=${() => setTplOpen(!tplOpen)}>${tplOpen ? '▾' : '▸'} ${only ? only[0] : '抽查表單'}範本<span className="mute" style=${{fontWeight: 'normal', fontSize: '13px'}}>　${tpls.length ? `已上傳 ${tpls.length} 頁：${[...new Set(tpls.map(t => t.group))].join('、')}` : '尚未上傳'}</span></h2>
+        <label className="b p">${busy ? '讀取中…' : '＋ 上傳表單範本'}<input type="file" hidden multiple accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async e => { const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return; setBusy(true);
           try { const cands = [], bad = []; for (const f of fs) { try { cands.push(...await parseTemplateFile(f)); } catch (er) { bad.push(`${f.name}：${er.message}`); console.error(er); } }
             if (bad.length) alert('以下檔案讀取失敗：\n' + bad.join('\n')); if (cands.length) setEd({cands}); else if (!bad.length) alert('檔案中找不到可用的表格'); }
           finally { setBusy(false); } }} /></label></div>
-      ${NFG.length ? html`<div className="row" style=${{marginTop: '8px'}}><b>新增表單並列印：</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}
-        ${NFG.some(([g]) => g !== '查核及團體督導紀錄') && html`<button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
-        <button className="b" title="開工日、工期、展延或頻率改了之後，刪除未修改的自動產生表單並依新條件補齊" onClick=${() => setFq('regen')}>重新產生…</button>`}</div>` : null}
-      ${tplOpen ? html`<div>
-      <div className="mute">可一次選多個檔案（PDF、Excel、Word）。上傳實際使用的空白表單：Excel／Word 在表格上點選儲存格、PDF 在頁面上點選位置，指定要填入的系統欄位。之後列印該類別時，會沿用範本版面並自動填入紀錄；每個類別保留一份範本。</div>
-      ${tpls.map(t => html`<div key=${t.id} className="row" style=${{marginTop: '4px'}}><span className="tag">${t.group}</span> ${t.name}（${t.page ? 'PDF' : 'Excel／Word'}，來源：${t.file}，已對應 ${t.page ? t.fields.length : Object.keys(t.map).length} 欄）
-        <button className="b" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button>
-        <button className="b" onClick=${() => update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); })}>移除</button></div>`)}
-      </div>` : tpls.length ? html`<div className="mute" style=${{marginTop: '4px'}}>已載入：${tpls.map(t => t.group).join('、')}（點「表單範本」標題展開）</div>` : null}
+      ${tplOpen && html`<div style=${{marginTop: '8px'}}>
+        <div className="mute">上傳實際使用的空白表單（可一次選多個 PDF、Excel、Word）：在表格或頁面上點選位置，指定要填入的系統欄位；之後列印該類別會沿用範本版面並自動填入紀錄。每個類別保留一份，重新上傳會整組取代；多頁範本每頁各印一頁。</div>
+        ${tpls.length ? html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>表單類別</th><th>範本頁</th><th>格式</th><th className="n">已對應欄位</th><th>來源檔案</th><th style=${{width: '1%'}}></th></tr></thead><tbody>
+          ${tpls.map((t, i) => html`<tr key=${t.id}><td>${i && tpls[i - 1].group === t.group ? '' : html`<span className="tag">${t.group}</span>`}</td><td>${t.name}</td><td className="mute">${t.page ? 'PDF' : 'Excel／Word'}</td><td className="n">${t.page ? t.fields.length : Object.keys(t.map).length}</td><td className="mute">${t.file}</td>
+            <td className="nw"><button className="b s" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button> <button className="b s" onClick=${() => { if (confirm(`移除範本「${t.group}／${t.name}」？`)) update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); }); }}>移除</button></td></tr>`)}</tbody></table></div>` : html`<div className="empty">尚未上傳範本，列印時使用系統預設版面</div>`}</div>`}
     </div>
+    ${NFG.length ? html`<div className="card noprint"><h2 style=${{margin: '0 0 8px'}}>新增與產生表單</h2>
+      <div className="row"><b style=${{minWidth: '84px'}}>新增單張</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}<span className="mute">填日期與內容後自動編號，可直接儲存並列印</span></div>
+      ${NFG.some(([g]) => g !== '查核及團體督導紀錄') && html`<div className="row" style=${{marginTop: '8px'}}><b style=${{minWidth: '84px'}}>批次產生</b><button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
+        <button className="b" title="開工日、工期、展延或頻率改了之後，刪除未修改的自動產生表單並依新條件補齊" onClick=${() => setFq('regen')}>重新產生…</button><span className="mute">依開工日與頻率補齊各期間的空白表單；條件改變後用「重新產生」</span></div>`}</div>` : null}
     ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG.filter(([g]) => g !== '查核及團體督導紀錄')} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${scanEnt && html`<${ScanModal} update=${update} e=${scanEnt} onClose=${() => setScanOf(null)} />`}
     ${edit && html`<${EditFormModal} p=${p} update=${update} e=${edit} onClose=${() => setEdit(null)} />`}
