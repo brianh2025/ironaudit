@@ -1976,7 +1976,10 @@ function PrintTab({p, update, only, pick, clearPick}) {
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all');
   const [tplOpen, setTplOpen] = useState(false); // 範本區預設收合
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
-  useEffect(() => { if (pick?.length) { setSel(new Set(pick)); setStat('all'); clearPick(); setTimeout(() => window.print(), 600); } }, [pick]); // 稽核頁「列印所有缺漏表單」：帶入已建立的表單並直接開啟列印
+  const tplFor = g => { const A = (p.formTemplates || []).filter(t => t.tables || t.page); return A.some(t => t.group === g) || A.some(t => t.group === g.split('－')[0]); };
+  const doPrint = ents => { const miss = {}; ents.forEach(e => { if (!tplFor(e.g)) miss[e.g] = (miss[e.g] || 0) + 1; }); const ks = Object.keys(miss); // 沒有對應範本的類別會改用系統預設版面，列印前警告
+    if (ks.length && !confirm(`以下類別沒有對應的表單範本，會改用系統預設版面列印（不是你上傳的範本版面）：\n${ks.map(g => `．${g}（${miss[g]} 張）`).join('\n')}\n\n請先在上方「表單範本」上傳對應範本；仍要以預設版面列印請按「確定」。`)) return; window.print(); };
+  useEffect(() => { if (pick?.length) { setSel(new Set(pick)); setStat('all'); clearPick(); setTimeout(() => doPrint(pick.map(id => p.inspections.find(r => r.id === id)).filter(Boolean).map(r => ({g: docGroup(p, r, 'inspections')}))), 600); } }, [pick]); // 稽核頁「列印所有缺漏表單」：帶入已建立的表單並直接開啟列印
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
       .filter(r => !q || norm(JSON.stringify(r) + itemNames(p, r.items).join()).includes(norm(q)))
@@ -2016,7 +2019,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
     ${fq && html`<${FreqModal} p=${p} update=${update} groups=${NFG.filter(([g]) => g !== '查核及團體督導紀錄')} regen0=${fq === 'regen'} onClose=${(n, del) => { setFq(null); if (n || del) alert(del ? `已刪除 ${del} 張未修改的自動產生表單，新增 ${n} 張。` : `已新增 ${n} 張空白表單，可在下方清單勾選後列印。`); }} />`}
     ${scanEnt && html`<${ScanModal} update=${update} e=${scanEnt} onClose=${() => setScanOf(null)} />`}
     ${edit && html`<${EditFormModal} p=${p} update=${update} e=${edit} onClose=${() => setEdit(null)} />`}
-    ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => window.print(), 500); }} />`}
+    ${nf && html`<${NewFormModal} p=${p} update=${update} group=${nf} onClose=${() => setNf(null)} onSaved=${(id, print) => { setNf(null); setSel(new Set([id])); if (print) setTimeout(() => doPrint([{g: nf}]), 500); }} />`}
     ${ed && html`<${TplEditor} init=${ed} onClose=${() => setEd(null)} onSave=${list => { update(d => { const old = (d.formTemplates || []).filter(x => x.tables || x.page), gs = new Set(list.map(t => t.group)); // 編輯單一頁：只換掉那一頁；新上傳：同類別的舊範本整組換成新檔的所有頁（多頁範本每頁都保留，依頁序列印）
       d.formTemplates = ed.id ? old.map(x => x.id === ed.id ? list[0] : x) : [...old.filter(x => !gs.has(x.group)), ...list]; }); setEd(null); }} />`}
     <div className="card noprint">
@@ -2028,7 +2031,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
           ${!only && gapN > 0 && html`<button className="b d" title="刪除「列印所有缺漏表單」自動產生、尚未填寫結果、未勾稽也沒有掃描檔的查驗單" onClick=${() => { if (!confirm(`刪除 ${gapN} 張自動補漏產生的查驗單？\n只刪除結果空白、未勾稽、沒有掃描檔者；刪除後這些日期會重新列為缺漏，表單號可再被預編使用。`)) return; const ids = new Set(p.inspections.filter(r => isGapForm(p, r)).map(r => r.id)); update(d => { d.inspections = d.inspections.filter(r => !ids.has(r.id)); }); setSel(s => { const n = new Set(s); ids.forEach(i => n.delete(i)); return n; }); }}>刪除自動補漏（${gapN}）</button>`}
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="需先上傳掃描檔；標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
-          <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
+          <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) doPrint(picked); }}>列印已選（${picked.length}）</button></div></div>
       <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已勾稽的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
       ${groups.length ? groups.map(({g, list}) => { const ok2 = list.filter(e => !e.r.checked), on = ok2.filter(e => sel.has(e.r.id)).length;
         return html`<div key=${g} style=${{marginBottom: '10px'}}>
