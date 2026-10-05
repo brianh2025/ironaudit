@@ -108,6 +108,9 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 @media(max-width:760px){td,th{overflow-wrap:anywhere}.tw table{font-size:12.5px}}
 @media print{header,nav,.subnav,.noprint{display:none}}
 .psheets{display:none}
+/* 手寫字體測試對照：只套在預填的欄位值，標籤、抽查標準維持印刷；整張加「測試對照」浮水印，結果欄留白 */
+.sheet.hand{position:relative}.sheet.hand .fv,.sheet.hand .pf,.sheet.hand table:not(.tpl) td{font-family:'Iansui','標楷體',cursive;color:#1a237e}
+.sheet.hand::after{content:"測試對照";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:bold 96px sans-serif;color:rgba(200,0,0,.13);transform:rotate(-30deg);pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{body{background:#fff}.psheets{display:block}main{padding:0;max-width:none}.sheet{break-after:page;font-size:12pt;color:#000}.sheet:last-child{break-after:auto}
 .sheet .st{text-align:center;font-size:18pt;font-weight:bold;margin:0 0 10px}.sheet table{width:100%;border-collapse:collapse}
 .sheet th,.sheet td{border:1px solid #000;padding:6px 8px;text-align:left;vertical-align:top}.sheet th{width:18%;background:#f2f2f2;white-space:nowrap;font-size:12pt;color:#000;font-weight:bold;text-transform:none;letter-spacing:0}
@@ -1739,7 +1742,7 @@ function TplTable({t, ti, map, vals, sel, onPick}) {
   const tot = t.widths.reduce((a, b) => a + b, 0) || 1;
   return html`<table className=${'tpl' + (t.plain ? ' plain' : '')}><colgroup>${t.widths.map((w, i) => html`<col key=${i} style=${{width: (w / tot * 100) + '%'}} />`)}</colgroup><tbody>
     ${t.rows.map((r, ri) => html`<tr key=${ri} style=${t.heights[ri] ? {height: t.heights[ri] + 'px'} : null}>${r.map((c, ci) => { const key = `${ti}:${ri}:${ci}`, f = map[key];
-      return html`<td key=${ci} colSpan=${c.cs} rowSpan=${c.rs} className=${(f && !vals ? 'm ' : '') + (sel === key ? 'tsel' : '')} onClick=${onPick ? () => onPick(key) : undefined}>${vals ? (f ? vals[f] ?? '' : c.t) : c.t}${!vals && f ? html`<span className="tplf">{${f}}</span>` : ''}</td>`; })}</tr>`)}</tbody></table>`;
+      return html`<td key=${ci} colSpan=${c.cs} rowSpan=${c.rs} className=${(f && !vals ? 'm ' : '') + (f && vals ? 'fv ' : '') + (sel === key ? 'tsel' : '')} onClick=${onPick ? () => onPick(key) : undefined}>${vals ? (f ? vals[f] ?? '' : c.t) : c.t}${!vals && f ? html`<span className="tplf">{${f}}</span>` : ''}</td>`; })}</tr>`)}</tbody></table>`;
 }
 const rotateImg = async ({img, w, h}) => { const im = new Image(); im.src = img; await im.decode(); const cv = document.createElement('canvas'); cv.width = h; cv.height = w; const g = cv.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(im, 0, 0); return {img: cv.toDataURL('image/jpeg', 0.82), w: h, h: w}; };
 function PdfFields({c, fields, patch}) {
@@ -1841,21 +1844,25 @@ function ReqSheet({p, e}) {
     </tbody></table>
     <div className="sg"><div>廠商：</div><div>監造單位：</div></div></div>`;
 }
-function renderTplPages(tpls, valsOf) {
+const HAND_BLANK = ['查驗結果', '缺失內容／改善要求', '缺失改善完成日', '缺失改善完成日', '試驗結果']; // 手寫對照模式留白的欄位（抽查結果與缺失改善）
+const ensureHandFont = () => { if (!document.getElementById('hand-font')) { const l = document.createElement('link'); l.id = 'hand-font'; l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Iansui&display=swap'; document.head.appendChild(l); }
+  return document.fonts ? document.fonts.load('20px Iansui', '手寫字體測試').then(() => document.fonts.ready) : Promise.resolve(); };
+function renderTplPages(tpls, valsOf, hand) {
   return html`<${React.Fragment}>${tpls.map(tpl => { const vals = valsOf(tpl); return tpl.page
-    ? html`<div key=${tpl.id} className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl), '--r': tpl.page.w / tpl.page.h}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`
-    : html`<div key=${tpl.id} className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; })}</${React.Fragment}>`;
+    ? html`<div key=${tpl.id} className=${'sheet pdfsheet' + (hand ? ' hand' : '')} style=${{fontFamily: fontOf(tpl), '--r': tpl.page.w / tpl.page.h}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`
+    : html`<div key=${tpl.id} className=${'sheet' + (hand ? ' hand' : '')} style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; })}</${React.Fragment}>`;
 }
 function Sheet({p, e}) {
   const I = p.info, r = e.r, all = (p.formTemplates || []).filter(t => t.tables || t.page), pages = all.filter(t => t.group === e.g), tpls = pages.length ? pages : all.filter(t => t.group === e.g.split('－')[0]);
-  if (tpls.length) { const base = formVals(p, e.k, r); return renderTplPages(tpls, tpl => pageVals(p, e.g, base, tpl)); } // 多頁範本：每頁各印一頁，依上傳順序；每頁可有自己的預填文字
-  return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
+  const hand = !!p.settings.hand && e.k === 'inspections'; // 手寫字體測試對照：結果欄一律留白
+  if (tpls.length) { const base = formVals(p, e.k, r); if (hand) HAND_BLANK.forEach(f => { base[f] = ''; }); return renderTplPages(tpls, tpl => pageVals(p, e.g, base, tpl), hand); } // 多頁範本：每頁各印一頁，依上傳順序；每頁可有自己的預填文字
+  return html`<div className=${'sheet' + (hand ? ' hand' : '')}><div className="st">${sheetTitle(e.g, r)}</div>
     <table><tbody>
       <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
       <tr><th>契約編號</th><td>${I.contractNo}</td><th>表單編號</th><td>${r.no}</td></tr>
       <tr><th>主辦機關</th><td>${I.owner}</td><th>日期</th><td>${roc(r.date)}</td></tr>
       <tr><th>監造單位</th><td>${I.supervisor}</td><th>承攬廠商</th><td>${I.contractor}</td></tr>
-      ${sheetRows(p, e.k, r).map(([l, v]) => html`<tr key=${l}><th>${l}</th><td colSpan="3" className="pre">${v}</td></tr>`)}
+      ${sheetRows(p, e.k, r).map(([l, v0]) => { const v = hand && HAND_BLANK.includes(l) ? '' : v0; return html`<tr key=${l}><th>${l}</th><td colSpan="3" className="pre">${v}</td></tr>`; })}
     </tbody></table>
     <div className="sg">${SIGNS[e.k].map(s => html`<div key=${s}>${s}：</div>`)}</div></div>`;
 }
@@ -2011,8 +2018,8 @@ function PrintTab({p, update, only, pick, clearPick}) {
   const [tplOpen, setTplOpen] = useState(false); // 範本區預設收合
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
   const tplFor = g => { const A = (p.formTemplates || []).filter(t => t.tables || t.page); return A.some(t => t.group === g) || A.some(t => t.group === g.split('－')[0]); };
-  const doPrint = ents => { const miss = {}; ents.forEach(e => { if (!tplFor(e.g)) miss[e.g] = (miss[e.g] || 0) + 1; }); const ks = Object.keys(miss); // 沒有對應範本的類別會改用系統預設版面，列印前警告
-    if (ks.length && !confirm(`以下類別沒有對應的表單範本，會改用系統預設版面列印（不是你上傳的範本版面）：\n${ks.map(g => `．${g}（${miss[g]} 張）`).join('\n')}\n\n請先在上方「表單範本」上傳對應範本；仍要以預設版面列印請按「確定」。`)) return; window.print(); };
+  const doPrint = async ents => { const miss = {}; ents.forEach(e => { if (!tplFor(e.g)) miss[e.g] = (miss[e.g] || 0) + 1; }); const ks = Object.keys(miss); // 沒有對應範本的類別會改用系統預設版面，列印前警告
+    if (ks.length && !confirm(`以下類別沒有對應的表單範本，會改用系統預設版面列印（不是你上傳的範本版面）：\n${ks.map(g => `．${g}（${miss[g]} 張）`).join('\n')}\n\n請先在上方「表單範本」上傳對應範本；仍要以預設版面列印請按「確定」。`)) return; if (p.settings.hand) await ensureHandFont().catch(() => {}); window.print(); };
   useEffect(() => { if (pick?.length) { setSel(new Set(pick)); setStat('all'); clearPick(); setTimeout(() => doPrint(pick.map(id => p.inspections.find(r => r.id === id)).filter(Boolean).map(r => ({g: docGroup(p, r, 'inspections')}))), 600); } }, [pick]); // 稽核頁「列印所有缺漏表單」：帶入已建立的表單並直接開啟列印
   const groups = PRINT_KINDS.filter(([g]) => inScope(g)).flatMap(([g, k, f]) => {
     const list = p[k].filter(f).filter(r => (!from || r.date >= from) && (!to || r.date <= to))
@@ -2077,6 +2084,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
           ${!only && gapN > 0 && html`<button className="b d" title="刪除「列印所有缺漏表單」自動產生、尚未填寫結果、未勾稽也沒有掃描檔的查驗單" onClick=${() => { if (!confirm(`刪除 ${gapN} 張自動補漏產生的查驗單？\n只刪除結果空白、未勾稽、沒有掃描檔者；刪除後這些日期會重新列為缺漏，表單號可再被預編使用。`)) return; const ids = new Set(p.inspections.filter(r => isGapForm(p, r)).map(r => r.id)); update(d => { d.inspections = d.inspections.filter(r => !ids.has(r.id)); }); setSel(s => { const n = new Set(s); ids.forEach(i => n.delete(i)); return n; }); }}>刪除自動補漏（${gapN}）</button>`}
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="需先上傳掃描檔；標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
+          ${!only && html`<label className="b" title="預填欄位改用手寫風格字體並加「測試對照」浮水印，抽查結果與缺失改善欄留白；僅供版面對照測試" style=${{cursor: 'pointer'}}><input type="checkbox" checked=${!!p.settings.hand} onChange=${ev => { const on = ev.target.checked; if (on) ensureHandFont().catch(() => {}); update(d => { d.settings.hand = on; }); }} /> 手寫字體對照</label>`}
           ${!only && html`<button className="b" disabled=${!reqPick.length} title="列印已選施工抽查紀錄表對應的工程查驗申請單（編號自動依序編列，之後與抽查單連動）" onClick=${printReq}>列印申請單（${reqPick.length}）</button>`}
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) doPrint(picked); }}>列印已選（${picked.length}）</button></div></div>
       <div className="mute" style=${{marginBottom: '8px'}}>依表單類別列出本專案所有查驗、督導、查核與職安衛／環保／交維／防汛紀錄，勾選後按「列印已選」，每張表單各印一頁（可在列印視窗選「另存為 PDF」）。已勾稽的表單（核對完成）不能再列印，也不會被「全選」選到；要重印請先取消勾稽。</div>
