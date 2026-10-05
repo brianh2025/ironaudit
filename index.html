@@ -908,7 +908,24 @@ function dayInfo(p, d) {
   const used = p.info.startDate ? dayDiff(p.info.startDate, d) + 1 : NaN;
   return {total, used, left: total - used, end: p.info.startDate ? addDays(p.info.startDate, total - 1) : ''};
 }
-const inspItemsNeeded = p => p.items.filter(x => x.inspect);
+/* 監造計畫表 6-4～6-13 訂有施工抽查標準表的工程類別（對應 SITE_NAME 代號）；未訂標準表的工項（臨時設施、管理費、打除、基樁…）不列入應查驗 */
+const stdLetter = name => /排水器/.test(name) ? 'I' : /鋼板樁|鋼版樁|鋼軌樁/.test(name) ? 'G' : /瀝青/.test(name) ? 'J' : /CLSM|低強度/i.test(name) ? 'K' : /測量|放樣/.test(name) ? 'A' : /開挖/.test(name) ? 'B' : /回填/.test(name) ? 'C'
+  : /植筋/.test(name) ? '' : /鋼筋/.test(name) ? 'D' : /模板/.test(name) ? 'E' : /混凝土/.test(name) && !/表面處理|基樁|混凝土塊|異型塊|預力/.test(name) ? 'F' : '';
+const inspItemsNeeded = p => p.items.filter(x => x.inspect && stdLetter(x.name));
+/* 從施工日誌「本日施工項目」解析該工項的施作樁號與部位：先依工項關鍵字取第一個命中的句子，該句沒有樁號才退回整段；仍無則「全工區」 */
+const POS_PARTS = ['止滑榫', '基礎', '牆身', '完成面', '底版', '頂版', '護岸', '路側', '渠道'];
+const stakesOf = t => [...String(t).matchAll(/(\d+)\s*[kK]?\s*\+\s*(\d{1,3})(?!\d)/g)].map(m => +m[1] * 1000 + +m[2]);
+const fmtStake = n => `${Math.floor(n / 1000)}K+${String(n % 1000).padStart(3, '0')}`;
+const itemKey = (it, L) => L === 'F' ? (/140/.test(it.name) ? /140/ : /210/.test(it.name) ? /210/ : /伸縮縫/.test(it.name) ? /伸縮縫|模板/ : /混凝土/) : L === 'E' ? (/乙種/.test(it.name) ? /牆身模板|牆身/ : /模板/)
+  : ({A: /放樣|測量/, B: /開挖/, C: /回填/, D: /鋼筋/, G: /鋼板樁|鋼版樁|鋼軌樁/, I: /牆身|排水/, J: /瀝青/, K: /CLSM|低強度/i})[L];
+function workPos(summary, it, L) {
+  const sents = String(summary || '').replace(/(^|[。；;\n])\s*\d+\s*[.、．]\s*(?=\D)/g, '$1\n').split(/[。；;\n]/).map(x => x.trim()).filter(Boolean), key = itemKey(it, L);
+  const hit = key ? sents.find(x => key.test(x)) || '' : '', whole = sents.join('。'), st = stakesOf(hit).length ? stakesOf(hit) : stakesOf(whole), part = POS_PARTS.find(w => (hit || whole).includes(w)) || '';
+  if (!st.length) return {lo: null, hi: null, part, text: '全工區' + (part ? `（${part}）` : ''), key: '全工區|' + part};
+  const lo = Math.min(...st), hi = Math.max(...st);
+  return {lo, hi, part, text: (lo === hi ? fmtStake(lo) : `${fmtStake(lo)}～${fmtStake(hi)}`) + (part ? `（${part}）` : ''), key: `${lo}-${hi}|${part}`};
+}
+const ABNORMAL_LOG = /無法施作|無法施工|停工/;
 
 /* ================= 每週稽核 ================= */
 /* 施工概況載明進場、但當日沒有對應材料查驗者（不列入查驗填報，於稽核提醒） */
@@ -951,7 +968,7 @@ function auditWeek(p, monday) {
     miss: rows.filter(r => r.status !== 'ok').length};
 }
 /* 先看工種（混凝土施工查驗、測量、開挖、鋼筋、模板、混凝土、回填…），最後才看結構名稱（擋土、坡面工），避免「坡面工…混凝土澆置」被判成坡面工程 */
-const SITE_CODE = [[/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
+const SITE_CODE = [[/排水器/, 'I'], [/混凝土施工查驗/, 'F'], [/瀝青/, 'J'], [/CLSM|低強度/i, 'K'], [/植筋/, 'L'], [/基樁/, 'H'], [/混凝土塊|異型塊/, 'M'],
   [/測量|放樣/, 'A'], [/開挖|整地/, 'B'], [/鋼筋/, 'D'], [/模板/, 'E'], [/混凝土|澆置|澆築/, 'F'], [/回填|塊石|拋石/, 'C'], [/鋼板樁|擋土/, 'G'], [/排水|抽水|擋水/, 'I'], [/坡面工(?!基礎|擋土牆|堤趾|路側)/, 'N'], [/安全衛生|職安|安衛/, 'U'], [/環境|環保|灑水/, 'V'], [/交維|交通/, 'W'], [/汛期|防汛|防災/, 'X']];
 /* 依表單類別決定完整前綴（查驗依內容／工項判斷工程類別代碼），例如 ED、EZ、RT、RQ */
 /* 文件管理編碼表（監造計畫的文管編號）：依表單類別（施工抽查再分工程類別）查編號，有就優先採用 */
@@ -1154,22 +1171,31 @@ async function exportAuditExcel(p, A) {
 /* 匯出全部：不分週次，依工項列出整個專案「有施工但查驗日期前後（容許天數內）都沒有查驗紀錄」的日子，並依日期順序預編表單編號
    （預編＝先補該類別現有編號的空號、用完才接在最大號之後；不改動任何現有編號。實際新增查驗單時，系統自動編號是接在最大號之後，補空號請在新增視窗手動輸入預編號碼） */
 function missingInspections(p) {
-  const tol = +p.settings.tolerance || 0, dates = Object.keys(p.logs).sort(), out = [];
+  const tol = +p.settings.tolerance || 0, dates = Object.keys(p.logs).sort(), out = [], workDays = it => dates.filter(d => (p.logs[d]?.qty?.[it.code] || 0) > 0);
+  const excluded = p.items.filter(x => x.inspect && !stdLetter(x.name)).map(it => ({it, days: workDays(it)})).filter(x => x.days.length), anomalies = [];
+  const locOk = (r, g) => { const rs = stakesOf(r.location || ''), txt = (r.location || '') + (r.content || ''), rp = POS_PARTS.find(w => txt.includes(w));
+    if (rs.length && g.lo != null && (Math.max(...rs) < g.lo || Math.min(...rs) > g.hi)) return false; return !(rp && g.part && rp !== g.part); };
   for (const it of inspItemsNeeded(p)) {
-    const work = dates.filter(d => (p.logs[d]?.qty?.[it.code] || 0) > 0); if (!work.length) continue;
-    const ins = p.inspections.filter(r => (r.type || '施工查驗') === '施工查驗' && (r.items || []).includes(it.code)), miss =  work.filter(d => !ins.some(r => r.date && Math.abs(dayDiff(d, r.date)) <= tol));
-    out.push({it, work: work.length, miss: miss.map(d => ({date: d, qty: p.logs[d].qty[it.code]}))}); }
+    const work = workDays(it); if (!work.length) continue; const L = stdLetter(it.name), groups = [];
+    for (const d of work) { const lg = p.logs[d]; if (ABNORMAL_LOG.test(lg.summary || '')) { anomalies.push({it, date: d, text: lg.summary}); continue; }
+      const ps = workPos(lg.summary, it, L), g = groups.find(x => x.key === ps.key && dayDiff(x.dates[0], d) <= 2); // 同工項、同樁號、同部位，且與組首日相隔 2 天內併為一組
+      if (g) { g.dates.push(d); g.qty += lg.qty[it.code]; } else groups.push({...ps, dates: [d], qty: lg.qty[it.code]}); }
+    const ins = p.inspections.filter(r => (r.type || '施工查驗') === '施工查驗' && (r.items || []).includes(it.code) && r.date), used = new Set(), miss = [];
+    for (const g of groups) { const first = g.dates[0], last = g.dates[g.dates.length - 1]; // 一張既有查驗單只抵一組：日期在該組前後容許天數內、位置相符者取日期最近的
+      const hit = ins.filter(r => !used.has(r.id) && dayDiff(first, r.date) >= -tol && dayDiff(last, r.date) <= tol && locOk(r, g)).sort((x, y) => Math.abs(dayDiff(first, x.date)) - Math.abs(dayDiff(first, y.date)))[0];
+      if (hit) used.add(hit.id); else miss.push({date: first, dates: g.dates, pos: g.text, qty: g.qty}); }
+    out.push({it, work: work.length, miss}); }
   const used = new Map(), usedSet = pre => { if (!used.has(pre)) { const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$'), st = new Set(); p.inspections.forEach(r => { const k = String(r.no || '').match(re); if (k) st.add(+k[1]); }); used.set(pre, st); } return used.get(pre); };
   const freeNo = pre => { const st = usedSet(pre); let n = 1; while (st.has(n)) n++; st.add(n); return `${pre}-${pad(n, 3)}`; }; // 先補現有編號的空號，用完才接在最大號之後；現有編號不動
   const flat = out.flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
   for (const {o, m} of flat) { const draft = {date: m.date, type: '施工查驗', items: [o.it.code], content: o.it.name}; m.no = freeNo(formPrefix(p, draft, 'inspections')); }
-  return out;
+  out.excluded = excluded; out.anomalies = anomalies; return out;
 }
 /* 缺漏匯出的版面：黑金配色（依使用者提供的 Excel 版面套用）。彙總表每個缺漏日期一列、工項資訊跨列合併並可收合，工項區塊交錯底色，A4 橫向、一頁寬、標題列每頁重複、只在工項區塊邊界分頁 */
 const rocPad = d => { const [y, m, dd] = d.split('-'); return `${+y - 1911}年${m}月${dd}日`; };
 const supers = t => String(t ?? '').replace(/\bM3\b/gi, 'M³').replace(/\bM2\b/gi, 'M²').replace(/cm2/g, 'cm²');
 async function exportAuditAll(p) {
-  const L = missingInspections(p).filter(o => o.miss.length); if (!L.length) return alert('沒有缺漏的查驗，或還沒有施工日誌、需查驗的工項');
+  const Ls = missingInspections(p), L = Ls.filter(o => o.miss.length); if (!L.length) return alert('沒有缺漏的查驗，或還沒有施工日誌、需查驗的工項');
   const G = {ink: 'FF1A1A1A', ink2: 'FF2A2A2A', gold: 'FFC9A227', gold2: 'FFD9C98A', amber: 'FFD97706', deep: 'FFB8860B', txt: 'FF262626', grey: 'FF8A8577', line: 'FFE3E1DC', alt: 'FFF7F5F0', white: 'FFFFFFFF'};
   const F = (o = {}) => ({name: '微軟正黑體', size: 11, color: {argb: G.txt}, ...o, ...(o.color ? {color: {argb: o.color}} : {})}), fill = c => ({type: 'pattern', pattern: 'solid', fgColor: {argb: c}});
   const bd = (l = G.line, t = G.line, b = G.line) => ({left: {style: 'thin', color: {argb: G.line}}, right: {style: 'thin', color: {argb: G.line}}, top: t && {style: 'thin', color: {argb: t}}, bottom: b && {style: 'thin', color: {argb: b}}});
@@ -1190,7 +1216,7 @@ async function exportAuditAll(p) {
     if (n > 1) for (let c = 1; c <= 5; c++) s.mergeCells(r, c, r + n - 1, c); // 先合併再逐格設樣式（合併會把主格樣式複製給被合併格）
     o.miss.forEach((m, k) => { const row = r + k, st = (font, al, extra) => ({font, fill: fill(fl), alignment: al, border: bd(G.line, k ? G.line : top, !k && n > 1 ? G.line : null)});
       const cells = [[o.it.code, F({bold: true, color: G.ink}), {horizontal: 'center', vertical: 'middle'}], [name, F(), {horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1}], [supers(o.it.unit), F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'middle'}],
-        [o.work, F(), {horizontal: 'right', vertical: 'middle', indent: 1}], [n, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'middle', indent: 1}], [rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'middle'}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'middle'}]];
+        [o.work, F(), {horizontal: 'right', vertical: 'middle', indent: 1}], [n, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'middle', indent: 1}], [m.dates.length > 1 ? `${rocPad(m.date)}～${rocMD(m.dates[m.dates.length - 1])}` : rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'middle'}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'middle'}]];
       cells.forEach(([v, font, al], c) => { if (k && c < 5) return; const x = s.getCell(row, c + 1); x.value = v; Object.assign(x, st(font, al)); if (c < 5) x.border = bd(G.line, top, null); }); // 合併格只設主格（被合併格與主格共用樣式），外框上緣＝區塊分隔線
       s.getRow(row).height = hs[k]; if (k) s.getRow(row).outlineLevel = 1; });
     r += n; });
@@ -1203,15 +1229,21 @@ async function exportAuditAll(p) {
   for (let c = 1; c <= 7; c++) { const x = s.getCell(r + 2, c); x.font = F({size: 9, color: G.grey}); x.alignment = {horizontal: 'left', vertical: 'middle', indent: 1}; } s.getRow(r + 2).height = 20.1;
   s.pageSetup.printArea = `A1:G${r + 2}`; s.pageSetup.printTitlesRow = '1:3';
   /* 缺漏明細：每個缺漏一列，工項交錯底色 */
-  const d = wb.addWorksheet('缺漏明細', {...common(G.ink), views: [{showGridLines: false, state: 'frozen', ySplit: 1}]}); [9.57, 57.14, 8.57, 18.14, 14.29, 21].forEach((w, i) => d.getColumn(i + 1).width = w);
-  ['項次', '工項', '單位', '缺漏日期', '當日數量', '預編表單編號'].forEach((t, i) => { const x = d.getCell(1, i + 1); x.value = t; x.font = F({bold: true, color: G.gold}); x.fill = fill(G.ink); x.alignment = {horizontal: 'center', vertical: 'middle', wrapText: true}; x.border = {left: {style: 'thin', color: {argb: 'FFBFBFBF'}}, right: {style: 'thin', color: {argb: 'FFBFBFBF'}}, top: {style: 'thin', color: {argb: 'FFBFBFBF'}}, bottom: {style: 'thin', color: {argb: G.gold}}}; }); d.getRow(1).height = 26.1;
+  const d = wb.addWorksheet('缺漏明細', {...common(G.ink), views: [{showGridLines: false, state: 'frozen', ySplit: 1}]}); [9.57, 57.14, 8.57, 18.14, 14.29, 21, 30].forEach((w, i) => d.getColumn(i + 1).width = w);
+  ['項次', '工項', '單位', '缺漏日期', '數量', '預編表單編號', '檢查位置（日誌樁號／部位）'].forEach((t, i) => { const x = d.getCell(1, i + 1); x.value = t; x.font = F({bold: true, color: G.gold}); x.fill = fill(G.ink); x.alignment = {horizontal: 'center', vertical: 'middle', wrapText: true}; x.border = {left: {style: 'thin', color: {argb: 'FFBFBFBF'}}, right: {style: 'thin', color: {argb: 'FFBFBFBF'}}, top: {style: 'thin', color: {argb: 'FFBFBFBF'}}, bottom: {style: 'thin', color: {argb: G.gold}}}; }); d.getRow(1).height = 26.1;
   let dr = 2; const dbreaks = []; let dused = 26.1; const dcap = 505;
   L.forEach((o, bi) => o.miss.forEach(m => { const fl = bi % 2 ? G.alt : G.white, name = supers(o.it.name), h = need(name, 15, 6) > 21.95 ? need(name, 15, 6) : 20.1;
     [[o.it.code, F({bold: true, color: G.ink}), {horizontal: 'center', vertical: 'top', wrapText: true}], [name, F(), {vertical: 'top', wrapText: true, indent: 1}], [supers(o.it.unit), F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'top', wrapText: true}],
-      [rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'top', wrapText: true}], [m.qty, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'top', wrapText: true, indent: 1}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'top', wrapText: true}]]
+      [m.dates.length > 1 ? `${rocPad(m.date)}～${rocMD(m.dates[m.dates.length - 1])}` : rocPad(m.date), F({size: 10}), {horizontal: 'center', vertical: 'top', wrapText: true}], [m.qty, F({bold: true, color: G.deep}), {horizontal: 'right', vertical: 'top', wrapText: true, indent: 1}], [m.no, F({size: 10, color: G.grey}), {horizontal: 'center', vertical: 'top', wrapText: true}], [m.pos, F({size: 10}), {horizontal: 'left', vertical: 'top', wrapText: true, indent: 1}]]
       .forEach(([v, font, al], c) => { const x = d.getCell(dr, c + 1); x.value = v; x.font = font; x.fill = fill(fl); x.alignment = al; x.border = bd(G.line, dr > 2 ? G.line : null, G.line); });
     d.getRow(dr).height = h; dr++; }));
-  d.pageSetup.printArea = `A1:F${dr - 1}`; d.pageSetup.printTitlesRow = '1:1';
+  d.pageSetup.printArea = `A1:G${dr - 1}`; d.pageSetup.printTitlesRow = '1:1';
+  const ex = wb.addWorksheet('排除與異常', common(G.grey)), heads = []; [12, 50, 18, 50].forEach((w, i) => ex.getColumn(i + 1).width = w);
+  heads.push(ex.addRow(['未訂抽查標準表的工項（不列入缺漏）']).number, ex.addRow(['工項代碼', '工項', '施工日數', '施工日']).number);
+  Ls.excluded.forEach(e => ex.addRow([e.it.code, e.it.name, e.days.length, e.days.map(rocMD).join('、')])); if (!Ls.excluded.length) ex.addRow(['無']);
+  ex.addRow([]); heads.push(ex.addRow(['日誌記載無法施作卻有申報數量（異常待確認，不產生查驗單）']).number, ex.addRow(['日期', '工項', '', '日誌記載']).number);
+  Ls.anomalies.forEach(a => ex.addRow([rocPad(a.date), a.it.name, '', a.text])); if (!Ls.anomalies.length) ex.addRow(['無']);
+  ex.eachRow((r, i) => r.eachCell(c => { c.font = F({size: 10, bold: heads.includes(i)}); c.alignment = {wrapText: true, vertical: 'top'}; }));
   downloadBlob(new Blob([await wb.xlsx.writeBuffer()]), `${p.info.name}_查驗缺漏_${todayISO().replace(/-/g, '')}.xlsx`);
 }
 /* ================= 共用元件 ================= */
@@ -2134,7 +2166,7 @@ const buildDocEntries = rows => {
   const H = rows[hi], tc = H.findIndex(t => /總\s*類\s*代碼/.test(t)), sc = H.findIndex(t => /細\s*類\s*代碼/.test(t)), nc = H.findIndex(t => /^細\s*類$/.test(t.trim())), out = []; let big = '';
   for (const r of rows.slice(hi + 1)) { const t = (r[tc] || '').replace(/\s+/g, ''), name = (r[nc] || '').replace(/\s+/g, ''), sub = (r[sc] || '').replace(/\s+/g, '');
     if (t) big = /^[A-Za-z]+$/.test(t) ? t : ''; if (!name || !sub) continue;
-    out.push({id: uid(), name, code: big + sub, group: /抽查|檢查表|督導|查核/.test(name) ? formGroupOf(name) : ''}); }
+    out.push({id: uid(), name, code: big + sub, group: /抽查|檢查表|督導|查核|材料設備檢驗申請單/.test(name) ? formGroupOf(name) : ''}); }
   return out;
 };
 function DocCodeEditor({init, onSave, onClose}) {
@@ -2196,10 +2228,10 @@ function AuditTab({p, C, quick, update, printMissing}) {
         <button className="b" onClick=${() => setMon(addDays(mon, 7))}>下週 ▶</button>
         <b>${roc(A.monday)}（一）～ ${roc(A.end)}（日）</b></div>
       <div className="row"><button className="b" onClick=${() => exportAuditExcel(p, A)}>匯出本週稽核表 Excel</button>
-        <button className="b p" title="依施工日誌，為整個專案缺漏的查驗各建立一張預編表單號的查驗單，並直接列印" onClick=${() => { const L = missingInspections(p).flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
+        <button className="b p" title="依施工日誌，為整個專案缺漏的查驗各建立一張預編表單號的查驗單，並直接列印" onClick=${() => { const M = missingInspections(p), L = M.flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
           if (!L.length) return alert('沒有缺漏的查驗');
-          if (!confirm(`整個專案共缺漏 ${L.length} 次查驗，將依缺漏日期新增 ${L.length} 張查驗單（結果空白、表單號依預編號碼），並直接列印。\n\n新增後這些日期會視為已有查驗紀錄。要繼續嗎？`)) return;
-          const recs = L.map(({o, m}) => ({id: uid(), date: m.date, type: '施工查驗', items: [o.it.code], location: '', content: o.it.name, result: '', no: m.no}));
+          if (!confirm(`依施工日誌與監造計畫的抽查標準表，整個專案應補 ${L.length} 張施工抽查紀錄表，將依施工日期新增查驗單（結果空白、表單號依預編號碼、檢查位置帶入日誌樁號部位），並直接列印。${M.anomalies.length ? `\n\n另有 ${M.anomalies.length} 筆日誌記載無法施作卻有申報數量，列為異常待確認，不會產生查驗單。` : ''}\n\n新增後這些日期會視為已有查驗紀錄。要繼續嗎？`)) return;
+          const recs = L.map(({o, m}) => ({id: uid(), date: m.date, type: '施工查驗', items: [o.it.code], location: m.pos, content: o.it.name + (m.dates.length > 1 ? `（施工日 ${m.dates.map(rocMD).join('、')}）` : ''), result: '', no: m.no}));
           update(d => { d.inspections.push(...recs); }); printMissing(recs.map(r => r.id)); }}>列印所有缺漏表單</button>
         <button className="b p" title="不分週次：依工項列出整個專案缺漏的查驗次數、日期與預編表單編號" onClick=${() => exportAuditAll(p).catch(e => alert('匯出失敗：' + e.message))}>匯出全部缺漏（依工項）</button></div></div>
       <div className="kpis" style=${{marginTop: '10px'}}>
@@ -2214,6 +2246,9 @@ function AuditTab({p, C, quick, update, printMissing}) {
           <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => rocMD(d)).join('、')}</td>
           <td className="noprint">${r.status !== 'ok' && html`<button className="b s" onClick=${() => quick({items: [r.it.code], date: r.missDays[0], type: '施工查驗'})}>補填查驗</button>`}</td></tr>`)}
       </tbody></table></div>` : html`<div className="empty">本週施工日誌無需查驗工項的完成數量</div>`}</div>
+    ${(() => { const M = missingInspections(p); return (M.excluded.length || M.anomalies.length) ? html`<div className="card"><h2>未列入查驗的工項與異常</h2>
+      ${M.excluded.length > 0 && html`<div className="mute">監造計畫未訂抽查標準表，不列入應查驗（建議監造單位判斷是否補訂）：${M.excluded.map(e => `${e.it.name}（${e.days.length} 天）`).join('、')}</div>`}
+      ${M.anomalies.length > 0 && html`<div className="msg warn" style=${{marginTop: '6px'}}>日誌記載無法施作卻有申報數量，需確認（不產生查驗單）：${M.anomalies.map(a => `${rocMD(a.date)} ${a.it.name}`).join('、')}</div>`}</div>` : null; })()}
     <div className="grid" style=${{gridTemplateColumns: 'repeat(auto-fill,minmax(360px,1fr))'}}>
       <div className="card"><h2>試驗報告未回填（截至週日）</h2>${A.pendingTests.length ? html`<table><tbody>${A.pendingTests.map(t => html`<tr key=${t.r.id}><td>${t.r.no}</td><td>${t.r.testName}</td><td>${roc(t.r.sampleDate || t.r.date)}</td><td className="n"><span className=${t.age > p.settings.testDue ? 'tag bad' : ''}>${t.age} 天</span></td></tr>`)}</tbody></table>` : html`<div className="mute">無</div>`}</div>
       <div className="card"><h2>本週表單填報</h2><table><tbody>${Object.entries(A.forms).map(([k, v]) => html`<tr key=${k}><td>${k}</td><td className="n">${v} 件</td><td>${!v && (k !== '防汛' || A.flood) ? html`<span className="tag warn">本週未填報</span>` : ''}</td></tr>`)}
