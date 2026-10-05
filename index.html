@@ -1609,7 +1609,7 @@ const FONT_STACKS = {'標楷體': '"標楷體","DFKai-SB","BiauKai","Noto Serif 
 const fontOf = t => FONT_STACKS[t.font || '標楷體'];
 const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
 const FORM_FIELDS = {
-  inspections: ['申請單編號', '查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
+  inspections: ['施工日誌試驗實測值', '申請單編號', '查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
   supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
   forms: ['表單名稱', '類別', '檢查結果', '缺失／備註'],
   requests: ['申請日期', '申請類別', '檢驗(查)項目', '依據規定', '檢驗(查)位置', '預定檢驗(查)時間', '樣品名稱', '樣品數量', '試驗單位', '對應抽查單編號']};
@@ -1626,9 +1626,20 @@ const matDisplay = r => {
   // 其餘：去掉括弧、前綴（「○○：」）、監造／廠商／會同／取樣…等動作用語，只留下材料名稱
   return t.replace(/（[^）]*）|\([^)]*\)/g, '').replace(/^.*?[：:]/, '').replace(/監造|廠商|會同|取樣|試體|試驗|製作|進場|查驗|與|及|和|，.*$|,.*$|。/g, '').trim();
 };
+/* 抽查單可帶入的真實紀錄：施工日誌「試驗」欄在該日記載的實測值（坍度、氯離子、強度…），依工項材料挑選，並註明來源；日誌沒記載就留白，不預填任何檢查結果 */
+const LOG_MEAS = {F: /混凝土|kgf|坍度|氯離子|圓柱/, D: /鋼筋/, C: /回填|夯實|密度/, J: /瀝青/, K: /CLSM|低強度/i};
+function logTests(p, r) {
+  if (!r.date || (r.type || '施工查驗') !== '施工查驗') return '';
+  const names = itemNames(p, r.items).join(' ') + ' ' + (r.content || ''), L = stdLetter(names) || siteLetter(p, r), re = LOG_MEAS[L], t = String(p.logs[r.date]?.tests || ''); if (!re || !t || /附屬品|伸縮縫/.test(names)) return '';
+  let ss = t.split(/[。；;\n]/).map(x => x.trim()).filter(x => x && /\d/.test(x) && /坍度|氯離子|強度|溫度|密度|厚度|量測|實測|抽檢/.test(x) && re.test(x)); if (!ss.length) return '';
+  const rs = stakesOf(r.location || ''); if (rs.length) ss = ss.filter(x => { const xs = stakesOf(x); return !xs.length || (Math.max(...xs) > Math.min(...rs) && Math.min(...xs) < Math.max(...rs)); }); // 樁號對不上的試驗不帶入
+  if (!ss.length) return '';
+  const kg = (names.match(/\b(140|210)\b/) || [])[1], mine = kg && ss.filter(x => x.includes(kg)); if (mine && mine.length) ss = mine; // 同日有多種強度時只取該工項的
+  return `${ss.join('；')}（依施工日誌${rocMD(r.date)}試驗紀錄）`;
+}
 function formVals(p, k, r) {
   const its = itemNames(p, r.items).join('、'), I = p.info, v = {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.no, 日期: roc(r.date)};
-  if (k === 'inspections') Object.assign(v, {申請單編號: r.reqNo, 查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
+  if (k === 'inspections') Object.assign(v, {施工日誌試驗實測值: logTests(p, r), 申請單編號: r.reqNo, 查驗類別: r.type || '施工查驗', 查驗工項: its, '材料／設備名稱': matDisplay(r), '位置／里程': r.location, 查驗項目及內容: r.content, 查驗結果: r.result, '缺失內容／改善要求': r.defect, 缺失改善完成日: roc(r.fixDone),
     試驗項目: r.testName, '取樣／會驗日期': roc(r.sampleDate), 試驗報告編號: r.reportNo, 報告日期: roc(r.reportDate), 試驗結果: r.testResult});
   else if (k === 'supervisions') Object.assign(v, {'督導人員／單位': r.person, 督導工項: its, '分數／等級': r.score, 內容摘要: r.content, 缺失件數: r.defects || 0, 改善期限: roc(r.fixDue), 改善完成日: roc(r.fixDone), 備註: r.note});
   else Object.assign(v, {表單名稱: r.title, 類別: r.cat, 檢查結果: r.result, '缺失／備註': r.note});
@@ -1806,7 +1817,7 @@ const PRINT_KINDS = [
 const sheetTitle = (g, r) => g === '查核及團體督導紀錄' ? `${r.kind || '查核'}紀錄` : r.cat ? r.title || `${r.cat}檢查表` : g;
 function sheetRows(p, k, r) {
   const its = itemNames(p, r.items).join('、');
-  if (k === 'inspections') return [...(r.reqNo ? [['申請單編號', r.reqNo]] : []), ['查驗類別', r.type || '施工查驗'], ['查驗工項', its], ['位置／里程', r.location], ['查驗項目及內容', r.content], ['查驗結果', r.result],
+  if (k === 'inspections') return [...(r.reqNo ? [['申請單編號', r.reqNo]] : []), ...(logTests(p, r) ? [['施工日誌試驗實測值', logTests(p, r)]] : []), ['查驗類別', r.type || '施工查驗'], ['查驗工項', its], ['位置／里程', r.location], ['查驗項目及內容', r.content], ['查驗結果', r.result],
     ...(r.defect || r.fixDone ? [['缺失內容／改善要求', r.defect], ['缺失改善完成日', roc(r.fixDone)]] : []),
     ...(r.testNeed ? [['試驗項目', r.testName], ['取樣／會驗日期', roc(r.sampleDate)], ['試驗報告編號', r.reportNo], ['報告日期', roc(r.reportDate)], ['試驗結果', r.testResult]] : [])];
   if (k === 'supervisions') return [[r.kind === '技師督導' ? '督導技師' : '查核單位／委員', r.person], ...(its ? [['督導工項', its]] : []), ...(r.score ? [['分數／等級', r.score]] : []),
