@@ -925,6 +925,8 @@ function workPos(summary, it, L) {
   const lo = Math.min(...st), hi = Math.max(...st);
   return {lo, hi, part, text: (lo === hi ? fmtStake(lo) : `${fmtStake(lo)}～${fmtStake(hi)}`) + (part ? `（${part}）` : ''), key: `${lo}-${hi}|${part}`};
 }
+/* 自動補漏產生的查驗單（gap 旗標；舊版產生的沒有旗標，以「結果空白、無位置、內容＝單一工項名稱」辨認）；已勾稽或已上傳掃描檔者不算 */
+const isGapForm = (p, r) => (r.type || '施工查驗') === '施工查驗' && !r.checked && !r.scan && (r.gap ? !r.result : !r.result && !r.location && !r.testNeed && (r.items || []).length === 1 && r.content === p.items.find(x => x.code === r.items[0])?.name);
 const ABNORMAL_LOG = /無法施作|無法施工|停工/;
 
 /* ================= 每週稽核 ================= */
@@ -1983,6 +1985,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
     if (g !== '施工抽查紀錄表') return list.length ? [{g, list: list.map(r => ({g, k, r}))}] : [];
     const by = {}; list.forEach(r => { const n = SITE_NAME[siteLetter(p, r)], gg = n ? `${g}－${n}` : g; (by[gg] = by[gg] || []).push({g: gg, k, r}); });
     return Object.entries(by).map(([gg, l]) => ({g: gg, list: l})); });
+  const gapN = p.inspections.filter(r => isGapForm(p, r)).length;
   const scanEnt = scanOf && ['inspections', 'supervisions', 'forms'].map(k => ({k, r: p[k].find(x => x.id === scanOf)})).find(x => x.r);
   const all = groups.flatMap(x => x.list), ok = all.filter(e => !e.r.checked), picked = ok.filter(e => sel.has(e.r.id)); // 已勾稽的表單不能列印
   const ym = d => (d || '').slice(0, 7), ymLabel = k => /^\d{4}-\d{2}$/.test(k) ? `${+k.slice(5)} 月` : '未填日期', yr = d => (d || '').slice(0, 4), yrLabel = y => /^\d{4}$/.test(y) ? `${+y - 1911} 年` : '未填日期', mk = (g, k) => g + '|' + k;
@@ -2022,6 +2025,7 @@ function PrintTab({p, update, only, pick, clearPick}) {
           <label>起 <input type="date" value=${from} onChange=${e => setFrom(e.target.value)} /></label><label>迄 <input type="date" value=${to} onChange=${e => setTo(e.target.value)} /></label>
           <select value=${stat} onChange=${e => setStat(e.target.value)}><option value="all">全部</option><option value="todo">未勾稽</option><option value="done">已勾稽</option></select>
           <button className="b" onClick=${() => togShut(allMonths)} title="依月份收合或展開所有清單">${allMonths.length && allMonths.every(isShut) ? '全部展開' : '全部收合'}</button>
+          ${!only && gapN > 0 && html`<button className="b d" title="刪除「列印所有缺漏表單」自動產生、尚未填寫結果、未勾稽也沒有掃描檔的查驗單" onClick=${() => { if (!confirm(`刪除 ${gapN} 張自動補漏產生的查驗單？\n只刪除結果空白、未勾稽、沒有掃描檔者；刪除後這些日期會重新列為缺漏，表單號可再被預編使用。`)) return; const ids = new Set(p.inspections.filter(r => isGapForm(p, r)).map(r => r.id)); update(d => { d.inspections = d.inspections.filter(r => !ids.has(r.id)); }); setSel(s => { const n = new Set(s); ids.forEach(i => n.delete(i)); return n; }); }}>刪除自動補漏（${gapN}）</button>`}
           <button className="b" onClick=${() => tog(ok.map(e => e.r.id), true)}>全選</button><button className="b" onClick=${() => setSel(new Set())}>全不選</button>
           <button className="b" disabled=${!picked.length} title="需先上傳掃描檔；標記為已勾稽後不能再列印" onClick=${() => mark(picked, true)}>勾稽已選（${picked.length}）</button>
           <button className="b p" disabled=${!picked.length} onClick=${() => { if (picked.length) window.print(); }}>列印已選（${picked.length}）</button></div></div>
@@ -2231,7 +2235,7 @@ function AuditTab({p, C, quick, update, printMissing}) {
         <button className="b p" title="依施工日誌，為整個專案缺漏的查驗各建立一張預編表單號的查驗單，並直接列印" onClick=${() => { const M = missingInspections(p), L = M.flatMap(o => o.miss.map(m => ({o, m}))).sort((a, b) => a.m.date.localeCompare(b.m.date) || String(a.o.it.code).localeCompare(String(b.o.it.code), 'zh-Hant', {numeric: true}));
           if (!L.length) return alert('沒有缺漏的查驗');
           if (!confirm(`依施工日誌與監造計畫的抽查標準表，整個專案應補 ${L.length} 張施工抽查紀錄表，將依施工日期新增查驗單（結果空白、表單號依預編號碼、檢查位置帶入日誌樁號部位），並直接列印。${M.anomalies.length ? `\n\n另有 ${M.anomalies.length} 筆日誌記載無法施作卻有申報數量，列為異常待確認，不會產生查驗單。` : ''}\n\n新增後這些日期會視為已有查驗紀錄。要繼續嗎？`)) return;
-          const recs = L.map(({o, m}) => ({id: uid(), date: m.date, type: '施工查驗', items: [o.it.code], location: m.pos, content: o.it.name + (m.dates.length > 1 ? `（施工日 ${m.dates.map(rocMD).join('、')}）` : ''), result: '', no: m.no}));
+          const recs = L.map(({o, m}) => ({id: uid(), date: m.date, type: '施工查驗', items: [o.it.code], location: m.pos, content: o.it.name + (m.dates.length > 1 ? `（施工日 ${m.dates.map(rocMD).join('、')}）` : ''), result: '', no: m.no, gap: true}));
           update(d => { d.inspections.push(...recs); }); printMissing(recs.map(r => r.id)); }}>列印所有缺漏表單</button>
         <button className="b p" title="不分週次：依工項列出整個專案缺漏的查驗次數、日期與預編表單編號" onClick=${() => exportAuditAll(p).catch(e => alert('匯出失敗：' + e.message))}>匯出全部缺漏（依工項）</button></div></div>
       <div className="kpis" style=${{marginTop: '10px'}}>
