@@ -991,7 +991,7 @@ const siteLetter = (p, r) => SITE_CODE.find(([re]) => re.test([r.content, r.test
 const SITE_NAME = {A: '測量', B: '開挖', C: '回填', D: '鋼筋', E: '模板', F: '混凝土', G: '臨時擋土設施', H: '預力混凝土基樁', I: '臨時擋抽移排水', J: '瀝青混凝土鋪面', K: 'CLSM', L: '植筋', M: '混凝土塊', N: '坡面工'};
 /* 範本類別名稱：施工抽查紀錄表可再分「－鋼筋」「－模板」等工程類別，沒有個別範本時沿用「施工抽查紀錄表」 */
 const SITE_KEYS = [['臨時擋土設施', '鋼板樁'], ['臨時擋土設施', '鋼軌樁'], ['預力混凝土基樁', '基樁'], ['瀝青混凝土鋪面', '瀝青'], ['混凝土塊', '混凝土塊'], ['CLSM', 'CLSM'], ['臨時擋土設施', '擋土'], ['臨時擋抽移排水', '排水'], ['測量', '測量'], ['開挖', '開挖'], ['回填', '回填'], ['鋼筋', '鋼筋'], ['模板', '模板'], ['植筋', '植筋'], ['坡面工', '坡面'], ['混凝土', '混凝土']];
-const kindOf = g => PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x + '－'))?.[1];
+const kindOf = g => REQ_GROUPS.includes(g) ? 'requests' : PRINT_KINDS.find(([x]) => g === x || (g || '').startsWith(x + '－'))?.[1];
 /* 舊版預設前綴（施查、E1-1…）的專案：改用新編碼並重編舊編號 */
 function migrateProject(p) {
   let ch = false; p.settings.prefix = p.settings.prefix || {};
@@ -1597,18 +1597,20 @@ function InspectionTab(props) {
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
 /* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
-const FORM_GROUPS = [[/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
+const REQ_GROUPS = ['施工查驗申請單', '材料查驗申請單']; // 工程查驗申請單（表 6-1）的範本類別：與抽查單連動、各有自己的範本
+const FORM_GROUPS = [[/材料.*申請|申請.*材料/, '材料查驗申請單'], [/查驗申請|檢驗申請|申請單/, '施工查驗申請單'], [/技師.*督導|督導.*技師/, '技師督導紀錄表'], [/查核|團體督導/, '查核及團體督導紀錄'], [/材料|設備|抽驗/, '材料設備品質抽驗紀錄表'], [/職安衛|安全衛生/, '職安衛表單'],
   [/環保|環境/, '環保表單'], [/交通|交維/, '交維表單'], [/汛|防災/, '防汛表單'], [/施工|抽查|查驗/, '施工抽查紀錄表']];
 const formGroupOf = t => { const g = FORM_GROUPS.find(([re]) => re.test(t))?.[1] || ''; if (g !== '施工抽查紀錄表') return g; const k = SITE_KEYS.find(([, kw]) => t.includes(kw)); return k ? `${g}－${k[0]}` : g; };
-const GROUP_OPTIONS = () => [...PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]), '查驗申請單', '材料查驗申請單'];
+const GROUP_OPTIONS = () => [...PRINT_KINDS.flatMap(([g]) => g === '施工抽查紀錄表' ? [g, ...Object.values(SITE_NAME).map(n => `${g}－${n}`)] : [g]), ...REQ_GROUPS];
 const FONT_STACKS = {'標楷體': '"標楷體","DFKai-SB","BiauKai","Noto Serif TC","Noto Serif CJK TC",serif', '新細明體': '"新細明體","PMingLiU","MingLiU","Noto Serif TC","Noto Serif CJK TC",serif', '微軟正黑體': '"微軟正黑體","Microsoft JhengHei","Noto Sans TC","Noto Sans CJK TC",sans-serif'};
 const fontOf = t => FONT_STACKS[t.font || '標楷體'];
 const FORM_BASE = ['工程名稱', '契約編號', '主辦機關', '監造單位', '承攬廠商', '表單編號', '日期'];
 const FORM_FIELDS = {
   inspections: ['申請單編號', '查驗類別', '查驗工項', '材料／設備名稱', '位置／里程', '查驗項目及內容', '查驗結果', '缺失內容／改善要求', '缺失改善完成日', '試驗項目', '取樣／會驗日期', '試驗報告編號', '報告日期', '試驗結果'],
   supervisions: ['督導人員／單位', '督導工項', '分數／等級', '內容摘要', '缺失件數', '改善期限', '改善完成日', '備註'],
-  forms: ['表單名稱', '類別', '檢查結果', '缺失／備註']};
-const FORM_ALIAS = {'表單名稱': ['表單名稱', '檢查表名稱', '表名', '檢查項目', '檢查名稱'], '缺失／備註': ['缺失', '備註', '缺失／備註', '缺失事項', '缺失內容', '缺失及改善情形', '改善情形', '改善事項'], 類別: ['類別', '項目類別', '檢查類別'], '材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
+  forms: ['表單名稱', '類別', '檢查結果', '缺失／備註'],
+  requests: ['申請日期', '申請類別', '檢驗(查)項目', '依據規定', '檢驗(查)位置', '預定檢驗(查)時間', '樣品名稱', '樣品數量', '試驗單位', '對應抽查單編號']};
+const FORM_ALIAS = {申請日期: ['申請日期'], 申請類別: ['申請類別', '類別勾選'], '檢驗(查)項目': ['檢驗項目', '檢查項目', '檢驗查項目'], 依據規定: ['依據規定', '依據'], '檢驗(查)位置': ['檢驗位置', '檢查位置', '位置'], '預定檢驗(查)時間': ['預定檢驗時間', '預定檢查時間', '預定時間'], 對應抽查單編號: ['抽查單編號', '對應抽查'], '表單名稱': ['表單名稱', '檢查表名稱', '表名', '檢查項目', '檢查名稱'], '缺失／備註': ['缺失', '備註', '缺失／備註', '缺失事項', '缺失內容', '缺失及改善情形', '改善情形', '改善事項'], 類別: ['類別', '項目類別', '檢查類別'], '材料／設備名稱': ['材料設備名稱', '材料名稱', '設備名稱', '材料/設備名稱', '材料／設備名稱', '材料/設備品名'], 工程名稱: ['工程名', '工程名稱'], 契約編號: ['契約編號', '標案編號'], 主辦機關: ['機關', '主辦機關'], 監造單位: ['監造', '監造單位'], 承攬廠商: ['承攬廠商', '承包商', '廠商'],
   表單編號: ['編號', '表單編號', '檢查表編號'], 日期: ['日期', '檢查日期', '查驗日期', '抽查日期', '填表日期', '督導日期', '督察日期', '巡查日期', '稽查日期'], 查驗工項: ['工程項目', '查驗工項', '施工項目', '工項'], '位置／里程': ['位置', '里程', '地點', '樁號', '施工位置'],
   查驗項目及內容: ['查驗項目', '抽查項目', '查驗內容', '檢查項目及內容'], 查驗結果: ['查驗結果', '檢查結果', '抽查結果', '結果'], '督導人員／單位': ['督導人員', '督導技師', '查核單位', '督察人員', '技師姓名', '督導單位'], 內容摘要: ['督導內容', '查核意見', '內容']};
 const formLabels = f => [f, ...(FORM_ALIAS[f] || [])].map(norm);
@@ -1705,7 +1707,7 @@ function suggestPdf(lines, base, fields, vrules = []) {
   return {fields: placed, size: med ? Math.min(2.4, Math.max(1.2, Math.round(med / base.w * 1000) / 10)) : 1.6};
 }
 /* 檔案 → 候選範本（Excel 每個工作表、Word 整份文件、PDF 每頁各一份） */
-async function parseTemplateFile(file) {
+async function parseTemplateFile(file, forceGroup) {
   const cands = [], bare = file.name.replace(/\.[^.]+$/, '');
   if (/\.pdf$/i.test(file.name)) {
     const lib = await loadPdfjs(), doc = await lib.getDocument({data: await file.arrayBuffer()}).promise;
@@ -1727,7 +1729,7 @@ async function parseTemplateFile(file) {
     const wb = await readWB(file);
     for (const [si, sn] of wb.SheetNames.entries()) { if (wb.Workbook?.Sheets?.[si]?.Hidden) continue; const t = sheetToTable(wb.Sheets[sn]); if (t) cands.push({kind: 'grid', name: sn, tables: [t]}); }
   }
-  return cands.map(c => { const group = formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, vrules, canvas, ...rest} = c;
+  return cands.map(c => { const group = forceGroup || formGroupOf(file.name + c.name + (c.lines || []).slice(0, 8).map(l => l.text).join('')), k = kindOf(group), fl = k ? [...FORM_BASE, ...FORM_FIELDS[k]] : [], {lines, base, vrules, canvas, ...rest} = c;
     const sug = c.kind === 'pdf' ? (fl.length ? suggestPdf(lines, base, fl, vrules) : {}) : {map: fl.length ? suggestMap(c.tables, fl) : {}};
     if (canvas && sug.fields) sug.fields = sug.fields.map(f => { if (f.w) return f; const w = fieldWallW(canvas, f, sug.size || 1.6, rest.page); return w ? {...f, w} : f; }); // 沒有向量框線時改由影像找儲存格右框線
     return {...rest, id: uid(), file: file.name, group, ...sug}; });
@@ -1810,34 +1812,43 @@ function sheetRows(p, k, r) {
 }
 const SIGNS = {inspections: ['監造單位查驗人員', '承攬廠商工地負責人'], supervisions: ['督導（查核）人員', '監造單位', '承攬廠商'], forms: ['檢查人員', '承攬廠商職安衛／工地負責人']};
 /* ================= 工程查驗申請單（監造計畫表 6-1）：與施工抽查紀錄表一對一連動，申請單編號存在查驗紀錄的 reqNo，日期、工項、位置都取自該查驗單 ================= */
-const reqPrefix = (p, r) => isSiteInsp(r) ? (p.docCodes || []).find(x => x.group === '查驗申請單')?.code || 'EB' : (p.docCodes || []).find(x => x.group === '材料查驗申請單')?.code || 'EA'; // 施工查驗＝檢驗申請單、材料查驗＝材料設備檢驗申請單
+const reqPrefix = (p, r) => isSiteInsp(r) ? (p.docCodes || []).find(x => x.group === '施工查驗申請單' || x.group === '查驗申請單')?.code || 'EB' : (p.docCodes || []).find(x => x.group === '材料查驗申請單')?.code || 'EA'; // 施工查驗＝檢驗申請單、材料查驗＝材料設備檢驗申請單
 const isSiteInsp = r => (r.type || '施工查驗') === '施工查驗';
 function nextReqNo(list, pre) { const re = new RegExp('^' + pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$'); let mx = 0; list.forEach(r => { const m = String(r.reqNo || '').match(re); if (m) mx = Math.max(mx, +m[1]); }); return `${pre}-${pad(mx + 1, 3)}`; }
 const STD_TABLE = {A: '測量放樣', B: '開挖', C: '構造物回填', D: '鋼筋', E: '模板', F: '混凝土', G: '鋼板樁', I: '排水器', J: '瀝青混凝土', K: 'CLSM'};
-function ReqSheet({p, e}) {
-  const I = p.info, r = e.r, mat = !isSiteInsp(r), L = stdLetter(itemNames(p, r.items).join(' ') + ' ' + (r.content || '')) || siteLetter(p, r), std = STD_TABLE[L], md = mat ? matDisplay(r) : '';
+function reqVals(p, r) {
+  const I = p.info, mat = !isSiteInsp(r), L = stdLetter(itemNames(p, r.items).join(' ') + ' ' + (r.content || '')) || siteLetter(p, r), std = STD_TABLE[L], md = mat ? matDisplay(r) : '';
   const basis = mat ? `監造計畫「材料品質檢驗標準表」${r.testNeed && r.testName && r.testName !== '其他' ? `（${r.testName}）` : ''}` : std ? `監造計畫「${std}工程施工抽查標準表」` : '監造計畫施工抽查標準表', when = mat && r.testNeed && r.sampleDate ? r.sampleDate : r.date;
+  return {工程名稱: I.name, 契約編號: I.contractNo, 主辦機關: I.owner, 監造單位: I.supervisor, 承攬廠商: I.contractor, 表單編號: r.reqNo || '', 日期: roc(r.date), 申請日期: roc(r.date),
+    申請類別: `${mat ? '■' : '□'}材料設備檢驗、${mat ? '□' : '■'}施工作業檢查、□施工設備查證、□施工品質檢驗`, '檢驗(查)項目': mat ? md : itemNames(p, r.items).join('、') || r.content, 依據規定: basis, '檢驗(查)位置': r.location || '',
+    '預定檢驗(查)時間': `${roc(when)}　　時`, 樣品名稱: md, 樣品數量: '', 試驗單位: '', 對應抽查單編號: r.no || ''};
+}
+function ReqSheet({p, e}) {
+  const r = e.r, mat = !isSiteInsp(r), g = mat ? '材料查驗申請單' : '施工查驗申請單', v = reqVals(p, r), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && t.group === g);
+  if (tpls.length) return renderTplPages(tpls, () => v); // 有上傳範本就用範本版面
   return html`<div className="sheet"><div className="st">工程查驗申請單</div>
     <div style=${{textAlign: 'right', marginBottom: '6px'}}>編號：${r.reqNo || '＿＿＿＿＿＿'}　　（對應${mat ? '材料抽驗' : '抽查'}紀錄表：${r.no}）</div>
-    <div style=${{marginBottom: '6px'}}>${mat ? '■' : '□'}材料設備檢驗、${mat ? '□' : '■'}施工作業檢查、□施工設備查證、□施工品質檢驗</div>
+    <div style=${{marginBottom: '6px'}}>${v.申請類別}</div>
     <table><tbody>
-      <tr><th>工程名稱</th><td>${I.name}</td><th>申請日期</th><td>${roc(r.date)}</td></tr>
-      <tr><th>主辦機關</th><td>${I.owner}</td><th>監造單位</th><td>${I.supervisor}</td></tr>
-      <tr><th>廠商</th><td colSpan="3">${I.contractor}</td></tr>
-      <tr><th>檢驗(查)項目</th><td>${mat ? md : itemNames(p, r.items).join('、') || r.content}</td><th>依據規定</th><td>${basis}</td></tr>
-      <tr><th>檢驗(查)位置</th><td>${r.location}</td><th>預定檢驗(查)時間</th><td>${roc(when)}　　時</td></tr>
-      <tr><th>樣品名稱</th><td>${mat ? md : ''}</td><th>樣品數量</th><td></td></tr>
+      <tr><th>工程名稱</th><td>${v.工程名稱}</td><th>申請日期</th><td>${v.申請日期}</td></tr>
+      <tr><th>主辦機關</th><td>${v.主辦機關}</td><th>監造單位</th><td>${v.監造單位}</td></tr>
+      <tr><th>廠商</th><td colSpan="3">${v.承攬廠商}</td></tr>
+      <tr><th>檢驗(查)項目</th><td>${v['檢驗(查)項目']}</td><th>依據規定</th><td>${v.依據規定}</td></tr>
+      <tr><th>檢驗(查)位置</th><td>${v['檢驗(查)位置']}</td><th>預定檢驗(查)時間</th><td>${v['預定檢驗(查)時間']}</td></tr>
+      <tr><th>樣品名稱</th><td>${mat ? v.樣品名稱 : ''}</td><th>樣品數量</th><td></td></tr>
       <tr><th>試驗單位</th><td colSpan="3"></td></tr>
       <tr><th>備註</th><td colSpan="3" style=${{fontSize: '10.5pt'}}>1.材料檢驗、設備檢驗、施工品質檢驗、施工設備查證、查驗及施工檢查由廠商提出申請。<br />2.各項工程使用材料設備及施工品質之試驗應由符合CNS 17025 (ISO/IEC 17025)規定及依標準法授權之實驗室認證機構認可之實驗室辦理，並出具試驗報告。<br />3.測量作業之檢查應於24小時前提出申請，其餘之施工作業檢查申請應於檢驗(查)前4小時前提出申請。<br />4.欄位依需求填寫，其餘免填。<br />5.本申請表由廠商填具一式二份送請監造單位簽認後，送監造單位執行檢查；由監造單位及廠商各存一份。</td></tr>
     </tbody></table>
     <div className="sg"><div>廠商：</div><div>監造單位：</div></div></div>`;
 }
+function renderTplPages(tpls, valsOf) {
+  return html`<${React.Fragment}>${tpls.map(tpl => { const vals = valsOf(tpl); return tpl.page
+    ? html`<div key=${tpl.id} className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl), '--r': tpl.page.w / tpl.page.h}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`
+    : html`<div key=${tpl.id} className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; })}</${React.Fragment}>`;
+}
 function Sheet({p, e}) {
   const I = p.info, r = e.r, all = (p.formTemplates || []).filter(t => t.tables || t.page), pages = all.filter(t => t.group === e.g), tpls = pages.length ? pages : all.filter(t => t.group === e.g.split('－')[0]);
-  if (tpls.length) { const base = formVals(p, e.k, r); // 多頁範本：每頁各印一頁，依上傳順序；每頁可有自己的預填文字
-    return html`<${React.Fragment}>${tpls.map(tpl => { const vals = pageVals(p, e.g, base, tpl); return tpl.page
-      ? html`<div key=${tpl.id} className="sheet pdfsheet" style=${{fontFamily: fontOf(tpl), '--r': tpl.page.w / tpl.page.h}}><img src=${tpl.page.img} />${tpl.fields.map(q => html`<div key=${q.f} className="pf" style=${{left: q.x * 100 + '%', top: q.y * 100 + '%', width: (q.w ?? Math.max(0.05, 0.96 - q.x)) * 100 + '%', fontSize: tpl.size + 'cqw'}}>${vals[q.f] ?? ''}</div>`)}</div>`
-      : html`<div key=${tpl.id} className="sheet" style=${{fontFamily: fontOf(tpl)}}>${tpl.tables.map((t, ti) => html`<${TplTable} key=${ti} t=${t} ti=${ti} map=${tpl.map} vals=${vals} />`)}</div>`; })}</${React.Fragment}>`; }
+  if (tpls.length) { const base = formVals(p, e.k, r); return renderTplPages(tpls, tpl => pageVals(p, e.g, base, tpl)); } // 多頁範本：每頁各印一頁，依上傳順序；每頁可有自己的預填文字
   return html`<div className="sheet"><div className="st">${sheetTitle(e.g, r)}</div>
     <table><tbody>
       <tr><th>工程名稱</th><td colSpan="3">${I.name}</td></tr>
@@ -1995,7 +2006,7 @@ function FreqModal({p, update, onClose, groups: GL = NEW_FORM_GROUPS, regen0 = f
 /* 這四類各有獨立頁面（範本、自動產生、列印）；其餘類別留在「表單列印」 */
 const SPLIT_GROUPS = ['技師督導紀錄表', '查核及團體督導紀錄', '職安衛表單', '環保表單', '交維表單', '防汛表單'];
 function PrintTab({p, update, only, pick, clearPick}) {
-  const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group));
+  const inScope = g => only ? only.includes(g) : !SPLIT_GROUPS.includes(g), NFG = NEW_FORM_GROUPS.filter(([g]) => inScope(g)), tpls = (p.formTemplates || []).filter(t => (t.tables || t.page) && inScope(t.group) && !REQ_GROUPS.includes(t.group));
   const [ed, setEd] = useState(null), [busy, setBusy] = useState(false), [nf, setNf] = useState(null), [fq, setFq] = useState(null), [edit, setEdit] = useState(null), [scanOf, setScanOf] = useState(null), [stat, setStat] = useState('all'), [reqMode, setReqMode] = useState(false);
   const [tplOpen, setTplOpen] = useState(false); // 範本區預設收合
   const [sel, setSel] = useState(() => new Set()), [opened, setOpened] = useState(() => new Set()), [from, setFrom] = useState(''), [to, setTo] = useState(''), [q, setQ] = useState('');
@@ -2039,6 +2050,14 @@ function PrintTab({p, update, only, pick, clearPick}) {
           ${tpls.map((t, i) => html`<tr key=${t.id}><td>${i && tpls[i - 1].group === t.group ? '' : html`<span className="tag">${t.group}</span>`}</td><td>${t.name}</td><td className="mute">${t.page ? 'PDF' : 'Excel／Word'}</td><td className="n">${t.page ? t.fields.length : Object.keys(t.map).length}</td><td className="mute">${t.file}</td>
             <td className="nw"><button className="b s" onClick=${() => setEd({id: t.id, cands: [t]})}>編輯對應</button> <button className="b s" onClick=${() => { if (confirm(`移除範本「${t.group}／${t.name}」？`)) update(d => { d.formTemplates = d.formTemplates.filter(x => x.id !== t.id); }); }}>移除</button></td></tr>`)}</tbody></table></div>` : html`<div className="empty">尚未上傳範本，列印時使用系統預設版面</div>`}</div>`}
     </div>
+    ${!only && html`<div className="card noprint"><h2 style=${{margin: '0 0 8px'}}>查驗申請單範本</h2>
+      <div className="mute">施工查驗申請單、材料查驗申請單各自上傳範本（Excel／Word／PDF），在範本上點選位置對應欄位（申請單編號、申請日期、檢驗(查)項目、依據規定、位置、預定時間、樣品…）。列印申請單時，沒上傳範本的類別使用系統預設版面。</div>
+      ${REQ_GROUPS.map(g => { const ts = (p.formTemplates || []).filter(t => (t.tables || t.page) && t.group === g);
+        return html`<div key=${g} className="row" style=${{marginTop: '8px'}}><b style=${{minWidth: '120px'}}>${g}</b>
+          <span className=${ts.length ? 'tag ok' : 'tag'}>${ts.length ? `已上傳 ${ts.length} 頁` : '未上傳（預設版面）'}</span>${ts.length > 0 && html`<span className="mute">${ts[0].file}</span>`}
+          <label className="b">${busy ? '讀取中…' : ts.length ? '重新上傳' : '＋ 上傳範本'}<input type="file" hidden accept=".pdf,.xlsx,.xlsm,.xls,.docx" disabled=${busy} onChange=${async ev => { const f = ev.target.files[0]; ev.target.value = ''; if (!f) return; setBusy(true);
+            try { const cands = await parseTemplateFile(f, g); if (cands.length) setEd({cands}); else alert('檔案中找不到可用的表格'); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } finally { setBusy(false); } }} /></label>
+          ${ts.length > 0 && html`<button className="b s" onClick=${() => setEd({id: ts[0].id, cands: [ts[0]]})}>編輯對應</button><button className="b s" onClick=${() => { if (confirm(`移除「${g}」範本（${ts.length} 頁）？`)) update(d => { d.formTemplates = d.formTemplates.filter(x => x.group !== g); }); }}>移除</button>`}</div>`; })}</div>`}
     ${NFG.length ? html`<div className="card noprint"><h2 style=${{margin: '0 0 8px'}}>新增與產生表單</h2>
       <div className="row"><b style=${{minWidth: '84px'}}>新增單張</b>${NFG.map(([g]) => html`<button key=${g} className="b" onClick=${() => setNf(g)}>＋ ${g.replace(/紀錄表|表單|紀錄/g, '')}</button>`)}<span className="mute">填日期與內容後自動編號，可直接儲存並列印</span></div>
       ${NFG.some(([g]) => g !== '查核及團體督導紀錄') && html`<div className="row" style=${{marginTop: '8px'}}><b style=${{minWidth: '84px'}}>批次產生</b><button className="b p" onClick=${() => setFq('gen')}>依頻率產生空白表單…</button>
@@ -2201,7 +2220,7 @@ const buildDocEntries = rows => {
   const H = rows[hi], tc = H.findIndex(t => /總\s*類\s*代碼/.test(t)), sc = H.findIndex(t => /細\s*類\s*代碼/.test(t)), nc = H.findIndex(t => /^細\s*類$/.test(t.trim())), out = []; let big = '';
   for (const r of rows.slice(hi + 1)) { const t = (r[tc] || '').replace(/\s+/g, ''), name = (r[nc] || '').replace(/\s+/g, ''), sub = (r[sc] || '').replace(/\s+/g, '');
     if (t) big = /^[A-Za-z]+$/.test(t) ? t : ''; if (!name || !sub) continue;
-    out.push({id: uid(), name, code: big + sub, group: name === '檢驗申請單' ? '查驗申請單' : name === '材料設備檢驗申請單' ? '材料查驗申請單' : /抽查|檢查表|督導|查核/.test(name) ? formGroupOf(name) : ''}); }
+    out.push({id: uid(), name, code: big + sub, group: name === '檢驗申請單' ? '施工查驗申請單' : name === '材料設備檢驗申請單' ? '材料查驗申請單' : /抽查|檢查表|督導|查核/.test(name) ? formGroupOf(name) : ''}); }
   return out;
 };
 function DocCodeEditor({init, onSave, onClose}) {
