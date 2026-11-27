@@ -518,6 +518,7 @@ const loadPdfjs = () => pdfjsP || (pdfjsP = new Promise((res, rej) => {
 async function pdfPageLines(page) {
   const tc = await page.getTextContent();
   const it = tc.items.filter(i => i.str && i.str.trim()).map(i => ({t: i.str.normalize("NFC"), x0: i.transform[4], x1: i.transform[4] + i.width, y: i.transform[5], h: Math.abs(i.transform[3]) || 10}));
+  it.forEach(i => { if (i.h < 8) { const b = it.find(o => o.h > i.h * 1.4 && Math.abs(o.x1 - i.x0) < 2 && i.y > o.y && i.y - o.y < 10); if (b) i.y = b.y; } }); // 上標（m³ 的 3）併回前一字的行
   it.sort((a, b) => b.y - a.y || a.x0 - b.x0);
   const lines = [];
   for (const i of it) { const L = lines.find(l => Math.abs(l.y - i.y) <= Math.max(2, i.h * 0.35)); if (L) L.c.push(i); else lines.push({y: i.y, c: [i]}); }
@@ -2186,20 +2187,21 @@ function StdApply({p, update, onClose}) {
 }
 function StdCard({p, update}) {
   const [busy, setBusy] = useState(false), [ap, setAp] = useState(false), S = p.testStandard, rows = S?.rows || [];
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('ss.stdOpen') !== '0'; } catch { return true; } }), togOpen = () => setOpen(o => { try { localStorage.setItem('ss.stdOpen', o ? '0' : '1'); } catch {} return !o; });
   const setRow = (id, k, v) => update(d => { d.testStandard.rows.find(x => x.id === id)[k] = v; });
-  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2>材料檢驗標準（${rows.length}）${S?.file ? html` <span className="mute">來源：${S.file}</span>` : ''}</h2>
+  return html`<div className="card"><div className="row" style=${{justifyContent: 'space-between'}}><h2 style=${{cursor: 'pointer'}} onClick=${togOpen} title="點擊收合／展開（會記住）">${open ? '▾' : '▸'} 材料檢驗標準（${rows.length}）${S?.file ? html` <span className="mute">來源：${S.file}</span>` : ''}</h2>
       <div className="row"><label className="b">${busy ? '讀取中…' : '上傳檢驗標準 PDF'}<input type="file" hidden accept=".pdf" disabled=${busy} onChange=${async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
           if (rows.length && !confirm('將取代目前的檢驗標準，確定嗎？')) return; setBusy(true);
           try { const rs = await parseStandardPdf(f); update(d => { d.testStandard = {file: f.name, rows: rs}; }); } catch (er) { alert('讀取失敗：' + er.message); console.error(er); } setBusy(false); }} /></label>
         <button className="b p" disabled=${!rows.length} onClick=${() => setAp(true)}>依標準判定試驗</button></div></div>
-    <div className="mute">上傳監造計畫中的「材料品質檢驗標準表」（文字型 PDF）。要不要試驗、試驗哪些項目，依此標準判定；「適用材料」決定哪些材料查驗會對到該列（留空＝不自動對應）。解析結果請核對並修正。</div>
+    ${open && html`<div><div className="mute">上傳監造計畫中的「材料品質檢驗標準表」（文字型 PDF）。要不要試驗、試驗哪些項目，依此標準判定；「適用材料」決定哪些材料查驗會對到該列（留空＝不自動對應）。解析結果請核對並修正。</div>
     ${rows.length ? html`<div className="tw" style=${{marginTop: '6px'}}><table><thead><tr><th>項次</th><th>試驗項目</th><th>抽查頻率</th><th>管理標準</th><th>適用材料</th><th></th></tr></thead><tbody>
       ${rows.map(r => html`<tr key=${r.id}><td className="nw">${r.no}</td>
         <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.test} onBlur=${e => setRow(r.id, 'test', e.target.value.trim())} /></td>
         <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.freq} onBlur=${e => setRow(r.id, 'freq', e.target.value.trim())} /></td>
         <td><textarea rows="2" style=${{width: '100%'}} defaultValue=${r.std} onBlur=${e => setRow(r.id, 'std', e.target.value.trim())} /></td>
         <td><select value=${r.mat || ''} onChange=${e => setRow(r.id, 'mat', e.target.value)}><option value="">（不對應）</option>${STD_MATS.map(m => html`<option key=${m}>${m}</option>`)}</select></td>
-        <td><button className="b" onClick=${() => update(d => { d.testStandard.rows = d.testStandard.rows.filter(x => x.id !== r.id); })}>刪除</button></td></tr>`)}</tbody></table></div>` : ''}
+        <td><button className="b" onClick=${() => update(d => { d.testStandard.rows = d.testStandard.rows.filter(x => x.id !== r.id); })}>刪除</button></td></tr>`)}</tbody></table></div>` : ''}</div>`}
     ${ap && html`<${StdApply} p=${p} update=${update} onClose=${() => setAp(false)} />`}</div>`;
 }
 
