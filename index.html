@@ -517,7 +517,7 @@ const loadPdfjs = () => pdfjsP || (pdfjsP = new Promise((res, rej) => {
 /* 一頁 → 行陣列，每行為儲存格 [{t, x0, x1, xc, y}] */
 async function pdfPageLines(page) {
   const tc = await page.getTextContent();
-  const it = tc.items.filter(i => i.str && i.str.trim()).map(i => ({t: i.str, x0: i.transform[4], x1: i.transform[4] + i.width, y: i.transform[5], h: Math.abs(i.transform[3]) || 10}));
+  const it = tc.items.filter(i => i.str && i.str.trim()).map(i => ({t: i.str.normalize("NFC"), x0: i.transform[4], x1: i.transform[4] + i.width, y: i.transform[5], h: Math.abs(i.transform[3]) || 10}));
   it.sort((a, b) => b.y - a.y || a.x0 - b.x0);
   const lines = [];
   for (const i of it) { const L = lines.find(l => Math.abs(l.y - i.y) <= Math.max(2, i.h * 0.35)); if (L) L.c.push(i); else lines.push({y: i.y, c: [i]}); }
