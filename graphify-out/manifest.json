@@ -1,0 +1,50 @@
+{
+  ".claude/lessons/2026-10-03-form-print.md": {
+    "mtime": 1793508346.829853,
+    "seen": 1793508412.0804489,
+    "ast_hash": "4c06648892dbfb7b8342634e51402be6",
+    "semantic_hash": ""
+  },
+  ".claude/lessons/2026-10-03-plan-template-upload.md": {
+    "mtime": 1793508346.8299673,
+    "seen": 1793508412.080454,
+    "ast_hash": "26b2c92a8b5fdbdd52c65a5419da50b1",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1793508346.8299673,
+    "seen": 1793508412.0804567,
+    "ast_hash": "887bc91ca77bd414a0d6e8ffcc135c9f",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1793508346.8300061,
+    "seen": 1793508412.080458,
+    "ast_hash": "393188082d7b5ed9a543ded8698177cd",
+    "semantic_hash": ""
+  },
+  "logo/ironaudit-icon.svg": {
+    "mtime": 1793508346.8300061,
+    "seen": 1793508412.080459,
+    "ast_hash": "5d4a2d13f70393abf637b59dab2be827",
+    "semantic_hash": ""
+  },
+  "logo/ironaudit-logo-dark.svg": {
+    "mtime": 1793508346.8318777,
+    "seen": 1793508412.0804603,
+    "ast_hash": "791dcf86e6a4fb98a02fc659b0bd2b9c",
+    "semantic_hash": ""
+  },
+  "logo/ironaudit-logo-preview.png": {
+    "mtime": 1793508346.8318777,
+    "seen": 1793508412.0804613,
+    "ast_hash": "220966b5ad1e4a0f9fcc0449ec313555",
+    "semantic_hash": ""
+  },
+  "logo/ironaudit-logo.svg": {
+    "mtime": 1793508346.8318777,
+    "seen": 1793508412.080462,
+    "ast_hash": "7c29fb82fff64033722e6bd92de026ef",
+    "semantic_hash": ""
+  }
+}
