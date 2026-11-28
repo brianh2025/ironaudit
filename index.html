@@ -2501,11 +2501,11 @@ function DriveImport({existing, onCreate, onReplace, onClose}) {
   };
   return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
     <div className="mute" style=${{marginBottom: '8px'}}>父資料夾底下每個子資料夾＝一個專案（名稱即專案名稱）；讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在的同名專案預設略過；勾選下方選項可清除資料後重新導入。只需唯讀權限。</div>
-    ${cid.trim() && root.trim() && !edit ? html`<div className="mute" style=${{marginBottom: '8px'}}>已使用${cloudS?.cid === cid.trim() && cloudS?.root === root.trim() ? '公司預設' : '已儲存'}的 Google 設定，直接按下方按鈕即可（第一次會跳出 Google 登入授權）。 <button className="b s" onClick=${() => setEdit(true)}>變更設定</button></div>` : html`<div>
+    ${!edit ? html`<div className="mute" style=${{marginBottom: '8px'}}>${cid.trim() && root.trim() ? '直接按下方按鈕，用你的 Google 帳號登入授權即可（唯讀）。' : '管理員尚未設定 Google 連線資訊，請先請管理員設定。'} <button className="b s" onClick=${() => setEdit(true)}>管理員設定</button></div>` : html`<div>
     <label>OAuth Client ID（Google Cloud 建立「網頁應用程式」，已授權的 JavaScript 來源加入 ${location.origin}）<input style=${{width: '100%'}} value=${cid} onChange=${e => setCid(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" /></label>
-    <label>父資料夾網址或 ID<input style=${{width: '100%'}} value=${root} onChange=${e => setRoot(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>${Cloud.code ? html`<div className="mute">第一次成功導入後，會自動存成公司預設，同事不用再填。</div>` : html`<div className="mute">提示：在「雲端同步」輸入公司存取碼後，這兩欄可存成公司預設，其他電腦就不用再填。</div>`}</div>`}
+    <label>父資料夾網址或 ID<input style=${{width: '100%'}} value=${root} onChange=${e => setRoot(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>${Cloud.code ? html`<div className="mute">只需管理員填一次：導入成功後會自動存成公司預設，同事不會再看到這兩欄。</div>` : html`<div className="mute">提示：在「雲端同步」輸入公司存取碼後，這兩欄可存成公司預設，其他電腦就不用再填。</div>`}</div>`}
     <label style=${{display: 'block', marginTop: '8px'}}><input type="checkbox" checked=${redo} onChange=${e => setRedo(e.target.checked)} /> 已存在的專案也重新導入（清除該專案的契約項目、預定進度、日誌與所有填報後重讀；專案本身、工程資料與設定保留，手動填報的內容會被清除）</label>
-    <div style=${{margin: '10px 0'}}><button className="b p" disabled=${busy} onClick=${go}>${busy ? '導入中…' : '登入並一鍵導入'}</button></div>
+    <div style=${{margin: '10px 0'}}><button className="b p" disabled=${busy || !cid.trim() || !root.trim()} onClick=${go}>${busy ? '導入中…' : '登入並一鍵導入'}</button></div>
     <pre style=${{whiteSpace: 'pre-wrap', maxHeight: '260px', overflow: 'auto', fontSize: '12px'}}>${log.join('\n')}</pre>
   <//>`;
 }
