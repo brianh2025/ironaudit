@@ -2419,7 +2419,7 @@ function InspStatTab({p}) {
 const GROUPS = [['總覽', ['home']], ['資料', ['import', 'items', 'log']], ['查驗', ['insp', 'tests', 'print', 'stat']], ['督導', ['gtech', 'gcheck']], ['安環', ['gsec', 'genv', 'gflood', 'gtraf']], ['稽核', ['audit']], ['設定', ['set']]];
 const TABS = [['home', '總覽'], ['import', '資料匯入'], ['items', '契約項目'], ['log', '施工日誌'], ['insp', '查驗填報'], ['tests', '試驗回填'], ['print', '抽查表單'], ['stat', '查驗統計'], ['gtech', '技師督導'], ['gcheck', '查核／團體督導'], ['gsec', '職安衛'], ['genv', '環保'], ['gflood', '防汛'], ['gtraf', '交維'], ['audit', '每週稽核'], ['set', '專案設定／匯出']];
 /* ================= Google 雲端硬碟一鍵導入 =================
-   父資料夾下每個子資料夾＝一個專案；讀取其中「監造日報」子資料夾的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
+   父資料夾下每個子資料夾＝一個專案；讀取其中（或下一層子資料夾）的 Excel，解析工程資料、契約項目、預定進度、施工日誌。 */
 const seqCmp = (a, b) => String(a).localeCompare(String(b), 'zh-Hant', {numeric: true}); // 依名稱開頭序號（數字大小）排列
 /* 清除匯入的資料與填報，保留專案本身（編號、工程資料、設定），供重新匯入 */
 function clearProjectData(d) { d.items = []; d.schedule = []; d.logs = {}; d.inspections = []; d.supervisions = []; d.forms = []; d.flags = []; }
@@ -2470,7 +2470,8 @@ function applyReport(d, r) {
   }
 }
 function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
-  /* 同事只需：用 Google 登入 → 點選資料夾 → 導入，不用任何設定。選到的資料夾若本身含「監造日報」＝單一專案；否則其下每個含「監造日報」的子資料夾＝一個專案（名稱＝資料夾名稱）。 */
+  /* 同事只需：用 Google 登入 → 點選資料夾 → 導入，不用任何設定。選到的資料夾本身有 Excel＝單一專案；否則其下每個有 Excel 的子資料夾＝一個專案（名稱＝資料夾名稱）。
+     專案資料夾內的 Excel 直接放在資料夾裡或放在下一層子資料夾都可以。 */
   const [tok, setTok] = useState(null), [stack, setStack] = useState([]), [ents, setEnts] = useState([]), [loadingF, setLoadingF] = useState(false);
   const [cands, setCands] = useState(null), [sel, setSel] = useState(() => new Set()), [log, setLog] = useState([]), [busy, setBusy] = useState(false), [redo, setRedo] = useState(false);
   useEffect(() => { if (auto) start(); }, []);
@@ -2487,22 +2488,25 @@ function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
     setLoadingF(false); };
   const start = async () => { setBusy(true); try { const tk = await driveTokenNow(); if (!tk) { await driveLogin(); return; } setTok(tk); await load(tk, []); } catch (e) { await fail(e); } setBusy(false); };
   const nav = stk => { setStack(stk); load(tok, stk); };
+  const isXls = f => (f.mimeType === GSHEET || /\.(xlsx|xlsm|xls)$/i.test(f.name)) && !f.name.startsWith('~$');
+  const xlsOf = async (id, deep) => { const all = await driveList(tok, id), xs = all.filter(isXls);
+    if (xs.length || !deep) return xs; const out = []; for (const d of all.filter(x => x.mimeType === FOLDER)) out.push(...(await driveList(tok, d.id)).filter(isXls)); return out; };
   const pickFolder = async f => { setBusy(true); setLog([]);
-    try { say(`檢查「${f.name}」…`); const subs = await driveList(tok, f.id, ` and mimeType='${FOLDER}'`), own = subs.find(x => /監造日報/.test(x.name)), list = [];
-      if (own) list.push({sub: f, rpt: own});
-      else for (const sub of subs.sort((x, y) => seqCmp(x.name, y.name))) { const rpt = (await driveList(tok, sub.id, ` and mimeType='${FOLDER}'`)).find(x => /監造日報/.test(x.name)); if (rpt) list.push({sub, rpt}); }
-      setCands(list); setSel(new Set(list.filter(c => !existing.some(x => x.info.name === c.sub.name)).map(c => c.sub.id))); say(`找到 ${list.length} 個專案（含「監造日報」資料夾）`);
+    try { say(`檢查「${f.name}」…`); const own = await xlsOf(f.id, false), list = [];
+      if (own.length) list.push({sub: f, files: own});
+      else for (const sub of (await driveList(tok, f.id, ` and mimeType='${FOLDER}'`)).sort((x, y) => seqCmp(x.name, y.name))) { const files = await xlsOf(sub.id, true); if (files.length) list.push({sub, files}); }
+      setCands(list); setSel(new Set(list.filter(c => !existing.some(x => x.info.name === c.sub.name)).map(c => c.sub.id))); say(`找到 ${list.length} 個專案`);
     } catch (e) { await fail(e); } setBusy(false); };
   const picked = (cands || []).filter(c => sel.has(c.sub.id));
   const go = async () => {
     setBusy(true); let made = 0, redone = 0;
     try {
-      for (const {sub, rpt} of picked) {
+      for (const {sub, files: xf} of picked) {
         const old = existing.find(x => x.info.name === sub.name);
         if (old && !redo) { say(`略過（專案已存在）：${sub.name}`); continue; }
         let p; if (old) { p = structuredClone(old); clearProjectData(p); say(`${sub.name}：清除舊資料，重新導入`); } else p = newProject(sub.name);
         {
-          const fs = (await driveList(tok, rpt.id)).filter(f => (f.mimeType === GSHEET || /\.(xlsx|xlsm|xls)$/i.test(f.name)) && !f.name.startsWith('~$')).sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+          const fs = [...xf].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
           say(`${sub.name}：讀取 ${fs.length} 個監造報表…`);
           const files = []; for (const f of fs) files.push(await driveFile(tok, f));
           const r = await parseReportFiles(files, p); applyReport(p, r); r.notes.forEach(say);
@@ -2516,7 +2520,7 @@ function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
   };
   const tog = id => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
-    <div className="mute" style=${{marginBottom: '8px'}}>登入 Google 後點選資料夾：選「單一專案資料夾」（裡面有「監造日報」）就導入該專案；選「父資料夾」就導入其下所有含「監造日報」的專案。專案名稱＝資料夾名稱，已存在的同名專案預設略過。只需唯讀權限。</div>
+    <div className="mute" style=${{marginBottom: '8px'}}>登入 Google 後點選資料夾：選「專案資料夾」（裡面放監造報表 Excel）就導入該專案；選「父資料夾」就導入其下每個專案資料夾。專案名稱＝資料夾名稱，已存在的同名專案預設略過。只需唯讀權限。</div>
     ${!tok ? html`<div><button className="b p" disabled=${busy || !GAuth} onClick=${start}>${busy ? '處理中…' : '用 Google 登入並選擇資料夾'}</button>
       <div className="mute" style=${{marginTop: '6px'}}>會轉到 Google 登入頁，同意「檢視雲端硬碟檔案」後自動回到這裡。</div></div>`
     : !cands ? html`<div>
@@ -2526,10 +2530,10 @@ function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
       <div className="tw" style=${{maxHeight: '38vh', overflow: 'auto'}}>${loadingF ? html`<div className="empty">讀取中…</div>` : ents.length ? html`<table><tbody>${ents.map(x => html`<tr key=${x.id} style=${{cursor: 'pointer'}} onClick=${() => nav([...stack, x])}><td>📁 ${x.name}</td></tr>`)}</tbody></table>` : html`<div className="empty">這裡沒有子資料夾</div>`}</div></div>`
     : html`<div>
       ${cands.length ? html`<div className="tw" style=${{maxHeight: '38vh', overflow: 'auto'}}><table><tbody>${cands.map(c => { const has = existing.some(x => x.info.name === c.sub.name);
-        return html`<tr key=${c.sub.id}><td><input type="checkbox" checked=${sel.has(c.sub.id)} disabled=${busy || (has && !redo)} onChange=${() => tog(c.sub.id)} /></td><td>${c.sub.name}</td><td className="mute">${has ? '已存在' : '新專案'}</td></tr>`; })}</tbody></table></div>
+        return html`<tr key=${c.sub.id}><td><input type="checkbox" checked=${sel.has(c.sub.id)} disabled=${busy || (has && !redo)} onChange=${() => tog(c.sub.id)} /></td><td>${c.sub.name}</td><td className="mute">${c.files.length} 個 Excel</td><td className="mute">${has ? '已存在' : '新專案'}</td></tr>`; })}</tbody></table></div>
         <div style=${{margin: '8px 0'}}><button className="b p" disabled=${busy || !picked.length} onClick=${go}>${busy ? '導入中…' : `導入已勾選的專案（${picked.length}）`}</button>
           <label style=${{marginLeft: '10px'}}><input type="checkbox" checked=${redo} onChange=${e => { setRedo(e.target.checked); if (!e.target.checked) setSel(s => new Set([...s].filter(id => !existing.some(x => x.info.name === cands.find(c => c.sub.id === id)?.sub.name)))); }} /> 已存在的專案也可重新導入（會清除該專案的契約項目、預定進度、日誌與所有填報後重讀，手動填報內容會被清除）</label></div>`
-        : html`<div className="empty">這個資料夾裡找不到含「監造日報」的專案資料夾</div>`}<button className="b s" disabled=${busy} onClick=${() => setCands(null)}>← 重新選資料夾</button></div>`}
+        : html`<div className="empty">這個資料夾裡找不到 Excel 檔</div>`}<button className="b s" disabled=${busy} onClick=${() => setCands(null)}>← 重新選資料夾</button></div>`}
     <pre style=${{whiteSpace: 'pre-wrap', maxHeight: '260px', overflow: 'auto', fontSize: '12px'}}>${log.join('\n')}</pre>
   <//>`;
 }
