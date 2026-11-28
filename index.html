@@ -189,34 +189,31 @@ const Store = (() => {
   };
 })();
 
-/* ================= 雲端同步（公司通用版）：Supabase 登入＋每專案一列（整份 JSON），以版本號防覆蓋 =================
-   本機仍是主要工作區（IndexedDB）；登入後，已「連結」的專案在儲存後自動上傳。
+/* ================= 雲端備份同步（公司通用版）：Supabase＋公司存取碼（不需帳號登入），每專案一列（整份 JSON），以版本號防覆蓋 =================
+   本機仍是主要工作區（IndexedDB）；輸入一次存取碼後，已「上傳」連結的專案在儲存後自動備份。資料表不開放匿名讀寫，所有存取都經過驗證存取碼的資料庫函式。
    版本號（雲端 version）記在 localStorage 的 ss.cv：上傳時必須等於雲端現行版本才寫入，否則視為衝突、停止自動上傳，由使用者選擇下載或覆蓋。 */
 const SB_URL = 'https://xbdchvmxgmypcyawavju.supabase.co', SB_KEY = 'sb_publishable_0uY_x4ZsMW5o0Gsp5wWPSg_31_-9ban', CLOUD_MAX = 20 * 1024 * 1024;
 const Cloud = (() => {
-  const sb = window.supabase?.createClient(SB_URL, SB_KEY, {auth: {persistSession: true, storageKey: 'ss.sb'}}), blocked = new Set();
+  const sb = window.supabase?.createClient(SB_URL, SB_KEY, {auth: {persistSession: false, autoRefreshToken: false}}), blocked = new Set();
   const cvAll = () => { try { return JSON.parse(localStorage.getItem('ss.cv') || '{}'); } catch { return {}; } };
-  const C = {user: null, blocked, ok: !!sb,
+  const rpc = async (fn, args) => { const {data, error} = await sb.rpc(fn, {p_code: C.code, ...args}); if (error) { if (/bad access code/.test(error.message)) { C.setCode(''); throw new Error('存取碼不正確'); } throw new Error(error.message); } return data; };
+  const C = {code: (() => { try { return localStorage.getItem('ss.ccode') || ''; } catch { return ''; } })(), blocked, ok: !!sb,
+    setCode: c => { C.code = c; try { c ? localStorage.setItem('ss.ccode', c) : localStorage.removeItem('ss.ccode'); } catch {} },
     v: id => cvAll()[id] ?? null,
     setV: (id, v) => { const m = cvAll(); m[id] = v; try { localStorage.setItem('ss.cv', JSON.stringify(m)); } catch {} },
-    init: async cb => { if (!sb) return; const {data} = await sb.auth.getSession(); C.user = data.session?.user?.email || null; cb(C.user);
-      sb.auth.onAuthStateChange((_e, ses) => { C.user = ses?.user?.email || null; cb(C.user); }); },
-    signIn: async (email, password) => { const {error} = await sb.auth.signInWithPassword({email, password}); if (error) throw new Error(error.message); },
-    signOut: () => sb.auth.signOut(),
-    list: async () => { const {data, error} = await sb.from('ironaudit_projects').select('id,name,version,updated_at'); if (error) throw new Error(error.message); return data; },
-    pull: async id => { const {data, error} = await sb.from('ironaudit_projects').select('doc,version').eq('id', id).single(); if (error) throw new Error(error.message); return data; },
+    list: () => rpc('ironaudit_list', {}),
+    pull: id => rpc('ironaudit_pull', {p_id: id}),
     /* 回傳 'ok' 或 'conflict'；force＝先把版本號對齊雲端現況再覆蓋 */
     push: async (p, force) => {
       if (blocked.has(p.id) && !force) return 'conflict';
-      if (force) { const {data} = await sb.from('ironaudit_projects').select('version').eq('id', p.id).maybeSingle(); C.setV(p.id, data?.version ?? 0); }
-      const doc = JSON.stringify(p); if (doc.length > CLOUD_MAX) throw new Error(`專案資料 ${(doc.length / 1048576).toFixed(1)} MB，超過雲端同步上限 ${CLOUD_MAX / 1048576} MB（掃描檔過多？）`);
-      const {data, error} = await sb.rpc('ironaudit_save', {p_id: p.id, p_name: p.info?.name || '', p_doc: p, p_base: C.v(p.id) || 0}); if (error) throw new Error(error.message);
+      if (force) C.setV(p.id, (await rpc('ironaudit_version', {p_id: p.id})) ?? 0);
+      const size = JSON.stringify(p).length; if (size > CLOUD_MAX) throw new Error(`專案資料 ${(size / 1048576).toFixed(1)} MB，超過雲端同步上限 ${CLOUD_MAX / 1048576} MB（掃描檔過多？）`);
+      const data = await rpc('ironaudit_save', {p_id: p.id, p_name: p.info?.name || '', p_doc: p, p_base: C.v(p.id) || 0});
       if (data.ok) { C.setV(p.id, data.version); blocked.delete(p.id); return 'ok'; }
       blocked.add(p.id); return 'conflict'; },
   };
   return C;
 })();
-
 /* 表單編碼（施工抽查紀錄表 E＋工程類別代碼）：A 測量、B 開挖、C 回填、D 鋼筋、E 模板、F 混凝土、G 臨時擋土設施、H 預力混凝土基樁、I 臨時擋抽移排水、J 瀝青混凝土鋪面、K 控制性低強度回填材料(CLSM)、L 植筋、M 混凝土塊、N 坡面工、
    U 安全衛生、V 環境保護、W 交維設施、X 汛期工地防災、Y 材料設備送審、Z 材料設備檢驗；技師督導 RT、機關督導（查核／團體督導）RQ。例：ED-001 ＝ 鋼筋工程第 1 張 */
 const PREFIX_GROUP = {施工查驗: '施工抽查紀錄表', 材料查驗: '材料設備品質抽驗紀錄表', 技師督導: '技師督導紀錄表', 查核: '查核及團體督導紀錄'}; // 前綴設定 → 文管編碼表的表單類別
@@ -2509,23 +2506,22 @@ function DriveImport({existing, onCreate, onReplace, onClose}) {
 }
 
 const SYNC_LABEL = {ok: '已同步', saving: '上傳中…', behind: '雲端有較新版本', conflict: '版本衝突（已停止自動上傳）', error: '上傳失敗'};
-function CloudModal({user, projects, remote, st, onClose, onRefresh, onPull, onPush}) {
-  const [email, setEmail] = useState(''), [pw, setPw] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+function CloudModal({code, projects, remote, st, onClose, onRefresh, onPull, onPush, onCode}) {
+  const [inp, setInp] = useState(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
   const run = async fn => { setBusy(true); setErr(''); try { await fn(); } catch (e) { setErr(e.message); } setBusy(false); };
-  const rows = [...new Map([...projects.map(x => [x.id, {id: x.id, name: x.info.name, local: x}]), ...remote.map(r => [r.id, {id: r.id, name: r.name, local: projects.find(x => x.id === r.id), remote: r}])].map(([k, v]) => [k, {...v, remote: remote.find(r => r.id === k), local: projects.find(x => x.id === k)}])).values()];
-  return html`<${Modal} title="雲端同步" onClose=${onClose}>
+  const rows = [...new Map([...projects.map(x => [x.id, 1]), ...remote.map(r => [r.id, 1])]).keys()].map(id => ({id, local: projects.find(x => x.id === id), remote: remote.find(r => r.id === id)}));
+  return html`<${Modal} title="雲端備份同步" onClose=${onClose}>
     ${!Cloud.ok ? html`<div className="msg warn">無法載入雲端元件，請確認網路後重新整理。</div>`
-    : !user ? html`<div className="mute">以公司帳號登入後，可把專案上傳到雲端，同事登入即可下載；已上傳的專案之後儲存會自動同步。</div>
-      <div className="row" style=${{marginTop: '8px'}}><input type="email" placeholder="電子郵件" value=${email} onChange=${e => setEmail(e.target.value)} />
-        <input type="password" placeholder="密碼" value=${pw} onChange=${e => setPw(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && email && pw) run(() => Cloud.signIn(email.trim(), pw)); }} />
-        <button className="b p" disabled=${busy || !email || !pw} onClick=${() => run(() => Cloud.signIn(email.trim(), pw))}>${busy ? '登入中…' : '登入'}</button></div>`
-    : html`<div className="row" style=${{justifyContent: 'space-between'}}><span className="mute">已登入：${user}</span>
-        <span className="row"><button className="b" disabled=${busy} onClick=${() => run(onRefresh)}>重新整理</button><button className="b" onClick=${() => Cloud.signOut()}>登出</button></span></div>
-      <div className="mute" style=${{margin: '6px 0'}}>「上傳」後該專案就與雲端連結，之後儲存會自動上傳；若同事先改了雲端版本，會停止自動上傳並提示，由你選擇下載雲端版或以本機覆蓋。專案內的掃描檔也會一起同步（單一專案上限 ${CLOUD_MAX / 1048576} MB）。</div>
-      ${rows.length ? html`<div className="tw"><table><thead><tr><th>專案</th><th>雲端版本</th><th>狀態</th><th></th></tr></thead><tbody>${rows.map(({id, name, local, remote: r}) => {
+    : !code ? html`<div className="mute">輸入公司存取碼後，可把專案備份到雲端、在其他電腦下載；已上傳的專案之後儲存會自動備份。存取碼只需輸入一次，會記在這台電腦的瀏覽器。</div>
+      <div className="row" style=${{marginTop: '8px'}}><input placeholder="公司存取碼" value=${inp} onChange=${e => setInp(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter' && inp.trim()) run(() => onCode(inp)); }} />
+        <button className="b p" disabled=${busy || !inp.trim()} onClick=${() => run(() => onCode(inp))}>${busy ? '驗證中…' : '確定'}</button></div>`
+    : html`<div className="row" style=${{justifyContent: 'space-between'}}><span className="mute">已連線到公司雲端</span>
+        <span className="row"><button className="b" disabled=${busy} onClick=${() => run(onRefresh)}>重新整理</button><button className="b" onClick=${() => { Cloud.setCode(''); onCode(''); }}>清除存取碼</button></span></div>
+      <div className="mute" style=${{margin: '6px 0'}}>「上傳」後該專案就與雲端連結，之後儲存會自動備份；若雲端版本被別台電腦更新，會停止自動上傳並提示，由你選擇下載雲端版或以本機覆蓋。專案內的掃描檔也會一起備份（單一專案上限 ${CLOUD_MAX / 1048576} MB）。</div>
+      ${rows.length ? html`<div className="tw"><table><thead><tr><th>專案</th><th>雲端版本</th><th>狀態</th><th></th></tr></thead><tbody>${rows.map(({id, local, remote: r}) => {
         const linked = Cloud.v(id) != null, s = st[id], dis = busy || s === 'saving';
-        const label = !r ? '僅在本機' : !local ? '僅在雲端' : !linked ? '尚未連結（雲端已有同名編號專案）' : SYNC_LABEL[s] || (r.version > Cloud.v(id) ? SYNC_LABEL.behind : '已同步');
-        return html`<tr key=${id}><td>${name}</td><td className="nw">${r ? `v${r.version}・${roc(r.updated_at.slice(0, 10))}` : '—'}</td><td>${label}</td>
+        const label = !r ? '僅在本機' : !local ? '僅在雲端' : !linked ? '尚未連結（雲端已有同編號專案）' : SYNC_LABEL[s] || (r.version > Cloud.v(id) ? SYNC_LABEL.behind : '已同步');
+        return html`<tr key=${id}><td>${local ? local.info.name : r.name}</td><td className="nw">${r ? `v${r.version}・${roc(r.updated_at.slice(0, 10))}` : '—'}</td><td>${label}</td>
           <td className="nw">${!r && local && html`<button className="b p" disabled=${dis} onClick=${() => run(() => onPush(local, false))}>上傳到雲端</button>`}
             ${r && !local && html`<button className="b p" disabled=${dis} onClick=${() => run(() => onPull(id, false))}>下載到本機</button>`}
             ${r && local && html`<button className="b" disabled=${dis} onClick=${() => run(() => onPull(id, true))}>下載雲端版</button> <button className="b" disabled=${dis} onClick=${() => run(() => onPush(local, true))}>以本機覆蓋雲端</button>`}</td></tr>`; })}</tbody></table></div>`
@@ -2535,23 +2531,24 @@ function CloudModal({user, projects, remote, st, onClose, onRefresh, onPull, onP
 
 function App() {
   const [projects, setProjects] = useState(null), [cur, setCur] = useState(null), [tab, setTab] = useState('home'), [preset, setPreset] = useState(null), [pick, setPick] = useState(null), [drv, setDrv] = useState(false);
-  const [cu, setCu] = useState(null), [cloudOpen, setCloudOpen] = useState(false), [remote, setRemote] = useState([]), [syncSt, setSyncSt] = useState({}), chain = useRef({});
+  const [cc, setCc] = useState(Cloud.code), [cloudOpen, setCloudOpen] = useState(false), [remote, setRemote] = useState([]), [syncSt, setSyncSt] = useState({}), chain = useRef({});
   useEffect(() => { Store.list().then(l => { l.forEach(x => { if (migrateProject(x)) Store.put(x); }); setProjects(l); const last = localStorage.getItem('ss.cur'); setCur((l.find(x => x.id === last) || l[0])?.id || null); }); }, []);
   const p = projects?.find(x => x.id === cur);
   const saveT = useRef({});
   const setSt = (id, v) => setSyncSt(s => s[id] === v ? s : {...s, [id]: v});
   const syncUp = (n, force) => chain.current[n.id] = (chain.current[n.id] || Promise.resolve()).then(async () => { setSt(n.id, 'saving');
     try { const r = await Cloud.push(n, force); setSt(n.id, r); if (r === 'conflict') await refresh(); } catch (e) { console.error(e); setSt(n.id, 'error'); throw e; } });
-  const persist = async n => { await Store.put(n); if (Cloud.user && Cloud.v(n.id) != null) syncUp(n, false).catch(() => {}); };
-  const refresh = async () => { if (!Cloud.user) return; const l = await Cloud.list(); setRemote(l);
+  const persist = async n => { await Store.put(n); if (Cloud.code && Cloud.v(n.id) != null) syncUp(n, false).catch(() => {}); };
+  const refresh = async () => { if (!Cloud.code) return; const l = await Cloud.list(); setRemote(l);
     setSyncSt(s => { const m = {...s}; l.forEach(r => { const v = Cloud.v(r.id); if (v == null || m[r.id] === 'saving') return;
       if (r.version > v) { m[r.id] = m[r.id] === 'conflict' ? 'conflict' : 'behind'; Cloud.blocked.add(r.id); } else if (m[r.id] === 'behind' || m[r.id] === undefined) { m[r.id] = 'ok'; Cloud.blocked.delete(r.id); } }); return m; }); };
   const pullCloud = async (id, overwrite) => { if (overwrite && !confirm('將以雲端版本覆蓋本機這個專案（本機尚未上傳的修改會消失），確定嗎？')) return;
     const {doc, version} = await Cloud.pull(id), n = {...newProject(), ...doc, settings: {...newProject().settings, ...doc.settings}}; migrateProject(n); await Store.put(n);
     setProjects(ps => ps.some(x => x.id === id) ? ps.map(x => x.id === id ? n : x) : [...ps, n]); Cloud.setV(id, version); Cloud.blocked.delete(id); setSt(id, 'ok'); setCur(c => c || id); await refresh(); };
+  const setCode = async c => { c = c.trim().toUpperCase().replace(/[\s-]/g, ''); Cloud.setCode(c); setCc(c); if (!c) { setRemote([]); setSyncSt({}); return; } try { await refresh(); } catch (e) { setCc(''); throw e; } };
   const pushCloud = async (n, force) => { if (force && !confirm('將以本機版本覆蓋雲端這個專案（同事在雲端的修改會消失），確定嗎？')) return;
     await syncUp(n, force); await refresh(); };
-  useEffect(() => { Cloud.init(u => { setCu(u); if (!u) { setRemote([]); setSyncSt({}); } else refresh().catch(console.error); }); const t = setInterval(() => refresh().catch(() => {}), 60000), f = () => refresh().catch(() => {}); window.addEventListener('focus', f); return () => { clearInterval(t); window.removeEventListener('focus', f); }; }, []);
+  useEffect(() => { refresh().catch(console.error); const t = setInterval(() => refresh().catch(() => {}), 60000), f = () => refresh().catch(() => {}); window.addEventListener('focus', f); return () => { clearInterval(t); window.removeEventListener('focus', f); }; }, []);
   const update = fn => setProjects(ps => ps.map(x => { if (x.id !== cur) return x; const n = structuredClone(x); fn(n); n.updated = new Date().toISOString();
     clearTimeout(saveT.current[n.id]); saveT.current[n.id] = setTimeout(() => persist(n), 400); return n; }));
   useEffect(() => { if (cur) localStorage.setItem('ss.cur', cur); }, [cur]);
@@ -2570,9 +2567,9 @@ function App() {
     <header><h1 style=${{display: "flex", alignItems: "center", gap: "10px"}}><img src=${LOGO_DARK} alt="Ironaudit" style=${{height: "30px"}} /><span className="ver" style=${{fontSize: "13px", fontWeight: "normal", opacity: .75}}>智慧監造報表　v115.09.21-3</span></h1>
       <div className="hbtn"><button className="b" onClick=${create}>＋ 新增</button>
       <button className="b" onClick=${() => setDrv(true)}>☁ 雲端導入</button>
-      <button className="b" onClick=${() => { setCloudOpen(true); refresh().catch(console.error); }} title=${cu ? '已登入 ' + cu : '登入公司雲端'}>⇅ 雲端同步${p && cu && syncSt[p.id] ? '（' + SYNC_LABEL[syncSt[p.id]].replace(/（.*/, '') + '）' : ''}</button></div>
+      <button className="b" onClick=${() => { setCloudOpen(true); refresh().catch(console.error); }} title=${cc ? '已連線公司雲端' : '輸入公司存取碼'}>⇅ 雲端同步${p && cc && syncSt[p.id] ? '（' + SYNC_LABEL[syncSt[p.id]].replace(/（.*/, '') + '）' : ''}</button></div>
       <select value=${cur || ''} onChange=${e => setCur(e.target.value)}>${!projects.length && html`<option value="">（尚無專案）</option>`}${[...projects].sort((a, b) => seqCmp(a.info.name, b.info.name)).map(x => html`<option key=${x.id} value=${x.id}>${x.info.name}</option>`)}</select></header>
-    ${cloudOpen && html`<${CloudModal} user=${cu} projects=${projects} remote=${remote} st=${syncSt} onClose=${() => setCloudOpen(false)} onRefresh=${refresh} onPull=${pullCloud} onPush=${pushCloud} />`}
+    ${cloudOpen && html`<${CloudModal} code=${cc} projects=${projects} remote=${remote} st=${syncSt} onClose=${() => setCloudOpen(false)} onRefresh=${refresh} onPull=${pullCloud} onPush=${pushCloud} onCode=${setCode} />`}
     ${drv && html`<${DriveImport} existing=${projects} onCreate=${addProject} onReplace=${replaceProject} onClose=${() => setDrv(false)} />`}
     ${p ? html`<nav>${GROUPS.map(([g, ks]) => html`<button key=${g} className=${ks.includes(tab) ? 'on' : ''} onClick=${() => setTab(ks[0])}>${g}</button>`)}</nav>
       ${(GROUPS.find(([, ks]) => ks.includes(tab))?.[1] || []).length > 1 && html`<div className="subnav">${GROUPS.find(([, ks]) => ks.includes(tab))[1].map(k => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => setTab(k)}>${TABS.find(t => t[0] === k)[1]}</button>`)}</div>`}
