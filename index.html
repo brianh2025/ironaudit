@@ -105,7 +105,8 @@ tr.g td{background:#f8fafc;font-weight:600;color:var(--pri)}
 @media(max-width:760px){.split{grid-template-columns:1fr}main{padding:6px}.list{max-height:40vh}.card{padding:8px;margin-bottom:6px}.kpis{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.kpi .v{font-size:19px}header h1 img{height:24px!important}}
 .split>*{min-width:0;max-width:100%}
 .xrow td{background:#f8fafc}.xrow div{padding:2px 0}
-@media(max-width:760px){td,th{overflow-wrap:anywhere}.tw table{font-size:12.5px}}
+.grp{cursor:pointer;font-weight:600;color:var(--pri);padding:6px 8px;background:#eef1f4;border-radius:6px;margin-bottom:4px}
+@media(max-width:760px){td,th{overflow-wrap:break-word;padding:6px 5px}.tw table{font-size:12.5px}}
 @media print{header,nav,.subnav,.noprint{display:none}}
 .psheets{display:none}
 /* 手寫字體測試對照：只套在預填的欄位值，標籤、抽查標準維持印刷；整張加「測試對照」浮水印，結果欄留白 */
@@ -1327,17 +1328,20 @@ function useNarrow() {
   return n;
 }
 /* cols：[標題, 顯示函式, 次要欄(手機收合)?, 欄位 class?]。手機只顯示主要欄，點 ▶ 展開該筆的細節 */
+const CT_NW = /日期|日$|表單號|結果|類別|報告/; // 短欄位不換行，避免手機上日期、表單號被拆成一字一行
 function CTable({cols, rows, onRow}) {
   const narrow = useNarrow(), [ex, setEx] = useState({});
   const sec = narrow ? cols.filter(c => c[2]) : [], pri = narrow ? cols.filter(c => !c[2]) : cols;
   return html`<div className="tw"><table><thead><tr>${sec.length ? html`<th style=${{width: '1%'}}></th>` : ''}${pri.map(c => html`<th key=${c[0]} className=${c[3] || ''}>${c[0]}</th>`)}</tr></thead><tbody>
-    ${rows.flatMap(r => [html`<tr key=${r.id} style=${onRow ? {cursor: 'pointer'} : null} onClick=${onRow ? () => onRow(r) : null}>${sec.length ? html`<td onClick=${e => { e.stopPropagation(); setEx({...ex, [r.id]: !ex[r.id]}); }}>${ex[r.id] ? '▼' : '▶'}</td>` : ''}${pri.map(c => html`<td key=${c[0]} className=${c[3] || ''}>${c[1](r)}</td>`)}</tr>`,
+    ${rows.flatMap(r => [html`<tr key=${r.id} style=${onRow ? {cursor: 'pointer'} : null} onClick=${onRow ? () => onRow(r) : null}>${sec.length ? html`<td onClick=${e => { e.stopPropagation(); setEx({...ex, [r.id]: !ex[r.id]}); }}>${ex[r.id] ? '▼' : '▶'}</td>` : ''}${pri.map(c => html`<td key=${c[0]} className=${c[3] || (CT_NW.test(c[0]) ? 'nw' : '')}>${c[1](r)}</td>`)}</tr>`,
       ex[r.id] && sec.length ? html`<tr key=${r.id + 'x'} className="xrow"><td colSpan=${pri.length + 1}>${sec.map(c => html`<div key=${c[0]}><span className="mute">${c[0]}：</span>${c[1](r)}</div>`)}</td></tr>` : null])}
   </tbody></table></div>`;
 }
-function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, prefixKey, preset, clearPreset, note}) {
+function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, prefixKey, preset, clearPreset, note, groupable}) {
   const list = p[listKey].filter(filter || (() => true)).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.no || '').localeCompare(a.no || ''));
   const [ed, setEd] = useState(null), [q, setQ] = useState('');
+  const [gb, setGb] = useState(() => { try { return localStorage.getItem('ss.gb.' + listKey) || ''; } catch { return ''; } }), [shut, setShut] = useState(() => new Set());
+  const setGroup = v => { setGb(v); setShut(new Set()); try { localStorage.setItem('ss.gb.' + listKey, v); } catch {} };
   const mkNew = (extra = {}) => { const r = {id: uid(), date: todayISO(), ...defaults, ...extra}; r.no = nextNo(p, p[listKey], prefixKey(r)); r._auto = true; return r; };
   useEffect(() => { if (preset) { setEd(mkNew(preset)); clearPreset(); } }, [preset]);
   const set = (k, v) => setEd(r => { const n = {...r, [k]: v}; if (r._auto && k !== 'no' && prefixKey(n) !== prefixKey(r)) n.no = nextNo(p, p[listKey], prefixKey(n)); if (k === 'no') n._auto = false; return n; });
@@ -1346,15 +1350,31 @@ function RecordTab({p, update, listKey, title, fields, cols, filter, defaults, p
   const shown = list.filter(r => !q || norm(JSON.stringify(r) + (r.items || []).map(c => p.items.find(x => x.code === c)?.name).join()).includes(norm(q)));
   return html`<div className="card">
     <div className="row" style=${{justifyContent: 'space-between'}}><h2>${title}（${list.length}）</h2>
-      <div className="row"><input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} /><button className="b p" onClick=${() => setEd(mkNew())}>＋ 新增</button></div></div>
+      <div className="row">${groupable && html`<select value=${gb} onChange=${e => setGroup(e.target.value)} title="分類方式"><option value="">不分類</option><option value="item">依工項</option><option value="month">依月份</option><option value="itemMonth">依工項＋月份</option></select>`}<input placeholder="搜尋" value=${q} onChange=${e => setQ(e.target.value)} /><button className="b p" onClick=${() => setEd(mkNew())}>＋ 新增</button></div></div>
     ${note && html`<div className="mute" style=${{marginBottom: '8px'}}>${note}</div>`}
-    ${shown.length ? html`<${CTable} cols=${cols} rows=${shown} onRow=${r => setEd({...r})} />` : html`<div className="empty">尚無紀錄</div>`}
+    ${!shown.length ? html`<div className="empty">尚無紀錄</div>` : !gb ? html`<${CTable} cols=${cols} rows=${shown} onRow=${r => setEd({...r})} />`
+      : groupRecs(p, shown, gb).map(([k, label, rs]) => html`<div key=${k} style=${{marginBottom: '6px'}}>
+        <div className="grp" onClick=${() => setShut(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; })}>${shut.has(k) ? '▸' : '▾'} ${label}<span className="mute">（${rs.length}）</span></div>
+        ${!shut.has(k) && html`<${CTable} cols=${cols} rows=${rs} onRow=${r => setEd({...r})} />`}</div>`)}
     ${ed && html`<${Modal} title=${(p[listKey].some(x => x.id === ed.id) ? '編輯' : '新增') + title} onClose=${() => setEd(null)}>
       <div className="grid">${fields.filter(f => !f.show || f.show(ed)).map(f => html`<${Field} key=${f.k} f=${f} rec=${ed} set=${set} p=${p} />`)}</div>
       <div className="row" style=${{marginTop: '12px', justifyContent: 'space-between'}}>
         <button className="b d" onClick=${del} disabled=${!p[listKey].some(x => x.id === ed.id)}>刪除</button>
         <button className="b p" onClick=${save}>儲存</button></div></${Modal}>`}
   </div>`;
+}
+/* 查驗紀錄分類：工項（一張單掛多個工項時，各工項下都列出）、月份（新到舊）、工項＋月份 */
+function groupRecs(p, rs, gb) {
+  const mon = r => (r.date || '').slice(0, 7), monLabel = m => /^\d{4}-\d{2}$/.test(m) ? `${+m.slice(0, 4) - 1911} 年 ${+m.slice(5)} 月` : '未填日期';
+  const itemOf = r => (r.items || []).length ? r.items : [''], itemLabel = c => c ? (p.items.find(x => x.code === c)?.name || c) : '未對應工項';
+  const m = new Map(), add = (k, label, r, ord) => { if (!m.has(k)) m.set(k, [k, label, [], ord]); m.get(k)[2].push(r); };
+  const iord = c => { const i = p.items.findIndex(x => x.code === c); return i < 0 ? 1e9 : i; };
+  for (const r of rs) {
+    if (gb === 'month') add(mon(r), monLabel(mon(r)), r, mon(r));
+    else for (const c of itemOf(r)) gb === 'item' ? add(c, itemLabel(c), r, iord(c)) : add(c + '|' + mon(r), `${itemLabel(c)}・${monLabel(mon(r))}`, r, [iord(c), mon(r)]);
+  }
+  const cmp = (a, b) => gb === 'month' ? String(b[3]).localeCompare(String(a[3])) : gb === 'item' ? a[3] - b[3] : a[3][0] - b[3][0] || b[3][1].localeCompare(a[3][1]);
+  return [...m.values()].sort(cmp);
 }
 const itemNames = (p, codes) => (codes || []).map(c => p.items.find(x => x.code === c)?.name || c);
 const shortList = arr => arr.length > 2 ? `${arr.slice(0, 2).join('、')} 等 ${arr.length} 項` : arr.join('、');
@@ -1538,7 +1558,7 @@ function ContractTab({p, C, update}) {
       ${rows.flatMap(it => { const out = []; if (it.group !== g) { g = it.group; const gi = rows.filter(x => x.group === it.group), gk = it.group; out.push(html`<tr className="g" key=${'g' + it.code} style=${{cursor: 'pointer'}} onClick=${() => setGopen({...gopen, [gk]: !gopen[gk]})}><td>${gopen[gk] ? '▼' : '▶'}</td><td>${it.gseq}</td><td colSpan="10">${it.group}<span className="mute">　${gi.length} 項　${money(gi.reduce((a, x) => a + x.qty * x.price, 0))}</span></td></tr>`); }
         if (!gopen[it.group]) return out;
         const cq = C.cumQty[it.code] || 0, n = p.inspections.filter(r => (r.items || []).includes(it.code)).length;
-        out.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.seq}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(it.price)}</td><td className="n">${money(it.qty * it.price)}</td>
+        out.push(html`<tr key=${it.code}><td className="mute nw">${it.code}</td><td>${it.seq}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(it.price)}</td><td className="n">${money(it.qty * it.price)}</td>
           <td><select value=${it.kind} onChange=${e => set(it.code, 'kind', e.target.value)}><option value="normal">計量</option><option value="ratio">比例</option></select></td>
           <td style=${{textAlign: 'center'}}><input type="checkbox" checked=${it.inspect} onChange=${e => set(it.code, 'inspect', e.target.checked)} /></td>
           <td className="n">${it.kind === 'normal' ? fmtQ(cq) : ''}</td><td className="n">${it.kind === 'normal' ? html`<span className=${cq > it.qty ? 'tag bad' : ''}>${pct(it.qty ? cq / it.qty : 0, 1)}</span>` : ''}</td>
@@ -1597,7 +1617,7 @@ function LogTab({p, C, update}) {
         ${qOpen && (items.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工程項目</th><th>單位</th><th className="n">契約數量</th><th className="n">前日累計</th><th className="n">本日完成</th><th className="n">本日金額</th><th className="n">累計完成率</th></tr></thead><tbody>
           ${items.flatMap(it => { const o = []; if (it.group !== g) { g = it.group; o.push(html`<tr className="g" key=${'g' + it.code}><td colSpan="8">${it.gseq}　${it.group}</td></tr>`); }
             const pc = prevCum(it.code), q = l.qty?.[it.code] || 0;
-            o.push(html`<tr key=${it.code}><td className="mute">${it.code}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(pc)}</td>
+            o.push(html`<tr key=${it.code}><td className="mute nw">${it.code}</td><td>${it.name}</td><td>${it.unit}</td><td className="n">${fmtQ(it.qty)}</td><td className="n">${fmtQ(pc)}</td>
               <td className="n"><input key=${sel + it.code} type="number" step="any" min="0" style=${{width: '90px', textAlign: 'right'}} defaultValue=${q || ''} onChange=${e => setQ(it.code, e.target.value)} /></td>
               <td className="n">${q ? money(q * it.price) : ''}</td><td className="n"><span className=${pc + q > it.qty ? 'tag bad' : ''}>${pct(it.qty ? (pc + q) / it.qty : 0, 1)}</span></td></tr>`); return o; })}
         </tbody></table></div>` : html`<div className="empty">本日無完成數量${p.items.length ? '，勾選「顯示全部工項」即可填報' : '（請先匯入契約項目）'}</div>`)}
@@ -1624,7 +1644,7 @@ function InspectionTab(props) {
     {k: 'testResult', label: '試驗結果', type: 'select', options: ['', '合格', '不合格'], show: r => r.testNeed}];
   const cols = [['日期', r => roc(r.date)], ['表單號', r => r.no], ['類別', r => r.type, true], ['工項', r => itemCell(p, r)], ['位置', r => r.location, true], ['結果', r => resTag(r.result)],
     ['試驗報告', r => r.testNeed ? (r.reportNo ? html`<span className="tag ok">${r.reportNo}</span>` : html`<span className="tag warn">待回填</span>`) : '']];
-  return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
+  return html`<${RecordTab} ...${props} listKey="inspections" title="查驗紀錄" groupable=${true} fields=${fields} cols=${cols} defaults=${{type: '施工查驗', items: [], result: ''}} prefixKey=${r => formPrefix(props.p, r, 'inspections')}
     note="材料查驗以「進場查驗」填報；廠商日誌若載明有辦理會驗，勾選「試驗會驗」，待取得報告後，在該批材料「進場日」的進場查驗單回填報告編號、報告日期、試驗結果（「試驗回填」頁會列出待回填項目）。工項請勾選契約項目，每週稽核會據此比對施工日誌。「帶入當日施工項目」會依查驗日期帶出當天施工日誌有數量的需查驗工項。" />`;
 }
 /* ================= 表單範本：上傳實際表單（Excel／Word），點選儲存格對應系統欄位，列印時沿用範本版面並填入紀錄 ================= */
@@ -2343,7 +2363,7 @@ function AuditTab({p, C, quick, update, printMissing}) {
       <div className="mute" style=${{marginTop: '6px'}}>判定方式：施工日誌某日有完成數量的「需查驗」工項，須在該日前後 ${p.settings.tolerance} 天內有勾選該工項的查驗紀錄（容許天數可於專案設定調整）。</div></div>
     <div className="card"><h2>工項查驗比對</h2>
       ${A.rows.length ? html`<div className="tw"><table><thead><tr><th>代碼</th><th>工項</th><th>本週施工日</th><th className="n">本週數量</th><th>查驗表單號</th><th>稽核結果</th><th>未查驗日</th><th className="noprint"></th></tr></thead><tbody>
-        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => rocMD(d)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
+        ${A.rows.map(r => html`<tr key=${r.it.code}><td className="mute nw">${r.it.code}</td><td>${r.it.name}</td><td>${r.work.map(d => rocMD(d)).join('、')}</td><td className="n">${fmtQ(r.qty)} ${r.it.unit}</td>
           <td>${r.nos.join('、')}</td><td><${Tag} s=${r.status} /></td><td>${r.missDays.map(d => rocMD(d)).join('、')}</td>
           <td className="noprint">${r.status !== 'ok' && html`<button className="b s" onClick=${() => quick({items: [r.it.code], date: r.missDays[0], type: '施工查驗'})}>補填查驗</button>`}</td></tr>`)}
       </tbody></table></div>` : html`<div className="empty">本週施工日誌無需查驗工項的完成數量</div>`}</div>
@@ -2502,16 +2522,17 @@ function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
     setBusy(true); let made = 0, redone = 0;
     try {
       for (const {sub, files: xf} of picked) {
-        const old = existing.find(x => x.info.name === sub.name);
-        if (old && !redo) { say(`略過（專案已存在）：${sub.name}`); continue; }
-        let p; if (old) { p = structuredClone(old); clearProjectData(p); say(`${sub.name}：清除舊資料，重新導入`); } else p = newProject(sub.name);
-        {
-          const fs = [...xf].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
-          say(`${sub.name}：讀取 ${fs.length} 個監造報表…`);
-          const files = []; for (const f of fs) files.push(await driveFile(tok, f));
-          const r = await parseReportFiles(files, p); applyReport(p, r); r.notes.forEach(say);
-          say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天、各項填報 ${p.inspections.length + p.supervisions.length + p.forms.length} 筆` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
-        }
+        const fs = [...xf].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+        say(`${sub.name}：讀取 ${fs.length} 個監造報表…`);
+        const files = []; for (const f of fs) files.push(await driveFile(tok, f));
+        const r = await parseReportFiles(files, newProject()); r.notes.forEach(say);
+        const name = (r.info.name || '').trim() || sub.name; // 專案名稱用報表裡的工程名稱，讀不到才用資料夾名稱
+        if (name !== sub.name) say(`　工程名稱：${name}`);
+        const old = existing.find(x => x.info.name === name || x.info.name === sub.name);
+        if (old && !redo) { say(`　略過（專案已存在）：${old.info.name}`); continue; }
+        let p; if (old) { p = structuredClone(old); clearProjectData(p); p.info.name = name; say('　清除舊資料，重新導入'); } else p = newProject(name);
+        applyReport(p, r);
+        say(`　→ 契約項目 ${p.items.length}、預定進度 ${p.schedule.length} 點、施工日誌 ${Object.keys(p.logs).length} 天、各項填報 ${p.inspections.length + p.supervisions.length + p.forms.length} 筆` + (r.logs?.unmatched.length ? `（${r.logs.unmatched.length} 筆數量未對應工項）` : ''));
         if (old) { await onReplace(p); redone++; } else { await onCreate(p); made++; }
       }
       say(`完成：新建立 ${made} 個、重新導入 ${redone} 個專案`);
@@ -2520,7 +2541,7 @@ function DriveImport({existing, onCreate, onReplace, onClose, auto}) {
   };
   const tog = id => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
-    <div className="mute" style=${{marginBottom: '8px'}}>登入 Google 後點選資料夾：選「專案資料夾」（裡面放監造報表 Excel）就導入該專案；選「父資料夾」就導入其下每個專案資料夾。專案名稱＝資料夾名稱，已存在的同名專案預設略過。只需唯讀權限。</div>
+    <div className="mute" style=${{marginBottom: '8px'}}>登入 Google 後點選資料夾：選「專案資料夾」（裡面放監造報表 Excel）就導入該專案；選「父資料夾」就導入其下每個專案資料夾。專案名稱取報表中的工程名稱（讀不到才用資料夾名稱），已存在的同名專案預設略過。只需唯讀權限。</div>
     ${!tok ? html`<div><button className="b p" disabled=${busy || !GAuth} onClick=${start}>${busy ? '處理中…' : '用 Google 登入並選擇資料夾'}</button>
       <div className="mute" style=${{marginTop: '6px'}}>會轉到 Google 登入頁，同意「檢視雲端硬碟檔案」後自動回到這裡。</div></div>`
     : !cands ? html`<div>
