@@ -2467,16 +2467,28 @@ function applyReport(d, r) {
   }
 }
 function DriveImport({existing, onCreate, onReplace, onClose}) {
-  const [cid, setCid] = useState(localStorage.getItem('ss.gcid') || ''), [root, setRoot] = useState(localStorage.getItem('ss.groot') || '');
-  const [log, setLog] = useState([]), [busy, setBusy] = useState(false), [redo, setRedo] = useState(false), [edit, setEdit] = useState(false), [cloudS, setCloudS] = useState(null);
-  useEffect(() => { if (Cloud.code) Cloud.settings().then(v => { setCloudS(v); if (!cid && v.cid) setCid(v.cid); if (!root && v.root) setRoot(v.root); }).catch(() => {}); }, []); // 公司預設（存在雲端）：不用每人各填一次
+  /* 同事只需：登入 Google → 點選資料夾 → 導入。Client ID 屬公司層級設定（存在公司雲端），只有管理員才會看到。 */
+  const [cid, setCid] = useState(localStorage.getItem('ss.gcid') || ''), [admin, setAdmin] = useState(false), [tok, setTok] = useState(null);
+  const [stack, setStack] = useState([]), [ents, setEnts] = useState([]), [loadingF, setLoadingF] = useState(false);
+  const [log, setLog] = useState([]), [busy, setBusy] = useState(false), [redo, setRedo] = useState(false);
+  useEffect(() => { if (Cloud.code) Cloud.settings().then(v => { if (v.cid && !cid) setCid(v.cid); }).catch(() => {}); }, []);
   const say = m => setLog(l => [...l, m]);
-  const go = async () => {
-    const rid = (root.match(/folders\/([\w-]+)/) || root.match(/[?&]id=([\w-]+)/) || [, root.trim()])[1];
-    if (!cid.trim() || !rid) return alert('請填入 OAuth Client ID 與父資料夾網址／ID');
-    localStorage.setItem('ss.gcid', cid.trim()); localStorage.setItem('ss.groot', root.trim()); setBusy(true); setLog([]);
+  const cur = stack.at(-1);
+  const load = async (tk, stk) => { setLoadingF(true);
+    try { const c = stk.at(-1);
+      if (!c) { const dr = await (await driveFetch(tk, 'https://www.googleapis.com/drive/v3/drives?pageSize=100')).json();
+        setEnts([{id: 'root', name: '我的雲端硬碟'}, {id: 'shared', name: '與我共用'}, ...(dr.drives || []).map(d => ({id: d.id, name: '共用雲端硬碟：' + d.name}))]); }
+      else if (c.id === 'shared') { const q = encodeURIComponent(`sharedWithMe=true and mimeType='${FOLDER}' and trashed=false`);
+        setEnts(((await (await driveFetch(tk, `${DRIVE_API}?q=${q}&fields=files(id,name)&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`)).json()).files || []).sort((x, y) => seqCmp(x.name, y.name))); }
+      else setEnts((await driveList(tk, c.id, ` and mimeType='${FOLDER}'`)).sort((x, y) => seqCmp(x.name, y.name)));
+    } catch (e) { say('讀取資料夾失敗：' + e.message); }
+    setLoadingF(false); };
+  const nav = stk => { setStack(stk); load(tok, stk); };
+  const login = async () => { if (!cid.trim()) return; setBusy(true); try { const tk = await driveToken(cid.trim()); setTok(tk); localStorage.setItem('ss.gcid', cid.trim()); await load(tk, []); } catch (e) { say('登入失敗：' + e.message); } setBusy(false); };
+  const go = async (rid, rname) => {
+    setBusy(true); setLog([]);
     try {
-      say('登入 Google…'); const tok = await driveToken(cid.trim());
+      say(`導入資料夾：${rname}`);
       const subs = (await driveList(tok, rid, ` and mimeType='${FOLDER}'`)).sort((a, b) => seqCmp(a.name, b.name));
       say(`找到 ${subs.length} 個子資料夾`); let made = 0, redone = 0;
       for (const sub of subs) {
@@ -2495,17 +2507,22 @@ function DriveImport({existing, onCreate, onReplace, onClose}) {
         if (old) { await onReplace(p); redone++; } else { await onCreate(p); made++; }
       }
       say(`完成：新建立 ${made} 個、重新導入 ${redone} 個專案`);
-      if (Cloud.code && (cloudS?.cid !== cid.trim() || cloudS?.root !== root.trim())) { try { await Cloud.saveSettings({cid: cid.trim(), root: root.trim()}); setCloudS({cid: cid.trim(), root: root.trim()}); say('已把這組 Client ID 與資料夾存為公司預設，其他電腦開啟只要按一下即可。'); } catch (e) { console.error(e); } }
+      if (Cloud.code && cid.trim()) Cloud.saveSettings({cid: cid.trim()}).catch(() => {});
     } catch (e) { say('失敗：' + e.message); console.error(e); }
     setBusy(false);
   };
   return html`<${Modal} title="從 Google 雲端硬碟一鍵導入專案" onClose=${onClose}>
-    <div className="mute" style=${{marginBottom: '8px'}}>父資料夾底下每個子資料夾＝一個專案（名稱即專案名稱）；讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在的同名專案預設略過；勾選下方選項可清除資料後重新導入。只需唯讀權限。</div>
-    ${!edit ? html`<div className="mute" style=${{marginBottom: '8px'}}>${cid.trim() && root.trim() ? '直接按下方按鈕，用你的 Google 帳號登入授權即可（唯讀）。' : '管理員尚未設定 Google 連線資訊，請先請管理員設定。'} <button className="b s" onClick=${() => setEdit(true)}>管理員設定</button></div>` : html`<div>
-    <label>OAuth Client ID（Google Cloud 建立「網頁應用程式」，已授權的 JavaScript 來源加入 ${location.origin}）<input style=${{width: '100%'}} value=${cid} onChange=${e => setCid(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" /></label>
-    <label>父資料夾網址或 ID<input style=${{width: '100%'}} value=${root} onChange=${e => setRoot(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." /></label>${Cloud.code ? html`<div className="mute">只需管理員填一次：導入成功後會自動存成公司預設，同事不會再看到這兩欄。</div>` : html`<div className="mute">提示：在「雲端同步」輸入公司存取碼後，這兩欄可存成公司預設，其他電腦就不用再填。</div>`}</div>`}
-    <label style=${{display: 'block', marginTop: '8px'}}><input type="checkbox" checked=${redo} onChange=${e => setRedo(e.target.checked)} /> 已存在的專案也重新導入（清除該專案的契約項目、預定進度、日誌與所有填報後重讀；專案本身、工程資料與設定保留，手動填報的內容會被清除）</label>
-    <div style=${{margin: '10px 0'}}><button className="b p" disabled=${busy || !cid.trim() || !root.trim()} onClick=${go}>${busy ? '導入中…' : '登入並一鍵導入'}</button></div>
+    <div className="mute" style=${{marginBottom: '8px'}}>選一個「父資料夾」：它底下每個子資料夾＝一個專案（名稱即專案名稱），讀取其中「監造日報」資料夾內的 Excel 解析匯入。已存在的同名專案預設略過。只需唯讀權限。</div>
+    ${!tok ? html`<div>
+      ${cid.trim() ? html`<button className="b p" disabled=${busy} onClick=${login}>${busy ? '登入中…' : '登入 Google 並選擇資料夾'}</button>` : html`<div className="msg warn">管理員尚未設定公司的 Google 連線（OAuth Client ID），請先請管理員設定。</div>`}
+      <div style=${{marginTop: '8px'}}><button className="b s" onClick=${() => setAdmin(a => !a)}>管理員設定</button></div>
+      ${admin && html`<label style=${{display: 'block', marginTop: '6px'}}>OAuth Client ID（Google Cloud 建立「網頁應用程式」，已授權的 JavaScript 來源加入 ${location.origin}；設定一次，全公司共用）<input style=${{width: '100%'}} value=${cid} onChange=${e => setCid(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" /></label>`}</div>`
+    : html`<div>
+      <div className="row" style=${{marginBottom: '6px'}}><button className="b s" disabled=${!stack.length} onClick=${() => nav([])}>全部位置</button>
+        ${stack.map((x, i) => html`<span key=${x.id}>／ <button className="b s" onClick=${() => nav(stack.slice(0, i + 1))}>${x.name}</button></span>`)}</div>
+      ${cur && cur.id !== 'shared' && html`<div style=${{margin: '6px 0'}}><button className="b p" disabled=${busy} onClick=${() => go(cur.id, cur.name)}>${busy ? '導入中…' : `導入「${cur.name}」底下的所有專案`}</button>
+        <label style=${{marginLeft: '10px'}}><input type="checkbox" checked=${redo} onChange=${e => setRedo(e.target.checked)} /> 已存在的專案也重新導入（會清除該專案的契約項目、預定進度、日誌與所有填報後重讀，手動填報內容會被清除）</label></div>`}
+      <div className="tw" style=${{maxHeight: '38vh', overflow: 'auto'}}>${loadingF ? html`<div className="empty">讀取中…</div>` : ents.length ? html`<table><tbody>${ents.map(x => html`<tr key=${x.id} style=${{cursor: 'pointer'}} onClick=${() => nav([...stack, x])}><td>📁 ${x.name}</td></tr>`)}</tbody></table>` : html`<div className="empty">這裡沒有子資料夾</div>`}</div></div>`}
     <pre style=${{whiteSpace: 'pre-wrap', maxHeight: '260px', overflow: 'auto', fontSize: '12px'}}>${log.join('\n')}</pre>
   <//>`;
 }
